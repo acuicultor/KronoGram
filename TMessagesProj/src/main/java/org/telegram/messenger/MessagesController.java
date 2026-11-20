@@ -284,6 +284,8 @@ public class MessagesController extends BaseController implements NotificationCe
     public SparseArray<DialogFilter> dialogFiltersById = new SparseArray<>();
     private boolean loadingSuggestedFilters;
     private boolean loadingRemoteFilters;
+    private boolean checkedMissingFilterPeers;
+    private boolean remoteFilterPeersFailed;
     public boolean dialogFiltersLoaded;
     public ArrayList<TLRPC.TL_dialogFilterSuggested> suggestedFilters = new ArrayList<>();
 
@@ -2010,9 +2012,72 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
 
-    private void sendLoadPeersRequest(TLObject req, ArrayList<TLObject> requests, TLRPC.messages_Dialogs pinnedDialogs, TLRPC.messages_Dialogs pinnedRemoteDialogs, ArrayList<TLRPC.User> users, ArrayList<TLRPC.Chat> chats, ArrayList<DialogFilter> filtersToSave, SparseArray<DialogFilter> filtersToDelete, ArrayList<Integer> filtersOrder, HashMap<Integer, HashSet<Long>> filterDialogRemovals, HashSet<Integer> filtersUnreadCounterReset, Runnable onDone) {
+    private boolean isPeerBatchError(TLRPC.TL_error error) {
+        return error != null && (error.code == 400 || error.code == 403 || error.code == 406);
+    }
+
+    private void sendLoadPeersRequest(TLObject req, ArrayList<TLObject> requests, boolean[] hasTransientError, TLRPC.messages_Dialogs pinnedDialogs, TLRPC.messages_Dialogs pinnedRemoteDialogs, ArrayList<TLRPC.User> users, ArrayList<TLRPC.Chat> chats, ArrayList<DialogFilter> filtersToSave, SparseArray<DialogFilter> filtersToDelete, ArrayList<Integer> filtersOrder, HashMap<Integer, HashSet<Long>> filterDialogRemovals, HashSet<Integer> filtersUnreadCounterReset, Runnable onDone) {
+        final ArrayList<TLRPC.InputUser> inputUsersSnapshot = req instanceof TLRPC.TL_users_getUsers ? new ArrayList<>(((TLRPC.TL_users_getUsers) req).id) : null;
+        final ArrayList<Long> inputChatsSnapshot = req instanceof TLRPC.TL_messages_getChats ? new ArrayList<>(((TLRPC.TL_messages_getChats) req).id) : null;
+        final ArrayList<TLRPC.InputChannel> inputChannelsSnapshot = req instanceof TLRPC.TL_channels_getChannels ? new ArrayList<>(((TLRPC.TL_channels_getChannels) req).id) : null;
+        final ArrayList<TLRPC.InputDialogPeer> inputDialogsSnapshot = req instanceof TLRPC.TL_messages_getPeerDialogs ? new ArrayList<>(((TLRPC.TL_messages_getPeerDialogs) req).peers) : null;
+
         getConnectionsManager().sendRequest(req, (response, error) -> {
-            if (response instanceof TLRPC.TL_messages_chats) {
+            if (error != null) {
+                if (isPeerBatchError(error)) {
+                    if (inputUsersSnapshot != null && inputUsersSnapshot.size() > 1) {
+                        int mid = inputUsersSnapshot.size() / 2;
+                        TLRPC.TL_users_getUsers left = new TLRPC.TL_users_getUsers();
+                        left.id.addAll(inputUsersSnapshot.subList(0, mid));
+                        TLRPC.TL_users_getUsers right = new TLRPC.TL_users_getUsers();
+                        right.id.addAll(inputUsersSnapshot.subList(mid, inputUsersSnapshot.size()));
+                        requests.add(left);
+                        requests.add(right);
+                        requests.remove(req);
+                        sendLoadPeersRequest(left, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        return;
+                    } else if (inputChatsSnapshot != null && inputChatsSnapshot.size() > 1) {
+                        int mid = inputChatsSnapshot.size() / 2;
+                        TLRPC.TL_messages_getChats left = new TLRPC.TL_messages_getChats();
+                        left.id.addAll(inputChatsSnapshot.subList(0, mid));
+                        TLRPC.TL_messages_getChats right = new TLRPC.TL_messages_getChats();
+                        right.id.addAll(inputChatsSnapshot.subList(mid, inputChatsSnapshot.size()));
+                        requests.add(left);
+                        requests.add(right);
+                        requests.remove(req);
+                        sendLoadPeersRequest(left, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        return;
+                    } else if (inputChannelsSnapshot != null && inputChannelsSnapshot.size() > 1) {
+                        int mid = inputChannelsSnapshot.size() / 2;
+                        TLRPC.TL_channels_getChannels left = new TLRPC.TL_channels_getChannels();
+                        left.id.addAll(inputChannelsSnapshot.subList(0, mid));
+                        TLRPC.TL_channels_getChannels right = new TLRPC.TL_channels_getChannels();
+                        right.id.addAll(inputChannelsSnapshot.subList(mid, inputChannelsSnapshot.size()));
+                        requests.add(left);
+                        requests.add(right);
+                        requests.remove(req);
+                        sendLoadPeersRequest(left, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        return;
+                    } else if (inputDialogsSnapshot != null && inputDialogsSnapshot.size() > 1) {
+                        int mid = inputDialogsSnapshot.size() / 2;
+                        TLRPC.TL_messages_getPeerDialogs left = new TLRPC.TL_messages_getPeerDialogs();
+                        left.peers.addAll(inputDialogsSnapshot.subList(0, mid));
+                        TLRPC.TL_messages_getPeerDialogs right = new TLRPC.TL_messages_getPeerDialogs();
+                        right.peers.addAll(inputDialogsSnapshot.subList(mid, inputDialogsSnapshot.size()));
+                        requests.add(left);
+                        requests.add(right);
+                        requests.remove(req);
+                        sendLoadPeersRequest(left, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                        return;
+                    }
+                } else {
+                    hasTransientError[0] = true;
+                }
+            } else if (response instanceof TLRPC.TL_messages_chats) {
                 TLRPC.TL_messages_chats res = (TLRPC.TL_messages_chats) response;
                 chats.addAll(res.chats);
             } else if (response instanceof Vector) {
@@ -2032,6 +2097,7 @@ public class MessagesController extends BaseController implements NotificationCe
             }
             requests.remove(req);
             if (requests.isEmpty()) {
+                remoteFilterPeersFailed = hasTransientError[0];
                 getMessagesStorage().processLoadedFilterPeers(pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
             }
         });
@@ -2040,76 +2106,104 @@ public class MessagesController extends BaseController implements NotificationCe
     protected void loadFilterPeers(HashMap<Long, TLRPC.InputPeer> dialogsToLoadMap, HashMap<Long, TLRPC.InputPeer> usersToLoadMap, HashMap<Long, TLRPC.InputPeer> chatsToLoadMap, TLRPC.messages_Dialogs pinnedDialogs, TLRPC.messages_Dialogs pinnedRemoteDialogs, ArrayList<TLRPC.User> users, ArrayList<TLRPC.Chat> chats, ArrayList<DialogFilter> filtersToSave, SparseArray<DialogFilter> filtersToDelete, ArrayList<Integer> filtersOrder, HashMap<Integer, HashSet<Long>> filterDialogRemovals, HashSet<Integer> filtersUnreadCounterReset, Runnable onDone) {
         Utilities.stageQueue.postRunnable(() -> {
             ArrayList<TLObject> requests = new ArrayList<>();
+            boolean[] hasTransientError = new boolean[1];
+            ArrayList<TLRPC.TL_users_getUsers> userRequests = new ArrayList<>();
+            ArrayList<TLRPC.TL_messages_getChats> chatRequests = new ArrayList<>();
+            ArrayList<TLRPC.TL_channels_getChannels> channelRequests = new ArrayList<>();
+            ArrayList<TLRPC.TL_messages_getPeerDialogs> peerDialogRequests = new ArrayList<>();
+
             TLRPC.TL_users_getUsers req = null;
             for (HashMap.Entry<Long, TLRPC.InputPeer> entry : usersToLoadMap.entrySet()) {
+                TLRPC.InputUser inputUser = getInputUser(entry.getValue());
+                if (inputUser instanceof TLRPC.TL_inputUserEmpty) {
+                    continue;
+                }
                 if (req == null) {
                     req = new TLRPC.TL_users_getUsers();
                     requests.add(req);
+                    userRequests.add(req);
                 }
-                req.id.add(getInputUser(entry.getValue()));
+                req.id.add(inputUser);
                 if (req.id.size() == 100) {
-                    sendLoadPeersRequest(req, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                     req = null;
                 }
             }
-            if (req != null) {
-                sendLoadPeersRequest(req, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
-            }
+
             TLRPC.TL_messages_getChats req2 = null;
             TLRPC.TL_channels_getChannels req3 = null;
             for (HashMap.Entry<Long, TLRPC.InputPeer> entry : chatsToLoadMap.entrySet()) {
                 TLRPC.InputPeer inputPeer = entry.getValue();
+                if (inputPeer == null) {
+                    continue;
+                }
                 if (inputPeer.chat_id != 0) {
                     if (req2 == null) {
                         req2 = new TLRPC.TL_messages_getChats();
                         requests.add(req2);
+                        chatRequests.add(req2);
                     }
                     req2.id.add(entry.getKey());
                     if (req2.id.size() == 100) {
-                        sendLoadPeersRequest(req2, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                         req2 = null;
                     }
                 } else if (inputPeer.channel_id != 0) {
                     if (req3 == null) {
                         req3 = new TLRPC.TL_channels_getChannels();
                         requests.add(req3);
+                        channelRequests.add(req3);
                     }
                     req3.id.add(getInputChannel(inputPeer));
                     if (req3.id.size() == 100) {
-                        sendLoadPeersRequest(req3, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                         req3 = null;
                     }
                 }
             }
-            if (req2 != null) {
-                sendLoadPeersRequest(req2, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
-            }
-            if (req3 != null) {
-                sendLoadPeersRequest(req3, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
-            }
 
             TLRPC.TL_messages_getPeerDialogs req4 = null;
             for (HashMap.Entry<Long, TLRPC.InputPeer> entry : dialogsToLoadMap.entrySet()) {
+                if (entry.getValue() == null || entry.getValue() instanceof TLRPC.TL_inputPeerEmpty) {
+                    continue;
+                }
                 if (req4 == null) {
                     req4 = new TLRPC.TL_messages_getPeerDialogs();
                     requests.add(req4);
+                    peerDialogRequests.add(req4);
                 }
                 TLRPC.TL_inputDialogPeer inputDialogPeer = new TLRPC.TL_inputDialogPeer();
                 inputDialogPeer.peer = entry.getValue();
                 req4.peers.add(inputDialogPeer);
                 if (req4.peers.size() == 100) {
-                    sendLoadPeersRequest(req4, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                     req4 = null;
                 }
             }
-            if (req4 != null) {
-                sendLoadPeersRequest(req4, requests, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+
+            if (requests.isEmpty()) {
+                remoteFilterPeersFailed = false;
+                getMessagesStorage().processLoadedFilterPeers(pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+                return;
+            }
+
+            for (TLRPC.TL_users_getUsers r : userRequests) {
+                sendLoadPeersRequest(r, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+            }
+            for (TLRPC.TL_messages_getChats r : chatRequests) {
+                sendLoadPeersRequest(r, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+            }
+            for (TLRPC.TL_channels_getChannels r : channelRequests) {
+                sendLoadPeersRequest(r, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
+            }
+            for (TLRPC.TL_messages_getPeerDialogs r : peerDialogRequests) {
+                sendLoadPeersRequest(r, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
             }
         });
     }
 
     protected void processLoadedDialogFilters(ArrayList<DialogFilter> filters, TLRPC.messages_Dialogs pinnedDialogs, TLRPC.messages_Dialogs pinnedRemoteDialogs, ArrayList<TLRPC.User> users, ArrayList<TLRPC.Chat> chats, ArrayList<TLRPC.EncryptedChat> encryptedChats, int remote, Runnable onDone) {
         Utilities.stageQueue.postRunnable(() -> {
+            final boolean skipMarkFiltersLoaded = remote != 0 && remoteFilterPeersFailed;
+            if (remote != 0) {
+                remoteFilterPeersFailed = false;
+            }
 
             LongSparseArray<TLRPC.Dialog> new_dialogs_dict = new LongSparseArray<>();
             SparseArray<TLRPC.EncryptedChat> enc_chats_dict;
@@ -2282,7 +2376,58 @@ public class MessagesController extends BaseController implements NotificationCe
                     dialogFiltersLoaded = true;
                     getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
                     if (remote == 0) {
-                        loadRemoteFilters(false);
+                        boolean needsRepair = false;
+                        if (!checkedMissingFilterPeers && getUserConfig().filtersLoaded) {
+                            for (int a = 0, N = dialogFilters.size(); a < N; a++) {
+                                DialogFilter filter = dialogFilters.get(a);
+                                if (filter.isDefault() || filter.isLocalFavorites()) {
+                                    continue;
+                                }
+                                for (int b = 0, N2 = filter.alwaysShow.size(); b < N2; b++) {
+                                    long did = filter.alwaysShow.get(b);
+                                    if (DialogObject.isEncryptedDialog(did) || did == 0) {
+                                        continue;
+                                    }
+                                    if (new_dialogs_dict.get(did) == null && dialogs_dict.get(did) == null) {
+                                        needsRepair = true;
+                                        break;
+                                    }
+                                    if (DialogObject.isChatDialog(did)) {
+                                        if (getChat(-did) == null) {
+                                            needsRepair = true;
+                                            break;
+                                        }
+                                    } else if (DialogObject.isUserDialog(did)) {
+                                        if (getUser(did) == null) {
+                                            needsRepair = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (needsRepair) {
+                                    break;
+                                }
+                                for (int b = 0, N2 = filter.neverShow.size(); b < N2; b++) {
+                                    long did = filter.neverShow.get(b);
+                                    if (DialogObject.isChatDialog(did)) {
+                                        if (getChat(-did) == null) {
+                                            needsRepair = true;
+                                            break;
+                                        }
+                                    } else if (DialogObject.isUserDialog(did)) {
+                                        if (getUser(did) == null) {
+                                            needsRepair = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (needsRepair) {
+                                    break;
+                                }
+                            }
+                            checkedMissingFilterPeers = true;
+                        }
+                        loadRemoteFilters(needsRepair);
                     }
 
                     if (pinnedRemoteDialogs != null && !pinnedRemoteDialogs.dialogs.isEmpty()) {
@@ -2431,8 +2576,10 @@ public class MessagesController extends BaseController implements NotificationCe
                     getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
                 }
                 if (remote != 0) {
-                    getUserConfig().filtersLoaded = true;
-                    getUserConfig().saveConfig(false);
+                    if (!skipMarkFiltersLoaded) {
+                        getUserConfig().filtersLoaded = true;
+                        getUserConfig().saveConfig(false);
+                    }
                     loadingRemoteFilters = false;
                     getNotificationCenter().postNotificationName(NotificationCenter.filterSettingsUpdated);
                 }
@@ -2469,6 +2616,10 @@ public class MessagesController extends BaseController implements NotificationCe
         loadRemoteFilters(force, null);
     }
 
+    void resetLoadingRemoteFilters() {
+        loadingRemoteFilters = false;
+    }
+
     public void loadRemoteFilters(boolean force, Utilities.Callback<Boolean> whenDone) {
         if (whenDone != null) {
             onLoadedRemoteFilters = whenDone;
@@ -2476,6 +2627,7 @@ public class MessagesController extends BaseController implements NotificationCe
         if (loadingRemoteFilters || !getUserConfig().isClientActivated() || !force && getUserConfig().filtersLoaded) {
             return;
         }
+        loadingRemoteFilters = true;
         if (force) {
             getUserConfig().filtersLoaded = false;
             getUserConfig().saveConfig(false);
@@ -5942,7 +6094,7 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         if (peer.access_hash == 0) {
             final TLRPC.User user = getUser(peer.user_id);
-            if (user.access_hash == 0 && user.fromMessageDialogId != 0 && user.fromMessageId != 0) {
+            if (user != null && user.access_hash == 0 && user.fromMessageDialogId != 0 && user.fromMessageId != 0) {
                 final TLRPC.TL_inputUserFromMessage inputUser = new TLRPC.TL_inputUserFromMessage();
                 inputUser.user_id = peer.user_id;
                 inputUser.peer = getInputPeer(user.fromMessageDialogId);
@@ -5980,6 +6132,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public static TLRPC.InputChannel getInputChannel(TLRPC.InputPeer peer) {
+        if (peer == null) {
+            return new TLRPC.TL_inputChannelEmpty();
+        }
         if (peer.access_hash == 0) {
             final TLRPC.Chat chat = MessagesController.getInstance(UserConfig.selectedAccount).getChat(peer.channel_id);
             if (chat != null && chat.access_hash == 0 && chat.fromMessageId != 0 && chat.fromMessageDialogId != 0) {
@@ -6669,6 +6824,8 @@ public class MessagesController extends BaseController implements NotificationCe
         dialogFiltersById.clear();
         loadingSuggestedFilters = false;
         loadingRemoteFilters = false;
+        checkedMissingFilterPeers = false;
+        remoteFilterPeersFailed = false;
         suggestedFilters.clear();
         dialogFiltersLoaded = false;
         ignoreSetOnline = false;
@@ -12698,6 +12855,11 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (onEmptyCallback != null && dialogsRes.dialogs.isEmpty()) {
                         AndroidUtilities.runOnUIThread(onEmptyCallback);
                     }
+                } else {
+                    AndroidUtilities.runOnUIThread(() -> {
+                        loadingDialogs.put(folderId, false);
+                        getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
+                    });
                 }
             });
         }
@@ -13921,16 +14083,23 @@ public class MessagesController extends BaseController implements NotificationCe
 
                 if (loadType != DIALOGS_LOAD_TYPE_CHANNEL && loadType != DIALOGS_LOAD_TYPE_UNKNOWN) {
                     if (!migrate) {
-                        dialogsEndReached.put(folderId, (dialogsRes.dialogs.size() == 0 || dialogsRes.dialogs.size() != count) && loadType == 0);
+                        boolean endReached = loadType == 0 && (dialogsRes.dialogs.isEmpty() || (!(dialogsRes instanceof TLRPC.TL_messages_dialogsSlice) && dialogsRes.dialogs.size() != count));
+                        if (!endReached && loadType == 0 && dialogsRes.dialogs.size() < count) {
+                            long[] updatedOffsets = getUserConfig().getDialogLoadOffsets(folderId);
+                            if (updatedOffsets[UserConfig.i_dialogsLoadOffsetId] == Integer.MAX_VALUE) {
+                                endReached = true;
+                            }
+                        }
+                        dialogsEndReached.put(folderId, endReached);
                         if (archivedDialogsCount > 0 && archivedDialogsCount < 20 && folderId == 0) {
                             dialogsEndReached.put(1, true);
-                            long[] dialogsLoadOffsetArchived = getUserConfig().getDialogLoadOffsets(folderId);
+                            long[] dialogsLoadOffsetArchived = getUserConfig().getDialogLoadOffsets(1);
                             if (dialogsLoadOffsetArchived[UserConfig.i_dialogsLoadOffsetId] == Integer.MAX_VALUE) {
                                 serverDialogsEndReached.put(1, true);
                             }
                         }
                         if (!fromCache) {
-                            serverDialogsEndReached.put(folderId, (dialogsRes.dialogs.size() == 0 || dialogsRes.dialogs.size() != count) && loadType == 0);
+                            serverDialogsEndReached.put(folderId, endReached);
                         }
                     }
                 }

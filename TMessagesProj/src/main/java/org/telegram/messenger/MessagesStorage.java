@@ -2729,6 +2729,9 @@ public class MessagesStorage extends BaseController {
                             if (a == 0) {
                                 if (!DialogObject.isEncryptedDialog(did)) {
                                     filter.alwaysShow.add(did);
+                                    if (did != 0 && !dialogsToLoad.contains(did)) {
+                                        dialogsToLoad.add(did);
+                                    }
                                 }
                                 int pin = cursor2.intValue(1);
                                 if (pin != Integer.MIN_VALUE) {
@@ -3408,14 +3411,58 @@ public class MessagesStorage extends BaseController {
                 continue;
             }
             long id;
-            if (peer.user_id != 0) {
+            if (peer instanceof TLRPC.TL_inputPeerSelf) {
+                id = getUserConfig().getClientUserId();
+            } else if (peer.user_id != 0) {
                 id = peer.user_id;
-            } else {
+            } else if (peer.chat_id != 0 || peer.channel_id != 0) {
                 id = -(peer.chat_id != 0 ? peer.chat_id : peer.channel_id);
+            } else {
+                continue;
             }
             array.add(id);
         }
         return array;
+    }
+
+    private void collectFilterPeerToLoad(TLRPC.InputPeer peer, boolean loadDialog, ArrayList<Long> usersToLoad, HashMap<Long, TLRPC.InputPeer> usersToLoadMap, ArrayList<Long> chatsToLoad, HashMap<Long, TLRPC.InputPeer> chatsToLoadMap, ArrayList<Long> dialogsToLoad, HashMap<Long, TLRPC.InputPeer> dialogsToLoadMap) {
+        if (peer == null) {
+            return;
+        }
+        if (peer instanceof TLRPC.TL_inputPeerSelf) {
+            long uid = getUserConfig().getClientUserId();
+            if (uid != 0) {
+                if (!usersToLoadMap.containsKey(uid)) {
+                    usersToLoad.add(uid);
+                    usersToLoadMap.put(uid, peer);
+                }
+                if (loadDialog && !dialogsToLoadMap.containsKey(uid)) {
+                    dialogsToLoad.add(uid);
+                    dialogsToLoadMap.put(uid, peer);
+                }
+            }
+        } else if (peer.user_id != 0) {
+            Long uid = peer.user_id;
+            if (!usersToLoadMap.containsKey(uid)) {
+                usersToLoad.add(uid);
+                usersToLoadMap.put(uid, peer);
+            }
+            if (loadDialog && !dialogsToLoadMap.containsKey(uid)) {
+                dialogsToLoad.add(uid);
+                dialogsToLoadMap.put(uid, peer);
+            }
+        } else if (peer.chat_id != 0 || peer.channel_id != 0) {
+            Long chatId = peer.chat_id != 0 ? peer.chat_id : peer.channel_id;
+            Long dialogId = -chatId;
+            if (!chatsToLoadMap.containsKey(chatId)) {
+                chatsToLoad.add(chatId);
+                chatsToLoadMap.put(chatId, peer);
+            }
+            if (loadDialog && !dialogsToLoadMap.containsKey(dialogId)) {
+                dialogsToLoad.add(dialogId);
+                dialogsToLoadMap.put(dialogId, peer);
+            }
+        }
     }
 
     public void checkLoadedRemoteFilters(ArrayList<TLRPC.DialogFilter> vector, Runnable onDone) {
@@ -3555,11 +3602,18 @@ public class MessagesStorage extends BaseController {
                         filter.pinnedDialogs.clear();
                         for (int b = 0, N2 = newFilter.pinned_peers.size(); b < N2; b++) {
                             TLRPC.InputPeer peer = newFilter.pinned_peers.get(b);
+                            if (peer == null) {
+                                continue;
+                            }
                             Long id;
-                            if (peer.user_id != 0) {
+                            if (peer instanceof TLRPC.TL_inputPeerSelf) {
+                                id = getUserConfig().getClientUserId();
+                            } else if (peer.user_id != 0) {
                                 id = peer.user_id;
-                            } else {
+                            } else if (peer.chat_id != 0 || peer.channel_id != 0) {
                                 id = -(peer.chat_id != 0 ? peer.chat_id : peer.channel_id);
+                            } else {
+                                continue;
                             }
                             int index = filter.pinnedDialogs.size();
                             if (secretChatsMap != null) {
@@ -3573,11 +3627,14 @@ public class MessagesStorage extends BaseController {
                             existingIds.remove(id);
                             if (!existingDialogsIds.remove(id)) {
                                 changed = true;
-                                if (!dialogsToLoadMap.containsKey(id)) {
-                                    dialogsToLoad.add(id);
-                                    dialogsToLoadMap.put(id, peer);
-                                }
                             }
+                            collectFilterPeerToLoad(peer, true, usersToLoad, usersToLoadMap, chatsToLoad, chatsToLoadMap, dialogsToLoad, dialogsToLoadMap);
+                        }
+                        for (int b = 0, N2 = newFilter.include_peers.size(); b < N2; b++) {
+                            collectFilterPeerToLoad(newFilter.include_peers.get(b), true, usersToLoad, usersToLoadMap, chatsToLoad, chatsToLoadMap, dialogsToLoad, dialogsToLoadMap);
+                        }
+                        for (int b = 0, N2 = newFilter.exclude_peers.size(); b < N2; b++) {
+                            collectFilterPeerToLoad(newFilter.exclude_peers.get(b), false, usersToLoad, usersToLoadMap, chatsToLoad, chatsToLoadMap, dialogsToLoad, dialogsToLoadMap);
                         }
                         if (secretChatsMap != null) {
                             for (LinkedHashMap.Entry<Integer, Long> entry : secretChatsMap.entrySet()) {
@@ -3643,46 +3700,47 @@ public class MessagesStorage extends BaseController {
                             if (c == 0) {
                                 for (int b = 0, N2 = newFilter.pinned_peers.size(); b < N2; b++) {
                                     TLRPC.InputPeer peer = newFilter.pinned_peers.get(b);
+                                    if (peer == null) {
+                                        continue;
+                                    }
                                     Long id;
-                                    if (peer.user_id != 0) {
+                                    if (peer instanceof TLRPC.TL_inputPeerSelf) {
+                                        id = getUserConfig().getClientUserId();
+                                    } else if (peer.user_id != 0) {
                                         id = peer.user_id;
-                                    } else {
+                                    } else if (peer.chat_id != 0 || peer.channel_id != 0) {
                                         id = -(peer.chat_id != 0 ? peer.chat_id : peer.channel_id);
+                                    } else {
+                                        continue;
                                     }
                                     if (!filter.alwaysShow.contains(id)) {
                                         filter.alwaysShow.add(id);
                                     }
                                     filter.pinnedDialogs.put(id, filter.pinnedDialogs.size() + 1);
-                                    if (!dialogsToLoadMap.containsKey(id)) {
-                                        dialogsToLoad.add(id);
-                                        dialogsToLoadMap.put(id, peer);
-                                    }
+                                    collectFilterPeerToLoad(peer, true, usersToLoad, usersToLoadMap, chatsToLoad, chatsToLoadMap, dialogsToLoad, dialogsToLoadMap);
                                 }
                             }
                             ArrayList<TLRPC.InputPeer> fromArray = c == 0 ? newFilter.include_peers : newFilter.exclude_peers;
                             ArrayList<Long> toArray = c == 0 ? filter.alwaysShow : filter.neverShow;
                             for (int b = 0, N2 = fromArray.size(); b < N2; b++) {
                                 TLRPC.InputPeer peer = fromArray.get(b);
-                                if (peer.user_id != 0) {
-                                    Long uid = peer.user_id;
-                                    if (!toArray.contains(uid)) {
-                                        toArray.add(uid);
-                                    }
-                                    if (!usersToLoadMap.containsKey(uid)) {
-                                        usersToLoad.add(uid);
-                                        usersToLoadMap.put(uid, peer);
-                                    }
-                                } else {
-                                    Long chatId = peer.chat_id != 0 ? peer.chat_id : peer.channel_id;
-                                    Long dialogId = -chatId;
-                                    if (!toArray.contains(dialogId)) {
-                                        toArray.add(dialogId);
-                                    }
-                                    if (!chatsToLoadMap.containsKey(chatId)) {
-                                        chatsToLoad.add(chatId);
-                                        chatsToLoadMap.put(chatId, peer);
-                                    }
+                                if (peer == null) {
+                                    continue;
                                 }
+                                Long dialogId;
+                                if (peer instanceof TLRPC.TL_inputPeerSelf) {
+                                    dialogId = getUserConfig().getClientUserId();
+                                } else if (peer.user_id != 0) {
+                                    dialogId = peer.user_id;
+                                } else if (peer.chat_id != 0 || peer.channel_id != 0) {
+                                    dialogId = -(peer.chat_id != 0 ? peer.chat_id : peer.channel_id);
+                                } else {
+                                    continue;
+                                }
+                                if (dialogId != 0 && !toArray.contains(dialogId)) {
+                                    toArray.add(dialogId);
+                                }
+                                collectFilterPeerToLoad(peer, c == 0, usersToLoad, usersToLoadMap, chatsToLoad, chatsToLoadMap, dialogsToLoad, dialogsToLoadMap);
                             }
                         }
                         filtersToSave.add(filter);
@@ -3723,6 +3781,12 @@ public class MessagesStorage extends BaseController {
                 }
             } catch (Exception e) {
                 checkSQLException(e);
+                AndroidUtilities.runOnUIThread(() -> {
+                    getMessagesController().resetLoadingRemoteFilters();
+                    if (onDone != null) {
+                        onDone.run();
+                    }
+                });
             }
         });
     }
@@ -3812,6 +3876,9 @@ public class MessagesStorage extends BaseController {
                 return 0;
             });
             saveDialogFiltersOrderInternal();
+        }
+        if (!users.isEmpty() || !chats.isEmpty() || (pinnedDialogs != null && !pinnedDialogs.dialogs.isEmpty()) || (pinnedRemoteDialogs != null && !pinnedRemoteDialogs.dialogs.isEmpty())) {
+            anythingChanged = true;
         }
         int remote = anythingChanged ? 1 : 2;
         calcUnreadCounters(true);
@@ -4910,16 +4977,16 @@ public class MessagesStorage extends BaseController {
                         }
                     }
                 }
-                for (int a = 0; a < 2; a++) {
-                    getUserConfig().setDialogsLoadOffset(a,
-                            dialogsLoadOffsetId,
-                            dialogsLoadOffsetDate,
-                            dialogsLoadOffsetUserId,
-                            dialogsLoadOffsetChatId,
-                            dialogsLoadOffsetChannelId,
-                            dialogsLoadOffsetAccess);
-                    getUserConfig().setTotalDialogsCount(a, totalDialogsLoadCount);
-                }
+                getUserConfig().setDialogsLoadOffset(0,
+                        dialogsLoadOffsetId,
+                        dialogsLoadOffsetDate,
+                        dialogsLoadOffsetUserId,
+                        dialogsLoadOffsetChatId,
+                        dialogsLoadOffsetChannelId,
+                        dialogsLoadOffsetAccess);
+                getUserConfig().setTotalDialogsCount(0, totalDialogsLoadCount);
+                getUserConfig().setDialogsLoadOffset(1, 0, 0, 0, 0, 0, 0);
+                getUserConfig().setTotalDialogsCount(1, 0);
                 getUserConfig().draftsLoaded = false;
                 getUserConfig().saveConfig(false);
                 getMessagesController().completeDialogsReset(dialogsRes, messagesCount, seq, newPts, date, qts, new_dialogs_dict, new_dialogMessage, lastMessage);

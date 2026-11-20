@@ -911,7 +911,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
 
     public int dialogsEmptyType() {
         if (dialogsType == 7 || dialogsType == 8) {
-            if (MessagesController.getInstance(currentAccount).isDialogsEndReached(folderId)) {
+            MessagesController messagesController = MessagesController.getInstance(currentAccount);
+            MessagesController.DialogFilter filter = getCurrentFilter();
+            boolean waitArchive = filter != null && (filter.flags & MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) == 0;
+            if (messagesController.isDialogsEndReached(folderId) && (!waitArchive || messagesController.isDialogsEndReached(1))) {
                 return DialogsEmptyCell.TYPE_FILTER_NO_CHATS_TO_DISPLAY;
             } else {
                 return DialogsEmptyCell.TYPE_FILTER_ADDING_CHATS;
