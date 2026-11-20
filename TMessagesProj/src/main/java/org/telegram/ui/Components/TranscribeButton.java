@@ -112,7 +112,7 @@ public class TranscribeButton {
 
         this.isOpen = false;
         this.shouldBeOpen = false;
-        premium = parent.getMessageObject() != null && UserConfig.getInstance(parent.getMessageObject().currentAccount).isPremium();
+        premium = org.telegram.messenger.KronoConfig.freeVoiceTranscription || (parent.getMessageObject() != null && UserConfig.getInstance(parent.getMessageObject().currentAccount).isPremium());
 
         loadingFloat = new AnimatedFloat(parent, 250, CubicBezierInterpolator.EASE_OUT_QUINT);
         animatedDrawLock = new AnimatedFloat(parent, 250, CubicBezierInterpolator.EASE_OUT_QUINT);
@@ -206,10 +206,11 @@ public class TranscribeButton {
             return;
         }
         clickedToOpen = false;
+        boolean allowFree = premium || org.telegram.messenger.KronoConfig.freeVoiceTranscription;
         boolean processClick, toOpen = !shouldBeOpen;
         if (!shouldBeOpen) {
             processClick = !loading;
-            if ((premium || canTranscribeTrial(parent.getMessageObject())) && parent.getMessageObject().isSent()) {
+            if ((allowFree || canTranscribeTrial(parent.getMessageObject())) && parent.getMessageObject().isSent()) {
                 setLoading(true, true);
             }
         } else {
@@ -223,7 +224,7 @@ public class TranscribeButton {
         }
         pressed = false;
         if (processClick) {
-            if (!premium && toOpen) {
+            if (!allowFree && toOpen) {
                 if (canTranscribeTrial(parent.getMessageObject()) || parent.getMessageObject() != null && parent.getMessageObject().messageOwner != null && !TextUtils.isEmpty(parent.getMessageObject().messageOwner.voiceTranscription)) {
                     transcribePressed(parent.getMessageObject(), toOpen, parent.getDelegate());
                 } else {
@@ -666,6 +667,68 @@ public class TranscribeButton {
         );
     }
 
+    private static boolean isOfficialServerTranscribeEligible(int account, MessageObject messageObject) {
+        if (messageObject == null || messageObject.messageOwner == null) {
+            return false;
+        }
+        if (UserConfig.getInstance(account).isPremium() || isFreeTranscribeInChat(messageObject)) {
+            return true;
+        }
+        ConnectionsManager cc = ConnectionsManager.getInstance(account);
+        MessagesController mc = MessagesController.getInstance(account);
+        if (mc.transcribeAudioTrialWeeklyNumber <= 0 || messageObject.getDuration() > mc.transcribeAudioTrialDurationMax) {
+            return false;
+        }
+        return mc.transcribeAudioTrialCooldownUntil == 0 || cc.getCurrentTime() > mc.transcribeAudioTrialCooldownUntil || mc.transcribeAudioTrialCurrentNumber > 0;
+    }
+
+    private static void transcribeLocally(MessageObject messageObject, long start, long minDuration) {
+        if (messageObject == null || messageObject.messageOwner == null) {
+            return;
+        }
+        final int account = messageObject.currentAccount;
+        TLRPC.InputPeer peer = MessagesController.getInstance(account).getInputPeer(messageObject.messageOwner.peer_id);
+        final long dialogId = DialogObject.getPeerDialogId(peer);
+        final int messageId = messageObject.messageOwner.id;
+
+        if (transcribeOperationsByDialogPosition == null) {
+            transcribeOperationsByDialogPosition = new HashMap<>();
+        }
+        transcribeOperationsByDialogPosition.put((Integer) reqInfoHash(messageObject), messageObject);
+
+        org.telegram.messenger.KronoVoiceTranscriber.transcribe(
+            messageObject,
+            status -> {
+                try {
+                    BulletinFactory.global().createSimpleBulletin(R.drawable.msg_info, status).show();
+                } catch (Throwable ignore) {}
+            },
+            (success, text, errorMessage) -> {
+                if (success) {
+                    String finalText = text == null ? "" : text;
+                    long duration = SystemClock.elapsedRealtime() - start;
+                    TranscribeButton.openVideoTranscription(messageObject);
+                    messageObject.messageOwner.voiceTranscription = finalText;
+                    messageObject.messageOwner.voiceTranscriptionOpen = true;
+                    messageObject.messageOwner.voiceTranscriptionFinal = true;
+                    MessagesStorage.getInstance(account).updateMessageVoiceTranscription(dialogId, messageId, finalText, messageObject.messageOwner);
+                    AndroidUtilities.runOnUIThread(() -> finishTranscription(messageObject, 0, finalText), Math.max(0, minDuration - duration));
+                } else {
+                    if (transcribeOperationsByDialogPosition != null) {
+                        transcribeOperationsByDialogPosition.remove((Integer) reqInfoHash(messageObject));
+                    }
+                    messageObject.messageOwner.voiceTranscriptionOpen = false;
+                    messageObject.messageOwner.voiceTranscriptionFinal = false;
+                    MessagesStorage.getInstance(account).updateMessageVoiceTranscriptionOpen(dialogId, messageId, messageObject.messageOwner);
+                    NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.voiceTranscriptionUpdate, messageObject, null, null, (Boolean) false, null);
+                    try {
+                        BulletinFactory.global().createSimpleBulletin(R.drawable.msg_info, !TextUtils.isEmpty(errorMessage) ? errorMessage : "No se pudo transcribir el audio.").show();
+                    } catch (Throwable ignore) {}
+                }
+            }
+        );
+    }
+
     private static void transcribePressed(MessageObject messageObject, boolean open, ChatMessageCell.ChatMessageCellDelegate delegate) {
         if (messageObject == null || messageObject.messageOwner == null || !messageObject.isSent()) {
             return;
@@ -675,14 +738,20 @@ public class TranscribeButton {
         TLRPC.InputPeer peer = MessagesController.getInstance(account).getInputPeer(messageObject.messageOwner.peer_id);
         long dialogId = DialogObject.getPeerDialogId(peer);
         int messageId = messageObject.messageOwner.id;
+        org.telegram.messenger.KronoConfig.loadConfig();
+        final boolean useFreeFallback = org.telegram.messenger.KronoConfig.freeVoiceTranscription;
+
         if (open) {
-            if (messageObject.messageOwner.voiceTranscription != null && messageObject.messageOwner.voiceTranscriptionFinal) {
+            boolean hasNonEmptyCached = !TextUtils.isEmpty(messageObject.messageOwner.voiceTranscription);
+            if ((hasNonEmptyCached || !useFreeFallback) && messageObject.messageOwner.voiceTranscription != null && messageObject.messageOwner.voiceTranscriptionFinal) {
                 TranscribeButton.openVideoTranscription(messageObject);
                 messageObject.messageOwner.voiceTranscriptionOpen = true;
                 MessagesStorage.getInstance(account).updateMessageVoiceTranscriptionOpen(dialogId, messageId, messageObject.messageOwner);
                 AndroidUtilities.runOnUIThread(() -> {
                     NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.voiceTranscriptionUpdate, messageObject, null, null, (Boolean) true, (Boolean) true);
                 });
+            } else if (useFreeFallback && (org.telegram.messenger.KronoConfig.voiceTranscriptionMode == org.telegram.messenger.KronoConfig.VOICE_TRANSCRIBE_MODE_LOCAL_ONLY || !isOfficialServerTranscribeEligible(account, messageObject))) {
+                transcribeLocally(messageObject, start, minDuration);
             } else {
                 if (BuildVars.LOGS_ENABLED) {
                     FileLog.d("sending Transcription request, msg_id=" + messageId + " dialog_id=" + dialogId);
@@ -725,6 +794,10 @@ public class TranscribeButton {
                         transcribeOperationsById.put(id, messageObject);
                         messageObject.messageOwner.voiceTranscriptionId = id;
                     } else {
+                        if (useFreeFallback) {
+                            AndroidUtilities.runOnUIThread(() -> transcribeLocally(messageObject, start, minDuration));
+                            return;
+                        }
                         if (err != null && err.text != null) {
                             if (err.text.startsWith("FLOOD_WAIT_")) {
                                 MessagesController.getInstance(account).updateTranscribeAudioTrialCurrentNumber(0);
@@ -819,6 +892,9 @@ public class TranscribeButton {
     }
 
     public static boolean canTranscribeTrial(MessageObject messageObject) {
+        if (org.telegram.messenger.KronoConfig.freeVoiceTranscription) {
+            return true;
+        }
         if (messageObject == null || messageObject.messageOwner == null) {
             return false;
         }
@@ -854,6 +930,9 @@ public class TranscribeButton {
     }
 
     public static boolean showTranscribeLock(MessageObject messageObject) {
+        if (org.telegram.messenger.KronoConfig.freeVoiceTranscription) {
+            return false;
+        }
         if (messageObject == null || messageObject.messageOwner == null) {
             return false;
         }

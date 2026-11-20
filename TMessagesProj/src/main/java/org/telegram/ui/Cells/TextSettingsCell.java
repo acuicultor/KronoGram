@@ -16,6 +16,8 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
+import android.text.Layout;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -27,6 +29,7 @@ import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeBind;
@@ -59,6 +62,11 @@ public class TextSettingsCell extends FrameLayout {
     private int loadingSize;
     private boolean measureDelay;
     private int changeProgressStartDelay;
+
+    private boolean stackedTwoLines;
+    private int stackedLeftOffset;
+    private int stackedRightOffset;
+    private TextPaint valueMeasurePaint;
 
     Paint paint;
 
@@ -121,52 +129,126 @@ public class TextSettingsCell extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), AndroidUtilities.dp(50) + (needDivider ? 1 : 0));
+        int measuredWidth = MeasureSpec.getSize(widthMeasureSpec);
+        int baseHeight = AndroidUtilities.dp(50) + (needDivider ? 1 : 0);
 
-        int availableWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight() - AndroidUtilities.dp(34);
+        int contentWidth = measuredWidth - getPaddingLeft() - getPaddingRight();
+        int titleLeft = imageView.getVisibility() == VISIBLE ? AndroidUtilities.dp(58) : AndroidUtilities.dp(padding);
+        int valueRight = AndroidUtilities.dp(padding - 4);
+        int availableWidth = Math.max(0, contentWidth - AndroidUtilities.dp(34));
         int width = betterLayout ? availableWidth : availableWidth / 2;
+
         if (valueImageView.getVisibility() == VISIBLE) {
-            valueImageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.EXACTLY));
+            valueImageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(baseHeight, MeasureSpec.EXACTLY));
+            valueRight += valueImageView.getMeasuredWidth() + AndroidUtilities.dp(8);
         }
 
         if (imageView.getVisibility() == VISIBLE) {
             if (imageViewIsColorful) {
                 imageView.measure(MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(28), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(28), MeasureSpec.EXACTLY));
             } else {
-                imageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.AT_MOST));
+                imageView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(baseHeight, MeasureSpec.AT_MOST));
             }
             if (betterLayout) width -= imageView.getMeasuredWidth() + AndroidUtilities.dp(8);
         }
 
-        if (valueBackupImageView != null) {
+        if (valueBackupImageView != null && valueBackupImageView.getVisibility() == VISIBLE) {
             valueBackupImageView.measure(MeasureSpec.makeMeasureSpec(valueBackupImageView.getLayoutParams().height, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(valueBackupImageView.getLayoutParams().width, MeasureSpec.EXACTLY));
+            valueRight += valueBackupImageView.getMeasuredWidth() + AndroidUtilities.dp(8);
             if (betterLayout) width -= valueBackupImageView.getMeasuredWidth() + AndroidUtilities.dp(8);
         }
+
+        int usableOneLineWidth = Math.max(0, contentWidth - titleLeft - valueRight);
+        stackedLeftOffset = titleLeft;
+        stackedRightOffset = valueRight;
+
         if (valueTextView.getVisibility() == VISIBLE) {
-            valueTextView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.EXACTLY));
-            if (betterLayout) {
-                width -= valueTextView.getMeasuredWidth() + AndroidUtilities.dp(8);
-            } else {
-                width = availableWidth - valueTextView.getMeasuredWidth() - AndroidUtilities.dp(8);
+            CharSequence valueText = valueTextView.getText();
+            int naturalValueOneLineW = 0;
+            if (!TextUtils.isEmpty(valueText)) {
+                if (valueMeasurePaint == null) {
+                    valueMeasurePaint = new TextPaint();
+                }
+                valueMeasurePaint.set(valueTextView.getPaint());
+                valueMeasurePaint.setTextSize(AndroidUtilities.dp(16));
+                naturalValueOneLineW = (int) Math.ceil(Layout.getDesiredWidth(valueText, valueMeasurePaint));
             }
 
-            if (valueImageView.getVisibility() == VISIBLE) {
-                MarginLayoutParams params = (MarginLayoutParams) valueImageView.getLayoutParams();
-                if (LocaleController.isRTL) {
-                    params.leftMargin = AndroidUtilities.dp(padding + 4) + valueTextView.getMeasuredWidth();
-                } else {
-                    params.rightMargin = AndroidUtilities.dp(padding + 4) + valueTextView.getMeasuredWidth();
+            CharSequence titleText = textView.getText();
+            int naturalTitleW = TextUtils.isEmpty(titleText) ? 0 : (int) Math.ceil(Layout.getDesiredWidth(titleText, textView.getPaint()));
+            boolean fitsOneLine = naturalTitleW + AndroidUtilities.dp(12) + naturalValueOneLineW <= usableOneLineWidth;
+
+            if (fitsOneLine) {
+                stackedTwoLines = false;
+                if (textView.getMaxLines() != 1) {
+                    textView.setSingleLine(true);
+                    textView.setMaxLines(1);
+                    textView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
                 }
+                valueTextView.getDrawable().setOverrideFullWidth(usableOneLineWidth);
+                valueTextView.setTextSize(AndroidUtilities.dp(16));
+                valueTextView.setGravity((LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT) | Gravity.CENTER_VERTICAL);
+                valueTextView.measure(MeasureSpec.makeMeasureSpec(usableOneLineWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(baseHeight, MeasureSpec.EXACTLY));
+
+                if (valueImageView.getVisibility() == VISIBLE) {
+                    MarginLayoutParams params = (MarginLayoutParams) valueImageView.getLayoutParams();
+                    if (LocaleController.isRTL) {
+                        params.leftMargin = AndroidUtilities.dp(padding + 4) + valueTextView.getMeasuredWidth();
+                    } else {
+                        params.rightMargin = AndroidUtilities.dp(padding + 4) + valueTextView.getMeasuredWidth();
+                    }
+                }
+                int textW = Math.max(0, usableOneLineWidth - valueTextView.getMeasuredWidth() - AndroidUtilities.dp(8));
+                textView.measure(MeasureSpec.makeMeasureSpec(textW, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(baseHeight, MeasureSpec.EXACTLY));
+                setMeasuredDimension(measuredWidth, baseHeight);
+            } else {
+                stackedTwoLines = true;
+                int stackRight = Math.max(AndroidUtilities.dp(padding), valueRight);
+                int stackWidth = Math.max(0, contentWidth - titleLeft - stackRight);
+                if (textView.getMaxLines() != 3) {
+                    textView.setSingleLine(false);
+                    textView.setMaxLines(3);
+                    textView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP);
+                }
+                textView.measure(MeasureSpec.makeMeasureSpec(stackWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                valueTextView.getDrawable().setOverrideFullWidth(stackWidth);
+                valueTextView.setTextSize(AndroidUtilities.dp(14));
+                valueTextView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
+                valueTextView.measure(MeasureSpec.makeMeasureSpec(stackWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(AndroidUtilities.dp(24), MeasureSpec.EXACTLY));
+                int stackedHeight = Math.max(AndroidUtilities.dp(64), AndroidUtilities.dp(20) + textView.getMeasuredHeight() + valueTextView.getMeasuredHeight()) + (needDivider ? 1 : 0);
+                setMeasuredDimension(measuredWidth, stackedHeight);
             }
         } else {
-            width = availableWidth;
+            stackedTwoLines = false;
+            if (textView.getMaxLines() != 1) {
+                textView.setSingleLine(true);
+                textView.setMaxLines(1);
+                textView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
+            }
+            int textW = Math.max(0, contentWidth - titleLeft - valueRight);
+            textView.measure(MeasureSpec.makeMeasureSpec(textW, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(baseHeight, MeasureSpec.EXACTLY));
+            setMeasuredDimension(measuredWidth, baseHeight);
         }
-        textView.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.EXACTLY));
     }
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        if (stackedTwoLines && valueTextView.getVisibility() == VISIBLE) {
+            int totalContentH = textView.getMeasuredHeight() + AndroidUtilities.dp(2) + valueTextView.getMeasuredHeight();
+            int startY = Math.max(AndroidUtilities.dp(8), (getMeasuredHeight() - (needDivider ? 1 : 0) - totalContentH) / 2);
+            int titleW = textView.getMeasuredWidth();
+            int valueW = valueTextView.getMeasuredWidth();
+            int titleL = LocaleController.isRTL
+                    ? (getMeasuredWidth() - getPaddingRight() - stackedLeftOffset - titleW)
+                    : (getPaddingLeft() + stackedLeftOffset);
+            int valueL = LocaleController.isRTL
+                    ? (getMeasuredWidth() - getPaddingRight() - stackedLeftOffset - valueW)
+                    : (getPaddingLeft() + stackedLeftOffset);
+            textView.layout(titleL, startY, titleL + titleW, startY + textView.getMeasuredHeight());
+            int valueTop = startY + textView.getMeasuredHeight() + AndroidUtilities.dp(2);
+            valueTextView.layout(valueL, valueTop, valueL + valueW, valueTop + valueTextView.getMeasuredHeight());
+        }
         if (measureDelay && getParent() != null) {
             changeProgressStartDelay = (int) ((getTop() / (float) ((View) getParent()).getMeasuredHeight()) * 150f);
         }
@@ -367,7 +449,7 @@ public class TextSettingsCell extends FrameLayout {
         super.dispatchDraw(canvas);
 
         if (needDivider) {
-            int offset = AndroidUtilities.dp(imageView.getVisibility() == View.VISIBLE ? 58 : 20);
+            int offset = KronoConfig.isTelegramXStyle() ? 0 : AndroidUtilities.dp(imageView.getVisibility() == View.VISIBLE ? 58 : 20);
             canvas.drawLine(LocaleController.isRTL ? 0 : offset, getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? offset : 0), getMeasuredHeight() - 1, Theme.dividerPaint);
         }
     }

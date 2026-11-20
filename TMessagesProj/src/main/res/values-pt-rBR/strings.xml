@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Telegram</string>
-    <string name="AppNameBeta">Telegram Beta</string>
+    <string name="AppName">KronoGram</string>
+    <string name="AppNameBeta">KronoGram Beta</string>
     <string name="LanguageName">Português (Brasil)</string>
     <string name="English">Inglês</string>
     <string name="LanguageNameInEnglish">Portuguese (Brazil)</string>
@@ -180,8 +180,8 @@
     <string name="NotificationGroupFew">%1$s enviou %3$s ao grupo %2$s</string>
     <string name="NotificationGroupAlbum">%1$s enviou um álbum para o grupo %2$s</string>
     <string name="NotificationGroupForwardedFew">%1$s encaminhou %3$s ao grupo %2$s</string>
-    <string name="NotificationHiddenName">Telegram</string>
-    <string name="NotificationHiddenChatName">Telegram</string>
+    <string name="NotificationHiddenName">KronoGram</string>
+    <string name="NotificationHiddenChatName">KronoGram</string>
     <string name="NotificationHiddenChatUserName">Usuário</string>
     <string name="NotificationHiddenMessage">Nova mensagem</string>
     <string name="Reply">Responder</string>
@@ -424,7 +424,7 @@
     <string name="LanguageUnknownTitle">Dados insuficientes</string>
     <string name="LanguageUnsupportedError">Idioma não encontrado.</string>
     <string name="LanguageSame">Você já está usando esse pacote de idiomas (**%1$s**). Você pode alterar seu idioma a qualquer momento em Configurações.</string>
-    <string name="LanguageUnknownCustomAlert">Infelizmente esse pacote de idiomas personalizado (**%1$s**) não contém dados para o Telegram no Android.</string>
+    <string name="LanguageUnknownCustomAlert">Infelizmente esse pacote de idiomas personalizado (**%1$s**) não contém dados para o KronoGram no Android.</string>
     <string name="AskAQuestionInfo">Por favor, note que o Suporte do Telegram é feito por voluntários. Tentaremos responder o mais rápido possível, mas pode levar um tempo.\n\nDê uma olhada na página de <![CDATA[<a href=\"https://telegram.org/faq/pt-br#questoes-gerais\">Perguntas Frequentes</a>]]>: há dicas e soluções para a maioria dos <![CDATA[<a href=\"https://telegram.org/faq/pt-br#solucao-de-problemas\">problemas</a>]]>.</string>
     <string name="AskButton">Perguntar</string>
     <string name="TelegramFAQ">Perguntas Frequentes</string>
@@ -446,7 +446,7 @@
     <string name="NotificationsService">Manter Serviço Ativo</string>
     <string name="NotificationsServiceInfo">Reinicia o app quando ele tiver sido fechado. Ative para notificações mais estáveis.</string>
     <string name="NotificationsServiceConnection">Conexão em Segundo Plano</string>
-    <string name="NotificationsServiceConnectionInfo">Mantém uma conexão de baixo impacto para que o Telegram receba notificações mais estáveis.</string>
+    <string name="NotificationsServiceConnectionInfo">Mantém uma conexão de baixo impacto para que o KronoGram receba notificações mais estáveis.</string>
     <string name="SortBy">Listar Por</string>
     <string name="ImportContacts">Importar Contatos</string>
     <string name="SortFirstName">Primeiro nome</string>
@@ -576,7 +576,7 @@
     <string name="DirectShareInfo">Mostra chats recentes no menu compartilhar.</string>
     <string name="Emoji">Emoji</string>
     <string name="LargeEmoji">Emoji Grande</string>
-    <string name="TelegramVersion">Telegram para Android %1$s</string>
+    <string name="TelegramVersion">KronoGram para Android %1$s</string>
     <string name="DebugMenu">Menu de Depuração</string>
     <string name="DebugMenuLongPress">Segure de novo para ver o menu de depuração</string>
     <string name="DebugSendLogs">Enviar Logs</string>
@@ -643,7 +643,7 @@
     <string name="UseProxyForCallsInfo">Servidores proxy podem diminuir a qualidade de suas chamadas.</string>
     <string name="ConnectingToProxyEnable">Ativar</string>
     <string name="LowDiskSpaceTitle">Atenção</string>
-    <string name="LowDiskSpaceMessage">Seu dispositivo está quase sem espaço. Para esvaziar um pouco, você pode configurar o Telegram para manter apenas mídias recentes.</string>
+    <string name="LowDiskSpaceMessage">Seu dispositivo está quase sem espaço. Para esvaziar um pouco, você pode configurar o KronoGram para manter apenas mídias recentes.</string>
     <string name="LowDiskSpaceMessage2">Seu dispositivo está quase sem espaço livre. Você pode usar as configurações de cache para remover mídias desnecessárias – e baixar novamente os arquivos se precisar deles.</string>
     <string name="LowDiskSpaceButton">Gerenciar Cache</string>
     <string name="AutodownloadContacts">Contatos</string>
@@ -678,7 +678,7 @@
     <string name="ClearSelectedCache">Limpar Selecionados</string>
     <string name="ClearCacheInfo">Libere espaço em disco no seu dispositivo; sua mídia ficará na nuvem.</string>
     <string name="ClearingCache">Limpando cache...</string>
-    <string name="ClearingCacheDescription">Por favor, fique nesta tela até o Telegram terminar a limpeza do seu cache.</string>
+    <string name="ClearingCacheDescription">Por favor, fique nesta tela até o KronoGram terminar a limpeza do seu cache.</string>
     <string name="ChangePhoneNumber">Alterar Número de Telefone</string>
     <string name="ChangePhoneNumberInfo">Mova sua conta, chats e mídias para um novo número.</string>
     <string name="ChangePhoneNumberSuccessWithPhone">Seu número de telefone foi alterado para %1$s.</string>
@@ -707,7 +707,7 @@
     <string name="AuthAnotherClientInfo2">Use o Telegram Desktop para obter o código QR.</string>
     <string name="AuthAnotherClientInfo3">Escaneie o código QR para conectar à sua conta.</string>
     <string name="AuthAnotherClientUrl">Esse código pode ser usado para permitir que alguém entre na sua conta do Telegram.\n\nPara confirmar o login no Telegram, acesse Configurações &gt; Dispositivos &gt; Ler Código QR e escaneie o código.</string>
-    <string name="QRCodePermissionNoCameraWithHint">O **Telegram** precisa de acesso à câmera para você escanear Códigos QR. Toque em Configurações &gt; Permissões, e ative a **Câmera**.</string>
+    <string name="QRCodePermissionNoCameraWithHint">O **KronoGram** precisa de acesso à câmera para você escanear Códigos QR. Toque em Configurações &gt; Permissões, e ative a **Câmera**.</string>
     <string name="SetProfilePhoto">Definir Foto do Perfil</string>
     <string name="AppUpdate">Atualizar o Telegram</string>
     <string name="AppUpdateVersionAndSize">Versão %1$s • %2$s</string>
@@ -1134,10 +1134,10 @@
     <string name="SecretLinkPreviewAlert">Ativar a prévia estendida de links em Chats Secretos? Note que a prévia é gerada nos servidores do Telegram.</string>
     <string name="SecretChatContextBotAlert">Os bots inline são fornecidos por desenvolvedores terceiros. Para o bot funcionar, os símbolos que você digita depois do nome de usuário do bot são enviados para o respectivo desenvolvedor.</string>
     <string name="EditMessageError">Desculpe, você não pode editar essa mensagem.</string>
-    <string name="AllowReadCall">Permita o acesso às ligações ao Telegram, assim podemos automaticamente adicionar o código para você.</string>
-    <string name="AllowReadCallAndLog">Por favor, permita que o Telegram receba chamadas e leia o registro de chamadas para que possamos inserir automaticamente seu código para você.</string>
-    <string name="AllowReadCallLog">Por favor, permita que o Telegram leia o registro de chamadas para inserir automaticamente o seu código para você.</string>
-    <string name="AllowFillNumber">Por favor, permita que o Telegram receba chamadas. Assim podemos confirmar o seu número de telefone automaticamente.</string>
+    <string name="AllowReadCall">Permita o acesso às ligações ao KronoGram, assim podemos automaticamente adicionar o código para você.</string>
+    <string name="AllowReadCallAndLog">Por favor, permita que o KronoGram receba chamadas e leia o registro de chamadas para que possamos inserir automaticamente seu código para você.</string>
+    <string name="AllowReadCallLog">Por favor, permita que o KronoGram leia o registro de chamadas para inserir automaticamente o seu código para você.</string>
+    <string name="AllowFillNumber">Por favor, permita que o KronoGram receba chamadas. Assim podemos confirmar o seu número de telefone automaticamente.</string>
     <string name="UserRestricted">Você não tem permissão para isso.</string>
     <string name="YouBlockedUser">Desculpe, você bloqueou este usuário ou bot e por isso não pode adicioná-lo a grupos. Desbloqueie para prosseguir.</string>
     <string name="AddAdminErrorNotAMember">Você não pode adicionar esse usuário como admin porque ele não é membro deste grupo e você não tem permissão para adicioná-lo.</string>
@@ -1172,27 +1172,27 @@
     <string name="TosUpdateDecline">Infelizmente, não há outras opções. Ao contrário de outros aplicativos, o Telegram não usa dados do usuário para direcionamento de anúncios ou outros fins comerciais. O Telegram armazena apenas as informações necessárias para funcionar como um serviço de nuvem rico em recursos. Você pode ajustar como seus dados são usados nas configurações de Privacidade e Segurança.\n\nSe você não se sentir confortável com as necessidades modestas do Telegram, não será possível fornecermos a você esse serviço.</string>
     <string name="TosDeclineDeleteAccount">Atenção, isso apagará irreversivelmente sua conta do Telegram e todos os dados armazenados na nuvem do Telegram.\n\nImportante: em vez de perder tudo, você pode Cancelar agora e exportar seus dados primeiro. (Para fazer isso, abra o Telegram Desktop atualizado e vá em Configurações &gt; Exportar Dados do Telegram.)</string>
     <!--permissions-->
-    <string name="PermissionStorageWithHint">O **Telegram** precisa de acesso ao armazenamento para enviar e salvar fotos, vídeos, músicas e outros documentos. Toque em Configurações &gt; Permissões e ative **Arquivos e mídia**.</string>
-    <string name="PermissionNoAudioWithHint">O **Telegram** precisa de acesso ao seu microfone para enviar mensagens de voz. Toque em Configurações &gt; Permissões, e ative **Microfone**.</string>
-    <string name="PermissionNoAudioVideoWithHint">O **Telegram** precisa de acesso ao seu microfone para você enviar mensagens de voz. Toque em Configurações &gt; Permissões, e ative **Microfone**.</string>
-    <string name="PermissionNoCameraWithHint">O **Telegram** precisa de acesso à câmera para tirar fotos e gravar vídeos. Toque em Configurações &gt; Permissões, e ative **Câmera**.</string>
-    <string name="PermissionNoCameraMicVideo">O **Telegram** precisa de acesso ao seu microfone e à câmera para enviar mensagens de vídeo. Toque em Configurações &gt; Permissões, e ative **Microfone** e **Câmera**.</string>
-    <string name="PermissionNoLocation">Telegram precisa acessar sua localização para que você possa compartilhar com seus amigos.</string>
-    <string name="PermissionNoLocationStory">O Telegram precisa acessar sua localização para você poder adicionar o widget de tempo aos seus stories.</string>
-    <string name="PermissionNoLocationFriends">O **Telegram** precisa acessar a localização para você compartilhar com seus amigos. Toque em Configurações &gt; Permissões e ative **Localização**.</string>
-    <string name="PermissionNoLocationNavigation">O **Telegram** precisa acessar a sua localização para você obter direções. Toque em Configurações &gt; Permissões e ative **Localização**.</string>
-    <string name="PermissionNoContactsSharing">O **Telegram** precisa acessar os seus contatos para você poder compartilhar com os seus amigos. Toque em Configurações &gt; Permissões e ative **Contatos**.</string>
-    <string name="PermissionNoStorageAvatar">O **Telegram** precisa de acesso ao armazenamento para enviar a foto de perfil. Toque em Configurações &gt; Permissões e ative **Arquivos e mídia**.</string>
-    <string name="PermissionNoAudioStorageStory">O **Telegram** precisa de acesso aos arquivos de música para adicioná-los ao seu story. Toque em Configurações &gt; Permissões e ative **Música e Áudio**.</string>
-    <string name="PermissionDrawAboveOtherApps">Para reproduzir vídeos no modo PiP, o Telegram precisa de acesso para aparecer sobre outros apps.</string>
-    <string name="PermissionDrawAboveOtherAppsGroupCall">O modo flutuante permite usar o recurso \"Aperte para Falar\" e também ver quem está falando até mesmo quando você estiver fora do Telegram.</string>
+    <string name="PermissionStorageWithHint">O **KronoGram** precisa de acesso ao armazenamento para enviar e salvar fotos, vídeos, músicas e outros documentos. Toque em Configurações &gt; Permissões e ative **Arquivos e mídia**.</string>
+    <string name="PermissionNoAudioWithHint">O **KronoGram** precisa de acesso ao seu microfone para enviar mensagens de voz. Toque em Configurações &gt; Permissões, e ative **Microfone**.</string>
+    <string name="PermissionNoAudioVideoWithHint">O **KronoGram** precisa de acesso ao seu microfone para você enviar mensagens de voz. Toque em Configurações &gt; Permissões, e ative **Microfone**.</string>
+    <string name="PermissionNoCameraWithHint">O **KronoGram** precisa de acesso à câmera para tirar fotos e gravar vídeos. Toque em Configurações &gt; Permissões, e ative **Câmera**.</string>
+    <string name="PermissionNoCameraMicVideo">O **KronoGram** precisa de acesso ao seu microfone e à câmera para enviar mensagens de vídeo. Toque em Configurações &gt; Permissões, e ative **Microfone** e **Câmera**.</string>
+    <string name="PermissionNoLocation">KronoGram precisa acessar sua localização para que você possa compartilhar com seus amigos.</string>
+    <string name="PermissionNoLocationStory">O KronoGram precisa acessar sua localização para você poder adicionar o widget de tempo aos seus stories.</string>
+    <string name="PermissionNoLocationFriends">O **KronoGram** precisa acessar a localização para você compartilhar com seus amigos. Toque em Configurações &gt; Permissões e ative **Localização**.</string>
+    <string name="PermissionNoLocationNavigation">O **KronoGram** precisa acessar a sua localização para você obter direções. Toque em Configurações &gt; Permissões e ative **Localização**.</string>
+    <string name="PermissionNoContactsSharing">O **KronoGram** precisa acessar os seus contatos para você poder compartilhar com os seus amigos. Toque em Configurações &gt; Permissões e ative **Contatos**.</string>
+    <string name="PermissionNoStorageAvatar">O **KronoGram** precisa de acesso ao armazenamento para enviar a foto de perfil. Toque em Configurações &gt; Permissões e ative **Arquivos e mídia**.</string>
+    <string name="PermissionNoAudioStorageStory">O **KronoGram** precisa de acesso aos arquivos de música para adicioná-los ao seu story. Toque em Configurações &gt; Permissões e ative **Música e Áudio**.</string>
+    <string name="PermissionDrawAboveOtherApps">Para reproduzir vídeos no modo PiP, o KronoGram precisa de acesso para aparecer sobre outros apps.</string>
+    <string name="PermissionDrawAboveOtherAppsGroupCall">O modo flutuante permite usar o recurso \"Aperte para Falar\" e também ver quem está falando até mesmo quando você estiver fora do KronoGram.</string>
     <string name="PermissionOpenSettings">Configurações</string>
-    <string name="PermissionXiaomiLockscreen">Por favor, permita que o Telegram seja mostrado na tela de bloqueio para que as chamadas possam funcionar corretamente.</string>
-    <string name="PermissionBackgroundLocation">Para enviar a sua localização ao vivo neste chat, o Telegram precisa de acesso contínuo à sua localização, inclusive enquanto o app estiver em segundo plano.\n\nO Telegram acessará a sua localização somente pela duração que você escolher e você pode parar de compartilhar a qualquer momento. Não usaremos a sua localização para nenhum outro motivo além de compartilhar neste chat.</string>
+    <string name="PermissionXiaomiLockscreen">Por favor, permita que o KronoGram seja mostrado na tela de bloqueio para que as chamadas possam funcionar corretamente.</string>
+    <string name="PermissionBackgroundLocation">Para enviar a sua localização ao vivo neste chat, o KronoGram precisa de acesso contínuo à sua localização, inclusive enquanto o app estiver em segundo plano.\n\nO KronoGram acessará a sua localização somente pela duração que você escolher e você pode parar de compartilhar a qualquer momento. Não usaremos a sua localização para nenhum outro motivo além de compartilhar neste chat.</string>
     <string name="PermissionDrawAboveOtherAppsTitle">Picture-in-Picture</string>
     <string name="PermissionDrawAboveOtherAppsGroupCallTitle">Chat de vídeo flutuante</string>
     <!--Intro view-->
-    <string name="Page1Title">Telegram</string>
+    <string name="Page1Title">KronoGram</string>
     <string name="Page2Title">Rápido</string>
     <string name="Page3Title">Gratuito</string>
     <string name="Page4Title">Seguro</string>

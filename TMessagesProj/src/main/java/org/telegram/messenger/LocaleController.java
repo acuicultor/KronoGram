@@ -116,6 +116,10 @@ public class LocaleController {
         return formatterDayWithSeconds;
     }
 
+    public FastDateFormat getMessageDayFormatter() {
+        return KronoConfig.showTimeWithSeconds ? getFormatterDayWithSeconds() : getFormatterDay();
+    }
+
     private volatile FastDateFormat formatterConstDay;
     public FastDateFormat getFormatterConstDay() {
         if (formatterConstDay == null) {
@@ -1478,11 +1482,129 @@ public class LocaleController {
     }
 
     public static String getServerString(String key) {
+        if ("AppName".equals(key) || "Page1Title".equals(key)) {
+            return "KronoGram";
+        }
+        if ("AppNameBeta".equals(key)) {
+            return "KronoGram Beta";
+        }
         String value = getInstance().localizationExternal.getByResName(key);
         if (value == null) {
             value = getInstance().getLocalizedString(key);
         }
-        return value;
+        return applyClientBrandingIfNeeded(key, 0, null, value);
+    }
+
+    private static boolean isClientBrandedKey(String key, int stringRes, String fallback) {
+        if (stringRes == R.string.TelegramVersion
+                || stringRes == R.string.OptimizingTelegram
+                || stringRes == R.string.NotificationHiddenName
+                || stringRes == R.string.NotificationHiddenChatName
+                || stringRes == R.string.NotificationsServiceConnectionInfo
+                || stringRes == R.string.NotificationsPermissionAlertSubtitle
+                || stringRes == R.string.ClearTelegramCache
+                || stringRes == R.string.ClearingCacheDescription
+                || stringRes == R.string.LocalDatabaseInfo
+                || stringRes == R.string.LocalDatabaseSize
+                || stringRes == R.string.LowDiskSpaceMessage
+                || stringRes == R.string.StorageUsageTelegram
+                || stringRes == R.string.StorageUsageTelegramLess
+                || stringRes == R.string.TelegramCacheSize
+                || stringRes == R.string.DownloadedFilesMessage
+                || stringRes == R.string.SdCardAlert
+                || stringRes == R.string.SdCardErrorDescription
+                || stringRes == R.string.AppLocked
+                || stringRes == R.string.ChangePasscodeInfo
+                || stringRes == R.string.CreatePasscodeInfoPIN
+                || stringRes == R.string.CreatePasscodeInfoPassword
+                || stringRes == R.string.EnterYourPasscodeInfo
+                || stringRes == R.string.EnterYourTelegramPasscode
+                || stringRes == R.string.ScreenCaptureAlert
+                || stringRes == R.string.CreateNewThemeAlert
+                || stringRes == R.string.LanguageUnknownCustomAlert
+                || stringRes == R.string.LiveLocationPausedText
+                || stringRes == R.string.IncomingCallsSystemSettingDescription
+                || stringRes == R.string.ContactsPermissionAlert
+                || stringRes == R.string.QRCodePermissionNoCameraWithHint
+                || stringRes == R.string.BotLocationPermissionRequestDeniedApp
+                || stringRes == R.string.VoipNeedCameraPermission
+                || stringRes == R.string.VoipNeedMicCameraPermissionWithHint
+                || stringRes == R.string.VoipNeedMicPermissionWithHint
+                || stringRes == R.string.AllowReadCall
+                || stringRes == R.string.AllowReadCallAndLog
+                || stringRes == R.string.AllowReadCallLog
+                || stringRes == R.string.AllowFillNumber
+                || stringRes == R.string.AllowBackgroundActivityInfoOneUIAboveS
+                || stringRes == R.string.AllowBackgroundActivityInfoOneUIBelowS
+                || stringRes == R.string.ContactShortcutMessage
+                || stringRes == R.string.ContactShortcutVoiceCall
+                || stringRes == R.string.ContactShortcutVideoCall) {
+            return true;
+        }
+        String k = !TextUtils.isEmpty(key) ? key : fallback;
+        if (TextUtils.isEmpty(k)) {
+            return false;
+        }
+        if (k.startsWith("Permission") || k.startsWith("Krono")) {
+            return true;
+        }
+        return "TelegramVersion".equals(k)
+                || "OptimizingTelegram".equals(k)
+                || "NotificationHiddenName".equals(k)
+                || "NotificationHiddenChatName".equals(k)
+                || "NotificationsServiceConnectionInfo".equals(k)
+                || "NotificationsPermissionAlertSubtitle".equals(k)
+                || "ClearTelegramCache".equals(k)
+                || "ClearingCacheDescription".equals(k)
+                || "LocalDatabaseInfo".equals(k)
+                || "LocalDatabaseSize".equals(k)
+                || "LowDiskSpaceMessage".equals(k)
+                || "StorageUsageTelegram".equals(k)
+                || "StorageUsageTelegramLess".equals(k)
+                || "TelegramCacheSize".equals(k)
+                || "DownloadedFilesMessage".equals(k)
+                || "SdCardAlert".equals(k)
+                || "SdCardErrorDescription".equals(k)
+                || "AppLocked".equals(k)
+                || "ChangePasscodeInfo".equals(k)
+                || "CreatePasscodeInfoPIN".equals(k)
+                || "CreatePasscodeInfoPassword".equals(k)
+                || "EnterYourPasscodeInfo".equals(k)
+                || "EnterYourTelegramPasscode".equals(k)
+                || "ScreenCaptureAlert".equals(k)
+                || "CreateNewThemeAlert".equals(k)
+                || "LanguageUnknownCustomAlert".equals(k)
+                || "LiveLocationPausedText".equals(k)
+                || "IncomingCallsSystemSettingDescription".equals(k)
+                || "ContactsPermissionAlert".equals(k)
+                || "QRCodePermissionNoCameraWithHint".equals(k)
+                || "BotLocationPermissionRequestDeniedApp".equals(k)
+                || "VoipNeedCameraPermission".equals(k)
+                || "VoipNeedMicCameraPermissionWithHint".equals(k)
+                || "VoipNeedMicPermissionWithHint".equals(k)
+                || "AllowReadCall".equals(k)
+                || "AllowReadCallAndLog".equals(k)
+                || "AllowReadCallLog".equals(k)
+                || "AllowFillNumber".equals(k)
+                || "AllowBackgroundActivityInfoOneUIAboveS".equals(k)
+                || "AllowBackgroundActivityInfoOneUIBelowS".equals(k)
+                || "ContactShortcutMessage".equals(k)
+                || "ContactShortcutVoiceCall".equals(k)
+                || "ContactShortcutVideoCall".equals(k);
+    }
+
+    private static String applyClientBrandingIfNeeded(String key, int stringRes, String fallback, String value) {
+        if (value == null || (!value.contains("Telegram") && !value.contains("TELEGRAM"))) {
+            return value;
+        }
+        if (!isClientBrandedKey(key, stringRes, fallback)) {
+            return value;
+        }
+        String result = value.replaceAll("(?<![@/\\\\.\\w])Telegram(?!\\.(?:org|me)|Tips\\b|\\s+(?:Premium|Business|Stars|Features|Cloud)\\b)", "KronoGram");
+        if (result.contains("TELEGRAM")) {
+            result = result.replaceAll("(?<![@/\\\\.\\w])TELEGRAM(?!\\.(?:ORG|ME))", "KRONOGRAM");
+        }
+        return result;
     }
 
     public static String getString(@StringRes int res) {
@@ -2298,13 +2420,13 @@ public class LocaleController {
             int dateYear = rightNow.get(Calendar.YEAR);
 
             if (dateDay == day && year == dateYear) {
-                return LocaleController.formatString(R.string.PmSentTodayAt, getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmSentTodayAt, getInstance().getMessageDayFormatter().format(new Date(date)));
             } else if (dateDay + 1 == day && year == dateYear) {
-                return LocaleController.formatString(R.string.PmSentYesterdayAt, getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmSentYesterdayAt, getInstance().getMessageDayFormatter().format(new Date(date)));
             } else if (Math.abs(System.currentTimeMillis() - date) < 31536000000L) {
-                return LocaleController.formatString(R.string.PmSentDateTimeAt, getInstance().getFormatterDayMonth().format(new Date(date)), getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmSentDateTimeAt, getInstance().getFormatterDayMonth().format(new Date(date)), getInstance().getMessageDayFormatter().format(new Date(date)));
             } else {
-                return LocaleController.formatString(R.string.PmSentDateTimeAt, getInstance().getFormatterYear().format(new Date(date)), getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmSentDateTimeAt, getInstance().getFormatterYear().format(new Date(date)), getInstance().getMessageDayFormatter().format(new Date(date)));
             }
         } catch (Exception e) {
             FileLog.e(e);
@@ -2323,13 +2445,13 @@ public class LocaleController {
             int dateYear = rightNow.get(Calendar.YEAR);
 
             if (dateDay == day && year == dateYear) {
-                return LocaleController.formatString(R.string.PmEditedTodayAt, getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmEditedTodayAt, getInstance().getMessageDayFormatter().format(new Date(date)));
             } else if (dateDay + 1 == day && year == dateYear) {
-                return LocaleController.formatString(R.string.PmEditedYesterdayAt, getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmEditedYesterdayAt, getInstance().getMessageDayFormatter().format(new Date(date)));
             } else if (Math.abs(System.currentTimeMillis() - date) < 31536000000L) {
-                return LocaleController.formatString(R.string.PmEditedDateTimeAt, getInstance().getFormatterDayMonth().format(new Date(date)), getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmEditedDateTimeAt, getInstance().getFormatterDayMonth().format(new Date(date)), getInstance().getMessageDayFormatter().format(new Date(date)));
             } else {
-                return LocaleController.formatString(R.string.PmEditedDateTimeAt, getInstance().getFormatterYear().format(new Date(date)), getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmEditedDateTimeAt, getInstance().getFormatterYear().format(new Date(date)), getInstance().getMessageDayFormatter().format(new Date(date)));
             }
         } catch (Exception e) {
             FileLog.e(e);
@@ -2348,13 +2470,13 @@ public class LocaleController {
             int dateYear = rightNow.get(Calendar.YEAR);
 
             if (dateDay == day && year == dateYear) {
-                return LocaleController.formatString(R.string.PmFwdOriginalTodayAt, getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmFwdOriginalTodayAt, getInstance().getMessageDayFormatter().format(new Date(date)));
             } else if (dateDay + 1 == day && year == dateYear) {
-                return LocaleController.formatString(R.string.PmFwdOriginalYesterdayAt, getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmFwdOriginalYesterdayAt, getInstance().getMessageDayFormatter().format(new Date(date)));
             } else if (Math.abs(System.currentTimeMillis() - date) < 31536000000L) {
-                return LocaleController.formatString(R.string.PmFwdOriginalDateTimeAt, getInstance().getFormatterDayMonth().format(new Date(date)), getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmFwdOriginalDateTimeAt, getInstance().getFormatterDayMonth().format(new Date(date)), getInstance().getMessageDayFormatter().format(new Date(date)));
             } else {
-                return LocaleController.formatString(R.string.PmFwdOriginalDateTimeAt, getInstance().getFormatterYear().format(new Date(date)), getInstance().getFormatterDay().format(new Date(date)));
+                return LocaleController.formatString(R.string.PmFwdOriginalDateTimeAt, getInstance().getFormatterYear().format(new Date(date)), getInstance().getMessageDayFormatter().format(new Date(date)));
             }
         } catch (Exception e) {
             FileLog.e(e);
@@ -4781,28 +4903,35 @@ public class LocaleController {
 
     @Nullable
     private String getStringV2(String key, @StringRes int stringRes, String fallback) {
+        if (stringRes == R.string.AppName || stringRes == R.string.Page1Title || "AppName".equals(key) || "Page1Title".equals(key) || "AppName".equals(fallback) || "Page1Title".equals(fallback)) {
+            return "KronoGram";
+        }
+        if (stringRes == R.string.AppNameBeta || "AppNameBeta".equals(key) || "AppNameBeta".equals(fallback)) {
+            return "KronoGram Beta";
+        }
         final Context context = ApplicationLoader.applicationContext;
         String value;
 
         if (BuildVars.USE_CLOUD_STRINGS) {
             value = localizationExternal.getByResNameOrResId(context, key, stringRes);
             if (value != null) {
-                return value;
+                return applyClientBrandingIfNeeded(key, stringRes, fallback, value);
             }
 
             value = localizationExternal.getByResName(fallback);
             if (value != null) {
-                return value;
+                return applyClientBrandingIfNeeded(key, stringRes, fallback, value);
             }
         }
 
         checkLocalizationInternal();
         value = localizationInternal.getByResNameOrResId(context, key, stringRes);
         if (value != null) {
-            return value;
+            return applyClientBrandingIfNeeded(key, stringRes, fallback, value);
         }
 
-        return localizationInternal.getByResName(fallback);
+        value = localizationInternal.getByResName(fallback);
+        return applyClientBrandingIfNeeded(key, stringRes, fallback, value);
     }
 
 

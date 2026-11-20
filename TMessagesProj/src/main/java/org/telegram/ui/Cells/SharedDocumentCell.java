@@ -73,6 +73,8 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
     private CheckBox2 checkBox;
     public TextView rightDateTextView;
     private TextView captionTextView;
+    private View nameContainer;
+    private ImageView goToMessageButton;
 
     private boolean drawDownloadIcon = true;
 
@@ -172,10 +174,12 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
             nameTextView.setLines(1);
             nameTextView.setMaxLines(1);
             nameTextView.setSingleLine(true);
+            nameContainer = nameTextView;
             addView(nameTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 8 : 72, 9, LocaleController.isRTL ? 72 : 8, 0));
         } else if (viewType == VIEW_TYPE_GLOBAL_SEARCH) {
             linearLayout = new LinearLayout(context);
             linearLayout.setOrientation(LinearLayout.HORIZONTAL);
+            nameContainer = linearLayout;
             addView(linearLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 16 : 72, 5, LocaleController.isRTL ? 72 : 16, 0));
 
             rightDateTextView = new TextView(context);
@@ -202,6 +206,7 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
             captionTextView.setVisibility(View.GONE);
         } else {
             nameTextView.setMaxLines(1);
+            nameContainer = nameTextView;
             addView(nameTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, LocaleController.isRTL ? 8 : 72, 5, LocaleController.isRTL ? 72 : 8, 0));
         }
 
@@ -250,6 +255,72 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
         if (viewType == VIEW_TYPE_GLOBAL_SEARCH) {
             dotSpan = new SpannableStringBuilder(".");
             dotSpan.setSpan(new DotDividerSpan(), 0, 1, 0);
+        }
+
+        goToMessageButton = new ImageView(context);
+        goToMessageButton.setScaleType(ImageView.ScaleType.CENTER);
+        goToMessageButton.setImageResource(R.drawable.msg_message);
+        goToMessageButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN));
+        goToMessageButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1));
+        goToMessageButton.setContentDescription(LocaleController.getString(R.string.AccDescrGoToMessage));
+        goToMessageButton.setVisibility(GONE);
+        addView(goToMessageButton, LayoutHelper.createFrame(48, 48, Gravity.CENTER_VERTICAL | (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT), LocaleController.isRTL ? 4 : 0, 0, LocaleController.isRTL ? 0 : 4, 0));
+    }
+
+    private int getEndMarginDp(int defaultDp) {
+        return goToMessageButton != null && goToMessageButton.getVisibility() == VISIBLE ? 56 : defaultDp;
+    }
+
+    public void setGoToMessageClickListener(OnClickListener listener) {
+        if (goToMessageButton == null) {
+            return;
+        }
+        goToMessageButton.setOnClickListener(listener);
+        int newVis = listener != null ? VISIBLE : GONE;
+        boolean changed = goToMessageButton.getVisibility() != newVis;
+        goToMessageButton.setVisibility(newVis);
+        if (!changed) {
+            return;
+        }
+        if (nameContainer != null) {
+            LayoutParams lp = (LayoutParams) nameContainer.getLayoutParams();
+            int endDp = getEndMarginDp(viewType == VIEW_TYPE_GLOBAL_SEARCH ? 16 : 8);
+            if (LocaleController.isRTL) {
+                lp.leftMargin = AndroidUtilities.dp(endDp);
+            } else {
+                lp.rightMargin = AndroidUtilities.dp(endDp);
+            }
+            nameContainer.setLayoutParams(lp);
+        }
+        if (captionTextView != null) {
+            LayoutParams lp = (LayoutParams) captionTextView.getLayoutParams();
+            int endDp = getEndMarginDp(8);
+            if (LocaleController.isRTL) {
+                lp.leftMargin = AndroidUtilities.dp(endDp);
+            } else {
+                lp.rightMargin = AndroidUtilities.dp(endDp);
+            }
+            captionTextView.setLayoutParams(lp);
+        }
+        if (dateTextView != null) {
+            LayoutParams lp = (LayoutParams) dateTextView.getLayoutParams();
+            int endDp = getEndMarginDp(8);
+            if (LocaleController.isRTL) {
+                lp.leftMargin = AndroidUtilities.dp(endDp);
+            } else {
+                lp.rightMargin = AndroidUtilities.dp(endDp);
+            }
+            dateTextView.setLayoutParams(lp);
+        }
+        if (progressView != null) {
+            LayoutParams lp = (LayoutParams) progressView.getLayoutParams();
+            int endDp = getEndMarginDp(0);
+            if (LocaleController.isRTL) {
+                lp.leftMargin = AndroidUtilities.dp(endDp);
+            } else {
+                lp.rightMargin = AndroidUtilities.dp(endDp);
+            }
+            progressView.setLayoutParams(lp);
         }
     }
 
@@ -542,8 +613,9 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
 
                 LayoutParams layoutParams = (LayoutParams) dateTextView.getLayoutParams();
                 if (layoutParams != null) {
-                    layoutParams.leftMargin = AndroidUtilities.dp(LocaleController.isRTL ? 8 : 72);
-                    layoutParams.rightMargin = AndroidUtilities.dp(LocaleController.isRTL ? 72 : 8);
+                    int endMarginDp = getEndMarginDp(8);
+                    layoutParams.leftMargin = AndroidUtilities.dp(LocaleController.isRTL ? endMarginDp : 72);
+                    layoutParams.rightMargin = AndroidUtilities.dp(LocaleController.isRTL ? 72 : endMarginDp);
                     dateTextView.requestLayout();
                 }
                 loading = false;
@@ -564,8 +636,9 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
                 }
                 LayoutParams layoutParams = (LayoutParams) dateTextView.getLayoutParams();
                 if (layoutParams != null) {
-                    layoutParams.leftMargin = AndroidUtilities.dp(LocaleController.isRTL ? 8 : (72 + 14));
-                    layoutParams.rightMargin = AndroidUtilities.dp(LocaleController.isRTL ? (72 + 14) : 8);
+                    int endMarginDp = getEndMarginDp(8);
+                    layoutParams.leftMargin = AndroidUtilities.dp(LocaleController.isRTL ? endMarginDp : (72 + 14));
+                    layoutParams.rightMargin = AndroidUtilities.dp(LocaleController.isRTL ? (72 + 14) : endMarginDp);
                     dateTextView.requestLayout();
                 }
                 if (loading) {
@@ -587,8 +660,9 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
             statusImageView.setVisibility(INVISIBLE);
             LayoutParams layoutParams = (LayoutParams) dateTextView.getLayoutParams();
             if (layoutParams != null) {
-                layoutParams.leftMargin = AndroidUtilities.dp(LocaleController.isRTL ? 8 : 72);
-                layoutParams.rightMargin = AndroidUtilities.dp(LocaleController.isRTL ? 72 : 8);
+                int endMarginDp = getEndMarginDp(8);
+                layoutParams.leftMargin = AndroidUtilities.dp(LocaleController.isRTL ? endMarginDp : 72);
+                layoutParams.rightMargin = AndroidUtilities.dp(LocaleController.isRTL ? 72 : endMarginDp);
                 dateTextView.requestLayout();
             }
             DownloadController.getInstance(currentAccount).removeLoadingFileObserver(this);
@@ -790,6 +864,10 @@ public class SharedDocumentCell extends FrameLayout implements Theme.Colorable, 
     public void updateColors() {
         try {
             progressView.setProgressColor(getThemedColor(Theme.key_sharedMedia_startStopLoadIcon));
+            if (goToMessageButton != null) {
+                goToMessageButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN));
+                goToMessageButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1));
+            }
             invalidate();
         } catch (Exception e) {
             FileLog.e(e);

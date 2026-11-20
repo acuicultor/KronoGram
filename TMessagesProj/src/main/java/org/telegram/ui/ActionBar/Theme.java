@@ -1676,15 +1676,26 @@ public class Theme {
             if (isDark != UNKNOWN) {
                 return isDark == DARK;
             }
-            if ("Dark Blue".equals(name) || "Night".equals(name)) {
+            if ("Dark Blue".equals(name) || "Night".equals(name) || "AMOLED".equals(name) || "Monet Dark".equals(name) || "Monet AMOLED".equals(name)) {
                 isDark = DARK;
-            } else if ("Blue".equals(name) || "Arctic Blue".equals(name) || "Day".equals(name)) {
+            } else if ("Blue".equals(name) || "Arctic Blue".equals(name) || "Day".equals(name) || "Monet Light".equals(name)) {
                 isDark = LIGHT;
             }
             if (isDark == UNKNOWN) {
                 String[] wallpaperLink = new String[1];
-                SparseIntArray colors = getThemeFileValues(new File(pathToFile), null, wallpaperLink);
-                checkIsDark(colors, this);
+                SparseIntArray colors = null;
+                final String localPathToFile = pathToFile;
+                final String localAssetName = assetName;
+                if (localPathToFile != null) {
+                    colors = getThemeFileValues(new File(localPathToFile), null, wallpaperLink);
+                } else if (localAssetName != null) {
+                    colors = getThemeFileValues(null, localAssetName, wallpaperLink);
+                }
+                if (colors != null) {
+                    checkIsDark(colors, this);
+                } else {
+                    isDark = LIGHT;
+                }
             }
             return isDark == DARK;
         }
@@ -4098,6 +4109,46 @@ public class Theme {
         themes.add(themeInfo);
         themesDict.put("Night", themeInfo);
 
+        themeInfo = new ThemeInfo();
+        themeInfo.name = "AMOLED";
+        themeInfo.assetName = "amoled.attheme";
+        themeInfo.previewBackgroundColor = 0xff000000;
+        themeInfo.previewInColor = 0xff181819;
+        themeInfo.previewOutColor = 0xff2b5278;
+        themeInfo.sortIndex = 6;
+        themes.add(themeInfo);
+        themesDict.put("AMOLED", themeInfo);
+
+        themeInfo = new ThemeInfo();
+        themeInfo.name = "Monet Light";
+        themeInfo.assetName = "monet_light.attheme";
+        themeInfo.previewBackgroundColor = org.telegram.messenger.MonetHelper.getColor("n1_50");
+        themeInfo.previewInColor = org.telegram.messenger.MonetHelper.getColor("n1_10");
+        themeInfo.previewOutColor = org.telegram.messenger.MonetHelper.getColor("a1_600");
+        themeInfo.sortIndex = 7;
+        themes.add(themeInfo);
+        themesDict.put("Monet Light", themeInfo);
+
+        themeInfo = new ThemeInfo();
+        themeInfo.name = "Monet Dark";
+        themeInfo.assetName = "monet_dark.attheme";
+        themeInfo.previewBackgroundColor = org.telegram.messenger.MonetHelper.getColor("n1_900");
+        themeInfo.previewInColor = org.telegram.messenger.MonetHelper.getColor("n1_800");
+        themeInfo.previewOutColor = org.telegram.messenger.MonetHelper.getColor("a1_500");
+        themeInfo.sortIndex = 8;
+        themes.add(themeInfo);
+        themesDict.put("Monet Dark", themeInfo);
+
+        themeInfo = new ThemeInfo();
+        themeInfo.name = "Monet AMOLED";
+        themeInfo.assetName = "monet_amoled.attheme";
+        themeInfo.previewBackgroundColor = org.telegram.messenger.MonetHelper.getColor("n1_1000", true);
+        themeInfo.previewInColor = org.telegram.messenger.MonetHelper.getColor("n1_900", true);
+        themeInfo.previewOutColor = org.telegram.messenger.MonetHelper.getColor("a1_500", true);
+        themeInfo.sortIndex = 9;
+        themes.add(themeInfo);
+        themesDict.put("Monet AMOLED", themeInfo);
+
         String themesString = themeConfig.getString("themes2", null);
 
         int remoteVersion = themeConfig.getInt("remote_version", 0);
@@ -4187,143 +4238,145 @@ public class Theme {
             SharedPreferences.Editor oldEditor = null;
             SharedPreferences.Editor oldEditorNew = null;
             for (ThemeInfo info : themesDict.values()) {
-                if (info.assetName != null && info.accentBaseColor != 0) {
-                    String accents = themeConfig.getString("accents_" + info.assetName, null);
-                    info.currentAccentId = themeConfig.getInt("accent_current_" + info.assetName, info.firstAccentIsDefault ? DEFALT_THEME_ACCENT_ID : 0);
-                    ArrayList<ThemeAccent> newAccents = new ArrayList<>();
-                    if (!TextUtils.isEmpty(accents)) {
-                        try {
-                            SerializedData data = new SerializedData(Base64.decode(accents, Base64.NO_WRAP | Base64.NO_PADDING));
-                            int version = data.readInt32(true);
-                            int count = data.readInt32(true);
-                            for (int a = 0; a < count; a++) {
-                                try {
-                                    ThemeAccent accent = new ThemeAccent();
-                                    accent.id = data.readInt32(true);
-                                    accent.accentColor = data.readInt32(true);
-                                    if (version >= 9) {
-                                        accent.accentColor2 = data.readInt32(true);
-                                    }
-                                    accent.parentTheme = info;
-                                    accent.myMessagesAccentColor = data.readInt32(true);
-                                    accent.myMessagesGradientAccentColor1 = data.readInt32(true);
-                                    if (version >= 7) {
-                                        accent.myMessagesGradientAccentColor2 = data.readInt32(true);
-                                        accent.myMessagesGradientAccentColor3 = data.readInt32(true);
-                                    }
-                                    if (version >= 8) {
-                                        accent.myMessagesAnimated = data.readBool(true);
-                                    }
-                                    if (version >= 3) {
-                                        accent.backgroundOverrideColor = data.readInt64(true);
-                                    } else {
-                                        accent.backgroundOverrideColor = data.readInt32(true);
-                                    }
-                                    if (version >= 2) {
-                                        accent.backgroundGradientOverrideColor1 = data.readInt64(true);
-                                    } else {
-                                        accent.backgroundGradientOverrideColor1 = data.readInt32(true);
-                                    }
-                                    if (version >= 6) {
-                                        accent.backgroundGradientOverrideColor2 = data.readInt64(true);
-                                        accent.backgroundGradientOverrideColor3 = data.readInt64(true);
-                                    }
-                                    if (version >= 1) {
-                                        accent.backgroundRotation = data.readInt32(true);
-                                    }
-                                    if (version >= 4) {
-                                        data.readInt64(true); //unused
-                                        accent.patternIntensity = (float) data.readDouble(true);
-                                        accent.patternMotion = data.readBool(true);
+                if (info.assetName != null) {
+                    if (info.accentBaseColor != 0) {
+                        String accents = themeConfig.getString("accents_" + info.assetName, null);
+                        info.currentAccentId = themeConfig.getInt("accent_current_" + info.assetName, info.firstAccentIsDefault ? DEFALT_THEME_ACCENT_ID : 0);
+                        ArrayList<ThemeAccent> newAccents = new ArrayList<>();
+                        if (!TextUtils.isEmpty(accents)) {
+                            try {
+                                SerializedData data = new SerializedData(Base64.decode(accents, Base64.NO_WRAP | Base64.NO_PADDING));
+                                int version = data.readInt32(true);
+                                int count = data.readInt32(true);
+                                for (int a = 0; a < count; a++) {
+                                    try {
+                                        ThemeAccent accent = new ThemeAccent();
+                                        accent.id = data.readInt32(true);
+                                        accent.accentColor = data.readInt32(true);
+                                        if (version >= 9) {
+                                            accent.accentColor2 = data.readInt32(true);
+                                        }
+                                        accent.parentTheme = info;
+                                        accent.myMessagesAccentColor = data.readInt32(true);
+                                        accent.myMessagesGradientAccentColor1 = data.readInt32(true);
+                                        if (version >= 7) {
+                                            accent.myMessagesGradientAccentColor2 = data.readInt32(true);
+                                            accent.myMessagesGradientAccentColor3 = data.readInt32(true);
+                                        }
+                                        if (version >= 8) {
+                                            accent.myMessagesAnimated = data.readBool(true);
+                                        }
+                                        if (version >= 3) {
+                                            accent.backgroundOverrideColor = data.readInt64(true);
+                                        } else {
+                                            accent.backgroundOverrideColor = data.readInt32(true);
+                                        }
+                                        if (version >= 2) {
+                                            accent.backgroundGradientOverrideColor1 = data.readInt64(true);
+                                        } else {
+                                            accent.backgroundGradientOverrideColor1 = data.readInt32(true);
+                                        }
+                                        if (version >= 6) {
+                                            accent.backgroundGradientOverrideColor2 = data.readInt64(true);
+                                            accent.backgroundGradientOverrideColor3 = data.readInt64(true);
+                                        }
+                                        if (version >= 1) {
+                                            accent.backgroundRotation = data.readInt32(true);
+                                        }
+                                        if (version >= 4) {
+                                            data.readInt64(true); //unused
+                                            accent.patternIntensity = (float) data.readDouble(true);
+                                            accent.patternMotion = data.readBool(true);
+                                            if (version >= 5) {
+                                                accent.patternSlug = data.readString(true);
+                                            }
+                                        }
                                         if (version >= 5) {
-                                            accent.patternSlug = data.readString(true);
+                                            if (data.readBool(true)) {
+                                                accent.account = data.readInt32(true);
+                                                accent.info = (TLRPC.TL_theme) TLRPC.Theme.TLdeserialize(data, data.readInt32(true), true);
+                                            }
                                         }
-                                    }
-                                    if (version >= 5) {
-                                        if (data.readBool(true)) {
-                                            accent.account = data.readInt32(true);
-                                            accent.info = (TLRPC.TL_theme) TLRPC.Theme.TLdeserialize(data, data.readInt32(true), true);
+                                        if (accent.info != null) {
+                                            accent.isDefault = accent.info.isDefault;
                                         }
+                                        info.themeAccentsMap.put(accent.id, accent);
+                                        if (accent.info != null) {
+                                            info.accentsByThemeId.put(accent.info.id, accent);
+                                        }
+                                        newAccents.add(accent);
+                                        info.lastAccentId = Math.max(info.lastAccentId, accent.id);
+                                    } catch (Throwable e) {
+                                        throw new RuntimeException(e);
                                     }
-                                    if (accent.info != null) {
-                                        accent.isDefault = accent.info.isDefault;
+                                }
+                            } catch (Throwable e) {
+                                FileLog.e(e);
+                                throw new RuntimeException(e);
+                            }
+                        } else {
+                            String key = "accent_for_" + info.assetName;
+                            int oldAccentColor = preferences.getInt(key, 0);
+                            if (oldAccentColor != 0) {
+                                if (oldEditor == null) {
+                                    oldEditor = preferences.edit();
+                                    oldEditorNew = themeConfig.edit();
+                                }
+                                oldEditor.remove(key);
+                                boolean found = false;
+                                for (int a = 0, N = info.themeAccents.size(); a < N; a++) {
+                                    ThemeAccent accent = info.themeAccents.get(a);
+                                    if (accent.accentColor == oldAccentColor) {
+                                        info.currentAccentId = accent.id;
+                                        found = true;
+                                        break;
                                     }
+                                }
+                                if (!found) {
+                                    ThemeAccent accent = new ThemeAccent();
+                                    accent.id = 100;
+                                    accent.accentColor = oldAccentColor;
+                                    accent.parentTheme = info;
                                     info.themeAccentsMap.put(accent.id, accent);
-                                    if (accent.info != null) {
-                                        info.accentsByThemeId.put(accent.info.id, accent);
-                                    }
-                                    newAccents.add(accent);
-                                    info.lastAccentId = Math.max(info.lastAccentId, accent.id);
-                                } catch (Throwable e) {
-                                    throw new RuntimeException(e);
+                                    newAccents.add(0, accent);
+                                    info.currentAccentId = 100;
+                                    info.lastAccentId = 101;
+
+                                    SerializedData data = new SerializedData(4 * (16 + 2));
+                                    //verison
+                                    data.writeInt32(9);
+                                    data.writeInt32(1);
+
+                                    data.writeInt32(accent.id);
+                                    data.writeInt32(accent.accentColor);
+                                    data.writeInt32(accent.myMessagesAccentColor);
+                                    data.writeInt32(accent.myMessagesGradientAccentColor1);
+                                    data.writeInt32(accent.myMessagesGradientAccentColor2);
+                                    data.writeInt32(accent.myMessagesGradientAccentColor3);
+                                    data.writeBool(accent.myMessagesAnimated);
+                                    data.writeInt64(accent.backgroundOverrideColor);
+                                    data.writeInt64(accent.backgroundGradientOverrideColor1);
+                                    data.writeInt64(accent.backgroundGradientOverrideColor2);
+                                    data.writeInt64(accent.backgroundGradientOverrideColor3);
+                                    data.writeInt32(accent.backgroundRotation);
+                                    data.writeInt64(0);
+                                    data.writeDouble(accent.patternIntensity);
+                                    data.writeBool(accent.patternMotion);
+                                    data.writeString(accent.patternSlug);
+                                    data.writeBool(false);
+
+                                    oldEditorNew.putString("accents_" + info.assetName, Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP | Base64.NO_PADDING));
                                 }
+                                oldEditorNew.putInt("accent_current_" + info.assetName, info.currentAccentId);
                             }
-                        } catch (Throwable e) {
-                            FileLog.e(e);
-                            throw new RuntimeException(e);
                         }
-                    } else {
-                        String key = "accent_for_" + info.assetName;
-                        int oldAccentColor = preferences.getInt(key, 0);
-                        if (oldAccentColor != 0) {
-                            if (oldEditor == null) {
-                                oldEditor = preferences.edit();
-                                oldEditorNew = themeConfig.edit();
-                            }
-                            oldEditor.remove(key);
-                            boolean found = false;
-                            for (int a = 0, N = info.themeAccents.size(); a < N; a++) {
-                                ThemeAccent accent = info.themeAccents.get(a);
-                                if (accent.accentColor == oldAccentColor) {
-                                    info.currentAccentId = accent.id;
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (!found) {
-                                ThemeAccent accent = new ThemeAccent();
-                                accent.id = 100;
-                                accent.accentColor = oldAccentColor;
-                                accent.parentTheme = info;
-                                info.themeAccentsMap.put(accent.id, accent);
-                                newAccents.add(0, accent);
-                                info.currentAccentId = 100;
-                                info.lastAccentId = 101;
-
-                                SerializedData data = new SerializedData(4 * (16 + 2));
-                                //verison
-                                data.writeInt32(9);
-                                data.writeInt32(1);
-
-                                data.writeInt32(accent.id);
-                                data.writeInt32(accent.accentColor);
-                                data.writeInt32(accent.myMessagesAccentColor);
-                                data.writeInt32(accent.myMessagesGradientAccentColor1);
-                                data.writeInt32(accent.myMessagesGradientAccentColor2);
-                                data.writeInt32(accent.myMessagesGradientAccentColor3);
-                                data.writeBool(accent.myMessagesAnimated);
-                                data.writeInt64(accent.backgroundOverrideColor);
-                                data.writeInt64(accent.backgroundGradientOverrideColor1);
-                                data.writeInt64(accent.backgroundGradientOverrideColor2);
-                                data.writeInt64(accent.backgroundGradientOverrideColor3);
-                                data.writeInt32(accent.backgroundRotation);
-                                data.writeInt64(0);
-                                data.writeDouble(accent.patternIntensity);
-                                data.writeBool(accent.patternMotion);
-                                data.writeString(accent.patternSlug);
-                                data.writeBool(false);
-
-                                oldEditorNew.putString("accents_" + info.assetName, Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP | Base64.NO_PADDING));
-                            }
-                            oldEditorNew.putInt("accent_current_" + info.assetName, info.currentAccentId);
+                        if (!newAccents.isEmpty()) {
+                            info.themeAccents.addAll(0, newAccents);
+                            sortAccents(info);
                         }
-                    }
-                    if (!newAccents.isEmpty()) {
-                        info.themeAccents.addAll(0, newAccents);
-                        sortAccents(info);
-                    }
-                    if (info.themeAccentsMap != null && info.themeAccentsMap.get(info.currentAccentId) == null) {
-                        info.currentAccentId = info.firstAccentIsDefault ? DEFALT_THEME_ACCENT_ID : 0;
+                        if (info.themeAccentsMap != null && info.themeAccentsMap.get(info.currentAccentId) == null) {
+                            info.currentAccentId = info.firstAccentIsDefault ? DEFALT_THEME_ACCENT_ID : 0;
+                        }
                     }
                     info.loadWallpapers(themeConfig);
                     ThemeAccent accent = info.getAccent(false);
@@ -4362,8 +4415,9 @@ public class Theme {
             FileLog.e(e);
             throw new RuntimeException(e);
         }
-        if (applyingTheme == null) {
+        if (applyingTheme == null || (applyingTheme.pathToFile == null && applyingTheme.assetName == null)) {
             applyingTheme = defaultTheme;
+            currentDayTheme = defaultTheme;
         } else {
             currentDayTheme = applyingTheme;
         }
@@ -7342,9 +7396,14 @@ public class Theme {
     }
 
     public static String createThemePreviewImage(String pathToFile, String wallpaperPath, Theme.ThemeAccent accent) {
+        if (pathToFile == null && (accent == null || accent.parentTheme == null || accent.parentTheme.assetName == null)) {
+            return null;
+        }
         try {
             String[] wallpaperLink = new String[1];
-            SparseIntArray colors = getThemeFileValues(new File(pathToFile), null, wallpaperLink);
+            SparseIntArray colors = pathToFile != null
+                    ? getThemeFileValues(new File(pathToFile), null, wallpaperLink)
+                    : getThemeFileValues(null, accent.parentTheme.assetName, wallpaperLink);
             if (accent != null) {
                 checkIsDark(colors, accent.parentTheme);
             }
@@ -7686,10 +7745,12 @@ public class Theme {
                             break;
                         } else {
                             if ((idx = line.indexOf('=')) != -1) {
-                                String key = line.substring(0, idx);
-                                String param = line.substring(idx + 1);
+                                String key = line.substring(0, idx).trim();
+                                String param = line.substring(idx + 1).trim();
                                 int value;
-                                if (param.length() > 0 && param.charAt(0) == '#') {
+                                if (org.telegram.messenger.MonetHelper.isMonetColor(param)) {
+                                    value = org.telegram.messenger.MonetHelper.getColor(param, assetName != null && assetName.contains("amoled"));
+                                } else if (param.length() > 0 && param.charAt(0) == '#') {
                                     try {
                                         value = Color.parseColor(param);
                                     } catch (Exception ignore) {

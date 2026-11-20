@@ -1187,6 +1187,9 @@ public class NotificationsController extends BaseController implements Notificat
                 int mid = messageObject.getId();
                 long randomId = messageObject.isFcmMessage() ? messageObject.messageOwner.random_id : 0;
                 long dialogId = messageObject.getDialogId();
+                if (KronoConfig.hiddenMuteNotifications && KronoConfig.isDialogOrFolderHidden(currentAccount, dialogId)) {
+                    continue;
+                }
                 boolean isChannel;
                 if (messageObject.isFcmMessage()) {
                     isChannel = messageObject.localChannel;
@@ -3301,13 +3304,22 @@ public class NotificationsController extends BaseController implements Notificat
 
     private void scheduleNotificationRepeat() {
         try {
-            Intent intent = new Intent(ApplicationLoader.applicationContext, NotificationRepeat.class);
+            Intent intent = new Intent(ApplicationLoader.applicationContext, NotificationRepeatReceiver.class);
             intent.putExtra("currentAccount", currentAccount);
-            PendingIntent pintent = PendingIntent.getService(ApplicationLoader.applicationContext, 0, intent, PendingIntent.FLAG_MUTABLE);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 23) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pintent = PendingIntent.getBroadcast(ApplicationLoader.applicationContext, currentAccount, intent, flags);
             SharedPreferences preferences = getAccountInstance().getNotificationsSettings();
             int minutes = preferences.getInt("repeat_messages", 60);
             if (minutes > 0 && personalCount > 0) {
-                alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + minutes * 60 * 1000, pintent);
+                long triggerAt = SystemClock.elapsedRealtime() + minutes * 60L * 1000L;
+                if (Build.VERSION.SDK_INT >= 23) {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pintent);
+                } else {
+                    alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pintent);
+                }
             } else {
                 alarmManager.cancel(pintent);
             }

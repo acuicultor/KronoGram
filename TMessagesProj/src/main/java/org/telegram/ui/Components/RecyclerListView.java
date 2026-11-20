@@ -58,6 +58,8 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.util.Consumer;
+
+import org.telegram.messenger.KronoConfig;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -3545,6 +3547,8 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
             Utilities.Callback5<Canvas, RectF, Float, Float, Float> drawSectionBackground,
             boolean topPadding
     ) {
+        padding = KronoConfig.getEffectiveSectionPaddingPx(padding);
+        roundRadius = KronoConfig.getEffectiveSectionRadiusPx(roundRadius);
         ThemeBind.listSelectorColor(this, Theme.key_settings_listSelector, resourcesProvider);
         this.isSectionView = isSectionView;
         this.isViewTypeSection = isViewTypeSection;

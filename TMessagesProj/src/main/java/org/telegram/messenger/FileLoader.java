@@ -934,11 +934,15 @@ public class FileLoader extends BaseController {
                 String path = getFileDatabase().getPath(documentId, dcId, type, true);
                 boolean customPath = false;
                 if (path != null) {
-                    File file = new File(path);
-                    if (file.exists()) {
-                        customPath = true;
-                        storeFileName = file.getName();
-                        storeDir = file.getParentFile();
+                    if (isInternalStickerOrReaction(document, parentObject) && isGenericInternalAssetName(new File(path).getName())) {
+                        getFileDatabase().putPath(documentId, dcId, type, 0, null);
+                    } else {
+                        File file = new File(path);
+                        if (file.exists()) {
+                            customPath = true;
+                            storeFileName = file.getName();
+                            storeDir = file.getParentFile();
+                        }
                     }
                 }
                 if (!customPath) {
@@ -963,7 +967,7 @@ public class FileLoader extends BaseController {
                             storeDir = newDir;
                             saveCustomPath = true;
                         }
-                    } else if (!TextUtils.isEmpty(getDocumentFileName(document)) && canSaveAsFile(parentObject)) {
+                    } else if (!TextUtils.isEmpty(getDocumentFileName(document)) && (canSaveAsFile(parentObject) || canUseOriginalFileName(document, parentObject, type, cacheType))) {
                         storeFileName = getDocumentFileName(document);
                         File newDir = getDirectory(MEDIA_DIR_FILES);
                         if (newDir != null) {
@@ -1084,6 +1088,76 @@ public class FileLoader extends BaseController {
         return operation;
     }
 
+    public static boolean isGenericInternalAssetName(String docName) {
+        if (TextUtils.isEmpty(docName)) {
+            return true;
+        }
+        String lower = docName.toLowerCase(java.util.Locale.US);
+        return lower.equals("sticker.tgs")
+                || lower.equals("sticker.webp")
+                || lower.equals("sticker.webm")
+                || lower.equals("animatedsticker.tgs")
+                || lower.equals("reaction.tgs")
+                || lower.equals("emoji.tgs")
+                || lower.startsWith("sticker (")
+                || lower.startsWith("animatedsticker (")
+                || lower.startsWith("reaction (");
+    }
+
+    public static boolean isInternalStickerOrReaction(TLRPC.Document document, Object parentObject) {
+        if (parentObject instanceof org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble.VisibleReaction
+                || parentObject instanceof TLRPC.TL_availableReaction
+                || parentObject instanceof TLRPC.TL_messages_stickerSet
+                || parentObject instanceof TLRPC.StickerSetCovered
+                || parentObject instanceof TLRPC.StickerSet) {
+            return true;
+        }
+        if (document != null) {
+            if (MessageObject.isStickerDocument(document)
+                    || MessageObject.isAnimatedStickerDocument(document, true)
+                    || MessageObject.isVideoStickerDocument(document)
+                    || MessageObject.isAnimatedEmoji(document)) {
+                return true;
+            }
+            if ("application/x-tgsticker".equals(document.mime_type) && !(parentObject instanceof MessageObject && ((MessageObject) parentObject).isDocument())) {
+                return true;
+            }
+            if (isGenericInternalAssetName(getDocumentFileName(document))) {
+                return true;
+            }
+        }
+        if (parentObject instanceof MessageObject) {
+            MessageObject msg = (MessageObject) parentObject;
+            if (msg.isAnyKindOfSticker() || msg.isAnimatedEmoji()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean canUseOriginalFileName(TLRPC.Document document, Object parentObject, int type, int cacheType) {
+        if (!KronoConfig.keepOriginalFilename || document == null || cacheType != 0) {
+            return false;
+        }
+        if (isInternalStickerOrReaction(document, parentObject)) {
+            return false;
+        }
+        if (MessageObject.isGifDocument(document)
+                || MessageObject.isVoiceDocument(document)
+                || MessageObject.isRoundVideoDocument(document)) {
+            return false;
+        }
+        if (canSaveAsFile(parentObject)) {
+            return true;
+        }
+        if (parentObject instanceof MessageObject) {
+            MessageObject msg = (MessageObject) parentObject;
+            return !msg.isAnyKindOfSticker() && !msg.isVoice() && !msg.isRoundVideo() && !msg.isGif()
+                    && (type == MEDIA_DIR_DOCUMENT || type == MEDIA_DIR_FILES || msg.isMusic());
+        }
+        return false;
+    }
+
     public static boolean canSaveAsFile(Object parentObject) {
         if (parentObject instanceof MessageObject) {
             MessageObject messageObject = (MessageObject) parentObject;
@@ -1104,12 +1178,12 @@ public class FileLoader extends BaseController {
         if (metadata != null) {
             int flag;
             long dialogId = metadata.dialogId;
-            if (getMessagesController().isPeerNoForwards(dialogId) || DialogObject.isEncryptedDialog(dialogId)) {
+            if (!KronoConfig.isAllowRestrictedContentBypass() && (getMessagesController().isPeerNoForwards(dialogId) || DialogObject.isEncryptedDialog(dialogId))) {
                 return false;
             }
             if (parentObject instanceof MessageObject) {
                 messageObject = (MessageObject) parentObject;
-                if (messageObject.isRoundVideo() || messageObject.isVoice() || messageObject.isAnyKindOfSticker() || messageObject.messageOwner.noforwards) {
+                if (messageObject.isRoundVideo() || messageObject.isVoice() || messageObject.isAnyKindOfSticker() || (!KronoConfig.isAllowRestrictedContentBypass() && messageObject.messageOwner.noforwards)) {
                     return false;
                 }
             } else {
@@ -1433,7 +1507,11 @@ public class FileLoader extends BaseController {
         if (documentId != 0) {
             String path = getInstance(UserConfig.selectedAccount).getFileDatabase().getPath(documentId, dcId, type, useFileDatabaseQueue);
             if (path != null) {
-                return new File(path);
+                if (attach instanceof TLRPC.Document && isInternalStickerOrReaction((TLRPC.Document) attach, null) && isGenericInternalAssetName(new File(path).getName())) {
+                    getInstance(UserConfig.selectedAccount).getFileDatabase().putPath(documentId, dcId, type, 0, null);
+                } else {
+                    return new File(path);
+                }
             }
         }
         return new File(dir, getAttachFileName(attach, ext));

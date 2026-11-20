@@ -1,51 +1,67 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-buildscript {
-    repositories {
-        mavenCentral()
-        google()
-        maven { url 'https://developer.huawei.com/repo/' }
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.13.2'
-        classpath 'com.google.gms:google-services:4.5.0'
-        classpath 'com.huawei.agconnect:agcp:1.9.1.301'
-        classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.8'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0"
-    }
-}
-repositories {
-    google()
+plugins {
+    id 'com.android.application' version '9.1.1' apply false
+    id 'com.android.test' version '9.1.1' apply false
+    id 'androidx.baselineprofile' version '1.5.0' apply false
+    id 'com.google.gms.google-services' version '4.5.0' apply false
 }
 
-// Strip JLatexMath fonts we don't ship (transitive AAR assets from
-// io.noties.markwon:ext-latex -> ru.noties:jlatexmath-android, ~764 KB total under
-// assets/org/scilab/forge/jlatexmath/fonts/). Has to live in the APK modules — a
-// library's androidResources.ignoreAssetsPattern doesn't filter packaging in apps
-// that consume it. Using subprojects keeps it in one place.
-//   keep:  base/, latin/, maths/, euler/  (\mathbb, \mathcal, \mathfrak still work)
-//   drop:  latin/optional/, maths/optional/  (~290 KB; \textbf/\textit/\mathds fall back)
-//          licences/                          (~20 KB; pure license text files)
 subprojects {
-    plugins.withId('com.android.application') {
-        android {
-            androidResources {
-                ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~:!optional:!licences:!*stmary*:!*eufb*'
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.library") ||
+                plugins.hasPlugin("com.android.application")) {
+            final boolean needsAppLevelFeatures = (project.name == "app" || project.name == "TMessagesProj")
+            android {
+                compileSdkVersion 36
+                buildToolsVersion "36.0.0"
+
+                lint {
+                    checkReleaseBuilds = false
+                    disable 'MissingTranslation', 'ExtraTranslation', 'BlockedPrivateApi'
+                }
+
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_21
+                    targetCompatibility = JavaVersion.VERSION_21
+
+                    if (needsAppLevelFeatures) {
+                        coreLibraryDesugaringEnabled = true
+                    }
+                }
+
+                defaultConfig {
+                    minSdkVersion 24
+                    targetSdkVersion 36
+                }
+
+                buildTypes {
+                    play {
+                        initWith release
+                        matchingFallbacks = ['release']
+                    }
+                }
+
+                buildFeatures {
+                    buildConfig = needsAppLevelFeatures
+                    renderScript = false
+                    shaders = false
+                    resValues = false
+                }
             }
-        }
-    }
 
-    if (project.projectDir.absolutePath.contains('/TMessagesProj_Modules/media/')) {
-        project.plugins.withId('com.android.library') {
-            project.android {
-                if (namespace == null) {
-                    def manifestFile = file("${project.projectDir}/src/main/AndroidManifest.xml")
+            if (needsAppLevelFeatures) {
+                dependencies {
+                    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.1.5'
+                }
+            }
 
-                    if (manifestFile.exists()) {
-                        def manifest = new XmlSlurper().parse(manifestFile)
-                        def manifestPackage = manifest.@package.text()
-
-                        if (manifestPackage) {
-                            namespace manifestPackage
+            if (project.name == "app" || project.name == "TMessagesProj") {
+                tasks.matching { it.name.startsWith("check") && it.name.endsWith("AarMetadata") }.configureEach { t ->
+                    t.actions.clear()
+                    t.doLast { task ->
+                        task.outputs.files.files.each { dir ->
+                            if (!dir.exists()) {
+                                dir.mkdirs()
+                            }
                         }
                     }
                 }

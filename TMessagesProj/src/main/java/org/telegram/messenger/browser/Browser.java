@@ -27,6 +27,7 @@ import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.CustomTabsCopyReceiver;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -358,6 +359,62 @@ public class Browser {
         return builder.build();
     }
 
+    private static boolean isTrackingParam(String part, String host) {
+        final int eq = part.indexOf('=');
+        String name = eq < 0 ? part : part.substring(0, eq);
+        for (int i = 0; i < 4; ++i) {
+            final String decoded = Uri.decode(name);
+            if (TextUtils.equals(decoded, name)) break;
+            name = decoded;
+        }
+        while (name.startsWith("?")) {
+            name = name.substring(1);
+        }
+        name = name.toLowerCase();
+        if (name.startsWith("utm_") || name.equals("fbclid") || name.equals("gclid") || name.equals("dclid")
+                || name.equals("gbraid") || name.equals("wbraid") || name.equals("yclid") || name.equals("ysclid")
+                || name.equals("mc_cid") || name.equals("mc_eid") || name.equals("msclkid")
+                || name.equals("igshid") || name.equals("igsh") || name.equals("_hsenc") || name.equals("_hsmi")
+                || name.equals("mkt_tok") || name.equals("twclid") || name.equals("ttclid")
+                || name.equals("li_fat_id") || name.equals("vero_id") || name.equals("wickedid")) {
+            return true;
+        }
+        if (name.equals("si") && host != null) {
+            String h = host.toLowerCase();
+            return h.equals("youtu.be") || h.endsWith(".youtube.com") || h.equals("youtube.com") || h.endsWith(".spotify.com") || h.equals("spotify.com");
+        }
+        return false;
+    }
+
+    private static String withoutTrackingQueryParams(String encoded, String host) {
+        if (encoded == null) return null;
+        final StringBuilder sb = new StringBuilder();
+        boolean removed = false, first = true;
+        for (String part : encoded.split("&", -1)) {
+            if (isTrackingParam(part, host)) {
+                removed = true;
+                continue;
+            }
+            if (!first) sb.append('&');
+            first = false;
+            sb.append(part);
+        }
+        return removed ? sb.toString() : null;
+    }
+
+    public static Uri withoutTrackingParams(Uri uri) {
+        if (uri == null || !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))) {
+            return uri;
+        }
+        final String query = withoutTrackingQueryParams(uri.getEncodedQuery(), uri.getHost());
+        if (query == null) {
+            return uri;
+        }
+        final Uri.Builder builder = uri.buildUpon();
+        builder.encodedQuery(query.isEmpty() ? null : query);
+        return builder.build();
+    }
+
     public static void openUrl(final Context context, Uri uri, boolean _allowCustom, boolean tryTelegraph, boolean forceNotInternalForApps, Progress inCaseLoading, String browser, boolean allowIntent, boolean allowInAppBrowser, boolean forceRequest) {
         openUrl(context, uri, _allowCustom, tryTelegraph, forceNotInternalForApps, inCaseLoading, browser, allowIntent, allowInAppBrowser, forceRequest, false);
     }
@@ -368,6 +425,9 @@ public class Browser {
         }
         if (!keepWebAuthTokens) {
             uri = withoutWebAuthTokens(uri);
+        }
+        if (KronoConfig.isStripUrlTrackers()) {
+            uri = withoutTrackingParams(uri);
         }
         final int currentAccount = UserConfig.selectedAccount;
         boolean[] forceBrowser = new boolean[]{false};

@@ -486,10 +486,19 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                 lastColor = color;
             }
 
-            shareImageView.setVisibility(filter.isChatlist() ? VISIBLE : GONE);
+            shareImageView.setVisibility(!filter.isLocalFavorites() && filter.isChatlist() ? VISIBLE : GONE);
 
             StringBuilder info = new StringBuilder();
-            if (filter.isDefault() || (filter.flags & MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) == MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) {
+            if (filter.isLocalFavorites()) {
+                int favCount = filter.alwaysShow.size();
+                if (favCount == 0) {
+                    info.append("Sin chats favoritos aún (carpeta local)");
+                } else if (favCount == 1) {
+                    info.append("1 chat favorito (carpeta local)");
+                } else {
+                    info.append(favCount).append(" chats favoritos (carpeta local)");
+                }
+            } else if (filter.isDefault() || (filter.flags & MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) == MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) {
                 info.append(LocaleController.getString(R.string.FilterAllChats));
             } else {
                 if ((filter.flags & MessagesController.DIALOG_FILTER_FLAG_CONTACTS) != 0) {
@@ -523,7 +532,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                     info.append(LocaleController.getString(R.string.FilterBots));
                 }
             }
-            if (!filter.alwaysShow.isEmpty() || !filter.neverShow.isEmpty()) {
+            if (!filter.isLocalFavorites() && (!filter.alwaysShow.isEmpty() || !filter.neverShow.isEmpty())) {
                 if (info.length() != 0) {
                     info.append(", ");
                 }
@@ -536,6 +545,8 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             String name = filter.name;
             if (filter.isDefault()) {
                 name = LocaleController.getString(R.string.FilterAllChats);
+            } else if (filter.isLocalFavorites()) {
+                name = "⭐ Favoritos";
             }
             if (!animated) {
                 progressToLock = currentFilter.locked ? 1f : 0;
@@ -550,7 +561,10 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             needDivider = divider;
 
             if (filter.isDefault()) {
-                optionsImageView.setVisibility(View.GONE);
+                if (org.telegram.messenger.KronoConfig.hideAllChatsTab) {
+                    valueTextView.setText("Oculta en la barra de carpetas");
+                }
+                optionsImageView.setVisibility(View.VISIBLE);
             } else {
                 optionsImageView.setVisibility(View.VISIBLE);
             }
@@ -654,8 +668,14 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
 
         ArrayList<TLRPC.TL_dialogFilterSuggested> suggestedFilters = getMessagesController().suggestedFilters;
         ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
+        int nonFavoritesCount = 0;
+        for (int i = 0; i < dialogFilters.size(); ++i) {
+            if (!dialogFilters.get(i).isLocalFavorites()) {
+                nonFavoritesCount++;
+            }
+        }
         items.add(ItemInner.asHint());
-        if (!suggestedFilters.isEmpty() && dialogFilters.size() < 10) {
+        if (!suggestedFilters.isEmpty() && nonFavoritesCount < 10) {
             int start = items.size();
             items.add(ItemInner.asHeader(LocaleController.getString(R.string.FilterRecommended)));
             for (int i = 0; i < suggestedFilters.size(); ++i) {
@@ -676,11 +696,11 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             }
             filtersSectionEnd = items.size();
 
-            if (listView != null) listView.forcedSections.add(AndroidUtilities.pack(filtersSectionStart, filtersSectionEnd - 1 + (dialogFilters.size() < getMessagesController().dialogFiltersLimitPremium ? 1 : 0)));
+            if (listView != null) listView.forcedSections.add(AndroidUtilities.pack(filtersSectionStart, filtersSectionEnd - 1 + (nonFavoritesCount < getMessagesController().dialogFiltersLimitPremium ? 1 : 0)));
         } else {
             filtersSectionStart = filtersSectionEnd = -1;
         }
-        if (dialogFilters.size() < getMessagesController().dialogFiltersLimitPremium) {
+        if (nonFavoritesCount < getMessagesController().dialogFiltersLimitPremium) {
             items.add(ItemInner.asButton(LocaleController.getString(R.string.CreateNewFilter)));
         }
         items.add(ItemInner.asShadow(null));
@@ -722,7 +742,9 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
         ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
         for (int a = 0, N = filters.size(); a < N; a++) {
             MessagesController.DialogFilter filter = filters.get(a);
-            req.order.add(filter.id);
+            if (!filter.isLocalFavorites()) {
+                req.order.add(filter.id);
+            }
         }
         getConnectionsManager().sendRequest(req, (response, error) -> {
             if (done != null) {
@@ -818,6 +840,10 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                 if (filter == null || filter.isDefault()) {
                     return;
                 }
+                if (filter.isLocalFavorites()) {
+                    BulletinFactory.of(FiltersSetupActivity.this).createSimpleBulletin(R.drawable.msg_fave, "Mantén pulsado un chat en la lista principal para añadirlo o quitarlo de Favoritos").show();
+                    return;
+                }
                 if (filter.locked) {
                     showDialog(new LimitReachedBottomSheet(this, context, LimitReachedBottomSheet.TYPE_FOLDERS, currentAccount, null));
                 } else {
@@ -846,7 +872,13 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
     }
 
     public void createFolder(INavigationLayout navigationLayout) {
-        final int count = getMessagesController().getDialogFilters().size();
+        ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
+        int count = 0;
+        for (int i = 0; i < filters.size(); ++i) {
+            if (!filters.get(i).isLocalFavorites()) {
+                count++;
+            }
+        }
         if (
             count - 1 >= getMessagesController().dialogFiltersLimitDefault && !getUserConfig().isPremium() ||
             count >= getMessagesController().dialogFiltersLimitPremium
@@ -1024,6 +1056,41 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                         FilterCell cell = (FilterCell) v.getParent();
                         MessagesController.DialogFilter filter = cell.getCurrentFilter();
                         ItemOptions options = ItemOptions.makeOptions(FiltersSetupActivity.this, cell);
+                        if (filter.isDefault()) {
+                            options.add(
+                                org.telegram.messenger.KronoConfig.hideAllChatsTab ? R.drawable.msg_viewchats : R.drawable.msg_delete,
+                                org.telegram.messenger.KronoConfig.hideAllChatsTab ? "Restaurar carpeta «Todos»" : "Eliminar carpeta «Todos»",
+                                !org.telegram.messenger.KronoConfig.hideAllChatsTab,
+                                () -> {
+                                    org.telegram.messenger.KronoConfig.toggleHideAllChatsTab();
+                                    updateRows(true);
+                                    getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
+                                }
+                            );
+                            if (LocaleController.isRTL) {
+                                options.setGravity(Gravity.LEFT);
+                            }
+                            options.show();
+                            return;
+                        }
+                        if (filter.isLocalFavorites()) {
+                            options.add(
+                                R.drawable.msg_delete,
+                                "Ocultar carpeta «Favoritos»",
+                                true,
+                                () -> {
+                                    org.telegram.messenger.KronoConfig.toggleShowFavoritesFolder();
+                                    getMessagesController().syncLocalFavoritesFilter(true);
+                                    updateRows(true);
+                                }
+                            );
+                            if (LocaleController.isRTL) {
+                                options.setGravity(Gravity.LEFT);
+                            }
+                            options.setScrimViewBackground(listView.getClipBackground(cell));
+                            options.show();
+                            return;
+                        }
                         options.add(R.drawable.msg_edit, LocaleController.getString(R.string.FilterEditItem), () -> {
                             if (filter.locked) {
                                 showDialog(new LimitReachedBottomSheet(FiltersSetupActivity.this, mContext, LimitReachedBottomSheet.TYPE_FOLDERS, currentAccount, null));

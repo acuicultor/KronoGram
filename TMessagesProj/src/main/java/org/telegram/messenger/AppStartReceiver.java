@@ -14,14 +14,25 @@ import android.content.Intent;
 
 public class AppStartReceiver extends BroadcastReceiver {
 
+    @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent != null && Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
+        if (intent == null) {
+            return;
+        }
+        String action = intent.getAction();
+        boolean isBoot = Intent.ACTION_BOOT_COMPLETED.equals(action)
+                || "android.intent.action.QUICKBOOT_POWERON".equals(action)
+                || "com.htc.intent.action.QUICKBOOT_POWERON".equals(action);
+        boolean isRestartOrUpdate = "org.telegram.start".equals(action)
+                || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action);
+        if (isBoot || isRestartOrUpdate) {
             AndroidUtilities.runOnUIThread(() -> {
                 SharedConfig.loadConfig();
-                if (SharedConfig.passcodeHash.length() > 0) {
+                if (isBoot && SharedConfig.passcodeHash.length() > 0) {
                     SharedConfig.appLocked = true;
                     SharedConfig.saveConfig();
                 }
+                ApplicationLoader.postInitApplication();
                 ApplicationLoader.startPushService();
             });
         }

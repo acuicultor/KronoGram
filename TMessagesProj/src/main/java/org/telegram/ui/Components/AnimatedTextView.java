@@ -1023,7 +1023,10 @@ public class AnimatedTextView extends View {
                     currentWidth = 0;
                     resetCurrentHeight();
                     for (int i = 0; i < currentParts.length; ++i) {
-                        StaticLayout layout = makeLayout(currentParts[i].layout.getText(), width - (int) Math.ceil(Math.min(currentWidth, oldWidth)));
+                        CharSequence partText = (currentParts.length == 1 && oldParts == null && currentText != null)
+                                ? currentText
+                                : currentParts[i].layout.getText();
+                        StaticLayout layout = makeLayout(partText, width - (int) Math.ceil(Math.min(currentWidth, oldWidth)));
                         currentParts[i] = new Part(layout, currentParts[i].offset, currentParts[i].toOppositeIndex);
                         currentWidth += currentParts[i].width;
                         includeCurrentPartHeight(currentParts[i]);
@@ -1282,13 +1285,15 @@ public class AnimatedTextView extends View {
         if (maxWidth > 0) {
             width = Math.min(width, maxWidth);
         }
+        int maxAllowedWidth = width;
         if (lastMaxWidth != width && getLayoutParams().width != 0) {
-            drawable.setBounds(getPaddingLeft(), getPaddingTop(), width - getPaddingRight(), height - getPaddingBottom());
+            drawable.setBounds(getPaddingLeft(), getPaddingTop(), Math.max(getPaddingLeft(), width - getPaddingRight()), Math.max(getPaddingTop(), height - getPaddingBottom()));
             drawable.setText(drawable.getText(), false, true);
         }
         lastMaxWidth = width;
         if (adaptWidth && MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.AT_MOST) {
-            width = getPaddingLeft() + (int) Math.ceil(drawable.getWidth()) + getPaddingRight();
+            int desired = getPaddingLeft() + (int) Math.ceil(drawable.getWidth()) + getPaddingRight();
+            width = maxAllowedWidth > 0 ? Math.min(maxAllowedWidth, desired) : desired;
         }
         setMeasuredDimension(width, height);
     }

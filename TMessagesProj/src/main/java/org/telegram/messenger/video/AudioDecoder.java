@@ -19,7 +19,7 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 
 public class AudioDecoder {
-    private static final int TIMEOUT_USEC = 0000;
+    private static final int TIMEOUT_USEC = 2500;
 
     private final MediaExtractor extractor;
     private MediaCodec decoder;
@@ -201,7 +201,7 @@ public class AudioDecoder {
     }
 
     public void start() {
-        if (startTimeUs > endTimeUs) {
+        if (endTimeUs >= 0 && startTimeUs > endTimeUs) {
             throw new RuntimeException("StartTimeUs(" + startTimeUs + ") must be less than or equal to EndTimeUs(" + endTimeUs + ")");
         }
 
@@ -230,7 +230,7 @@ public class AudioDecoder {
                     }
                     int sampleSize = extractor.readSampleData(buffer, 0);
 
-                    if (sampleSize >= 0 && extractor.getSampleTime() <= endTimeUs) {
+                    if (sampleSize >= 0 && (endTimeUs < 0 || extractor.getSampleTime() <= endTimeUs)) {
                         decoder.queueInputBuffer(inBufferId, 0, sampleSize, extractor.getSampleTime(), extractor.getSampleFlags());
                         extractor.advance();
                     } else {
@@ -261,32 +261,41 @@ public class AudioDecoder {
                 data.flags = outputBufferInfo.flags;
                 data.offset = outputBufferInfo.offset;
 
-                // Adjusting start time
-                if (data.presentationTimeUs < startTimeUs) {
-                    long timeDiff = startTimeUs - data.presentationTimeUs;
-                    int bytesForTimeDiff = AudioConversions.usToBytes(timeDiff, getSampleRate(), getChannelCount());
-                    int position = data.byteBuffer.position() + bytesForTimeDiff;
-                    if (position <= data.byteBuffer.limit()) {
-                        data.byteBuffer.position(position);
+                if (data.byteBuffer != null) {
+                    // Adjusting start time
+                    if (data.presentationTimeUs < startTimeUs) {
+                        long timeDiff = startTimeUs - data.presentationTimeUs;
+                        int bytesForTimeDiff = AudioConversions.usToBytes(timeDiff, getSampleRate(), getChannelCount());
+                        int position = data.byteBuffer.position() + bytesForTimeDiff;
+                        if (position <= data.byteBuffer.limit()) {
+                            data.byteBuffer.position(position);
+                        }
                     }
-                }
 
-                // Adjusting end time
-                long nextTime = data.presentationTimeUs + AudioConversions.bytesToUs(data.size, getSampleRate(), getChannelCount());
-                if (nextTime > endTimeUs) {
-                    int bytesToRemove = AudioConversions.usToBytes(nextTime - endTimeUs, getSampleRate(), getChannelCount());
-                    if (bytesToRemove > 0) {
-                        int limit = data.byteBuffer.limit() - bytesToRemove;
-                        if (limit >= data.byteBuffer.position()) {
-                            data.byteBuffer.limit(limit);
+                    // Adjusting end time
+                    long nextTime = data.presentationTimeUs + AudioConversions.bytesToUs(data.size, getSampleRate(), getChannelCount());
+                    if (endTimeUs >= 0 && nextTime > endTimeUs) {
+                        int bytesToRemove = AudioConversions.usToBytes(nextTime - endTimeUs, getSampleRate(), getChannelCount());
+                        if (bytesToRemove > 0) {
+                            int limit = data.byteBuffer.limit() - bytesToRemove;
+                            if (limit >= data.byteBuffer.position()) {
+                                data.byteBuffer.limit(limit);
+                            }
                         }
                     }
                 }
 
                 // Did we get all output from decoder?
-                if ((outputBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0)
+                if ((outputBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                     decodingDone = true;
-                if (data.byteBuffer.remaining() > 0) currentOutputDone = true;
+                }
+                if (data.byteBuffer != null && data.byteBuffer.remaining() > 0) {
+                    currentOutputDone = true;
+                } else if (!decodingDone) {
+                    decoder.releaseOutputBuffer(outputBufferIndex, false);
+                    data.index = -1;
+                    data.byteBuffer = null;
+                }
             }
 
         }

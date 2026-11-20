@@ -37,6 +37,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
@@ -284,6 +285,17 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     private boolean filter(Object obj) {
+        long checkDid = 0;
+        if (obj instanceof TLRPC.User) {
+            checkDid = ((TLRPC.User) obj).id;
+        } else if (obj instanceof TLRPC.Chat) {
+            checkDid = -((TLRPC.Chat) obj).id;
+        } else if (obj instanceof TLRPC.EncryptedChat) {
+            checkDid = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) obj).id);
+        }
+        if (checkDid != 0 && KronoConfig.isDialogOrFolderHidden(currentAccount, checkDid)) {
+            return false;
+        }
         if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {
             return true;
         }
@@ -625,6 +637,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                         for (int a = 0; a < res.messages.size(); a++) {
                             TLRPC.Message message = res.messages.get(a);
                             long did = MessageObject.getDialogId(message);
+                            if (KronoConfig.isDialogOrFolderHidden(currentAccount, did)) {
+                                continue;
+                            }
                             int maxId = MessagesController.getInstance(currentAccount).deletedHistory.get(did);
                             if (maxId != 0 && message.id <= maxId) {
                                 continue;
@@ -1011,6 +1026,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             for (int i = 0; i < result.size(); ++i) {
                 if (!filter(result.get(i))) {
                     result.remove(i);
+                    if (names != null && i < names.size()) {
+                        names.remove(i);
+                    }
                     i--;
                 }
             }
@@ -2350,7 +2368,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             filteredRecentSearchObjects.clear();
             final int count = recentSearchObjects.size();
             for (int i = 0; i < count; ++i) {
-                if (delegate != null && delegate.getSearchForumDialogId() == recentSearchObjects.get(i).did || !filter(recentSearchObjects.get(i).object)) {
+                if (delegate != null && delegate.getSearchForumDialogId() == recentSearchObjects.get(i).did
+                        || KronoConfig.isDialogOrFolderHidden(currentAccount, recentSearchObjects.get(i).did)
+                        || !filter(recentSearchObjects.get(i).object)) {
                     continue;
                 }
                 filteredRecentSearchObjects.add(recentSearchObjects.get(i));
@@ -2364,7 +2384,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             if (obj == null || obj.object == null) {
                 continue;
             }
-            if (delegate != null && delegate.getSearchForumDialogId() == obj.did || !filter(recentSearchObjects.get(i).object)) {
+            if (delegate != null && delegate.getSearchForumDialogId() == obj.did
+                    || KronoConfig.isDialogOrFolderHidden(currentAccount, obj.did)
+                    || !filter(recentSearchObjects.get(i).object)) {
                 continue;
             }
             String title = null, username = null;
@@ -2542,7 +2564,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     public void seenSponsoredPeer(TLRPC.TL_sponsoredPeer sponsoredPeer) {
-        if (sponsoredPeer == null) return;
+        if (sponsoredPeer == null || org.telegram.messenger.KronoConfig.isBlockSponsoredMessages()) return;
         boolean sent = false;
         for (byte[] r : seenSponsoredPeers) {
             if (Arrays.equals(r, sponsoredPeer.random_id)) {
@@ -2559,7 +2581,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     public void clickedSponsoredPeer(TLRPC.TL_sponsoredPeer sponsoredPeer) {
-        if (sponsoredPeer == null) return;
+        if (sponsoredPeer == null || org.telegram.messenger.KronoConfig.isBlockSponsoredMessages()) return;
         TLRPC.TL_messages_clickSponsoredMessage req = new TLRPC.TL_messages_clickSponsoredMessage();
         req.random_id = sponsoredPeer.random_id;
         ConnectionsManager.getInstance(currentAccount).sendRequest(req, null);

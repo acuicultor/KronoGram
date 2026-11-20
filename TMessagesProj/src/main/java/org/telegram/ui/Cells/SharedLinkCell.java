@@ -15,6 +15,8 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.net.Uri;
@@ -32,6 +34,7 @@ import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.Emoji;
@@ -42,6 +45,7 @@ import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
+import org.telegram.messenger.R;
 import org.telegram.messenger.RichMessageLayout;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.tgnet.tl.TL_iv;
@@ -70,8 +74,12 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
         try {
             if (titleTextPaint != null) {
                 titleTextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
-                invalidate();
             }
+            if (goToMessageButton != null) {
+                goToMessageButton.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider), PorterDuff.Mode.SRC_IN));
+                goToMessageButton.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 1));
+            }
+            invalidate();
         } catch (Exception e) {
             FileLog.e(e);
         }
@@ -194,6 +202,7 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
     private AnimatedEmojiSpan.EmojiGroupedSpans fromInfoLayoutEmojis;
 
     private Theme.ResourcesProvider resourcesProvider;
+    private ImageView goToMessageButton;
     private int viewType;
     public final static int VIEW_TYPE_DEFAULT = 0;
     public final static int VIEW_TYPE_GLOBAL_SEARCH = 1;
@@ -240,6 +249,28 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
 
         captionTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
         captionTextPaint.setTextSize(dp(13));
+
+        goToMessageButton = new ImageView(context);
+        goToMessageButton.setScaleType(ImageView.ScaleType.CENTER);
+        goToMessageButton.setImageResource(R.drawable.msg_message);
+        goToMessageButton.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteGrayIcon, resourcesProvider), PorterDuff.Mode.SRC_IN));
+        goToMessageButton.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 1));
+        goToMessageButton.setContentDescription(LocaleController.getString(R.string.AccDescrGoToMessage));
+        goToMessageButton.setVisibility(GONE);
+        addView(goToMessageButton, LayoutHelper.createFrame(48, 48, Gravity.CENTER_VERTICAL | (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT), LocaleController.isRTL ? 4 : 0, 0, LocaleController.isRTL ? 0 : 4, 0));
+    }
+
+    public void setGoToMessageClickListener(OnClickListener listener) {
+        if (goToMessageButton == null) {
+            return;
+        }
+        goToMessageButton.setOnClickListener(listener);
+        int newVis = listener != null ? VISIBLE : GONE;
+        if (goToMessageButton.getVisibility() != newVis) {
+            goToMessageButton.setVisibility(newVis);
+            requestLayout();
+            invalidate();
+        }
     }
 
     private void gatherLink(String link) {
@@ -320,7 +351,8 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
         linkLayout.clear();
         links.clear();
 
-        int maxWidth = MeasureSpec.getSize(widthMeasureSpec) - dp(AndroidUtilities.leftBaseline) - dp(8);
+        int extraEnd = goToMessageButton != null && goToMessageButton.getVisibility() == VISIBLE ? dp(48) : 0;
+        int maxWidth = Math.max(dp(40), MeasureSpec.getSize(widthMeasureSpec) - dp(AndroidUtilities.leftBaseline) - dp(8) - extraEnd);
 
         String title = null;
         CharSequence description = null;
@@ -467,7 +499,7 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
         if (title != null) {
             try {
                 CharSequence titleFinal = title;
-                CharSequence titleH = AndroidUtilities.highlightText(titleFinal, message.highlightedWords, null);
+                CharSequence titleH = AndroidUtilities.highlightText(titleFinal, message.highlightedWords, resourcesProvider);
                 if (titleH != null) {
                     titleFinal = titleH;
                 }
@@ -521,7 +553,7 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
 
         if (message != null && !TextUtils.isEmpty(message.messageOwner.message)) {
             CharSequence caption = Emoji.replaceEmoji(message.messageOwner.message.replace("\n", " ").replaceAll(" +", " ").trim(), Theme.chat_msgTextPaint.getFontMetricsInt(), false);
-            CharSequence sequence = AndroidUtilities.highlightText(caption, message.highlightedWords, null);
+            CharSequence sequence = AndroidUtilities.highlightText(caption, message.highlightedWords, resourcesProvider);
             if (sequence != null) {
                 sequence = TextUtils.ellipsize(AndroidUtilities.ellipsizeCenterEnd(sequence, message.highlightedWords.get(0), maxWidth, captionTextPaint, 130), captionTextPaint, maxWidth, TextUtils.TruncateAt.END);
                 captionLayout = new StaticLayout(sequence, captionTextPaint, maxWidth + dp(4), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
@@ -620,6 +652,9 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
             height += fromInfoLayout.getLineBottom(fromInfoLayout.getLineCount() - 1) + dp(5);
         }
         checkBox.measure(MeasureSpec.makeMeasureSpec(dp(24), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(24), MeasureSpec.EXACTLY));
+        if (goToMessageButton != null && goToMessageButton.getVisibility() != GONE) {
+            goToMessageButton.measure(MeasureSpec.makeMeasureSpec(dp(48), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(48), MeasureSpec.EXACTLY));
+        }
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), Math.max(dp(76), height + dp(17)) + (needDivider ? 1 : 0));
     }
 
@@ -880,15 +915,16 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
         if (viewType == VIEW_TYPE_GLOBAL_SEARCH) {
             description2TextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3, resourcesProvider));
         }
+        final int rtlShiftDp = LocaleController.isRTL && goToMessageButton != null && goToMessageButton.getVisibility() == VISIBLE ? 56 : 8;
         if (dateLayout != null) {
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 8 : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? 0 : dateLayoutX), titleY);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? 0 : dateLayoutX), titleY);
             dateLayout.draw(canvas);
             canvas.restore();
         }
         if (titleLayout != null) {
             canvas.save();
-            float x = dp(LocaleController.isRTL ? 8 : AndroidUtilities.leftBaseline);
+            float x = dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline);
             if (LocaleController.isRTL) {
                 x += dateLayout == null ? 0 : (dateLayout.getWidth() + dp(4));
             }
@@ -900,14 +936,14 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
         if (captionLayout != null) {
             captionTextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 8 : AndroidUtilities.leftBaseline), captionY);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline), captionY);
             captionLayout.draw(canvas);
             canvas.restore();
         }
         if (descriptionLayout != null) {
             descriptionTextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 8 : AndroidUtilities.leftBaseline), descriptionY);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline), descriptionY);
             SpoilerEffect.renderWithRipple(this, false, descriptionTextPaint.getColor(), -dp(2), patchedDescriptionLayout, 0, descriptionLayout, descriptionLayoutSpoilers, canvas, false);
             canvas.restore();
         }
@@ -915,7 +951,7 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
         if (descriptionLayout2 != null) {
             descriptionTextPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 8 : AndroidUtilities.leftBaseline), description2Y);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline), description2Y);
             SpoilerEffect.renderWithRipple(this, false, descriptionTextPaint.getColor(), -dp(2), patchedDescriptionLayout2, 0, descriptionLayout2, descriptionLayout2Spoilers, canvas, false);
             canvas.restore();
         }
@@ -928,7 +964,7 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
                 List<SpoilerEffect> spoilers = linkSpoilers.get(a);
                 if (layout.getLineCount() > 0) {
                     canvas.save();
-                    canvas.translate(dp(LocaleController.isRTL ? 8 : AndroidUtilities.leftBaseline), linkY + offset);
+                    canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline), linkY + offset);
 
                     path.rewind();
                     if (spoilers != null) {
@@ -966,7 +1002,7 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
 
         if (fromInfoLayout != null) {
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 8 : AndroidUtilities.leftBaseline), fromInfoLayoutY );
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline), fromInfoLayoutY );
             fromInfoLayout.draw(canvas);
             AnimatedEmojiSpan.drawAnimatedEmojis(canvas, fromInfoLayout, fromInfoLayoutEmojis, 0, null, 0, 0, 0, 1f);
             canvas.restore();
@@ -977,10 +1013,11 @@ public class SharedLinkCell extends FrameLayout implements Theme.Colorable {
         }
 
         if (needDivider) {
+            Paint dividerPaint = Theme.getThemePaint(Theme.key_paint_divider, resourcesProvider);
             if (LocaleController.isRTL) {
-                canvas.drawLine(0, getMeasuredHeight() - 1, getMeasuredWidth() - dp(AndroidUtilities.leftBaseline), getMeasuredHeight() - 1, Theme.dividerPaint);
+                canvas.drawLine(0, getMeasuredHeight() - 1, getMeasuredWidth() - dp(AndroidUtilities.leftBaseline), getMeasuredHeight() - 1, dividerPaint);
             } else {
-                canvas.drawLine(dp(AndroidUtilities.leftBaseline), getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight() - 1, Theme.dividerPaint);
+                canvas.drawLine(dp(AndroidUtilities.leftBaseline), getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight() - 1, dividerPaint);
             }
         }
     }

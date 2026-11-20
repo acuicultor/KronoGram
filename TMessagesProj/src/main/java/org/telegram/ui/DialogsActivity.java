@@ -587,6 +587,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Nullable
     private ActionBarMenuSubItem removeFromFolderItem;
     @Nullable
+    private ActionBarMenuSubItem favoriteItem;
+    @Nullable
+    private ActionBarMenuSubItem hideChatItem;
+    @Nullable
+    private BlurredBackgroundDrawable filterTabsViewBackground;
+    @Nullable
     private ActionBarMenuSubItem archiveItem;
     @Nullable
     private ActionBarMenuSubItem clearItem;
@@ -715,6 +721,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private final static int add_to_folder = 109;
     private final static int remove_from_folder = 110;
     private final static int community_ungroup = 111;
+    private final static int toggle_favorite = 112;
+    private final static int hide_chat = 113;
 
     private final static int ARCHIVE_ITEM_STATE_PINNED = 0;
     private final static int ARCHIVE_ITEM_STATE_SHOWED = 1;
@@ -1359,6 +1367,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                             startedTracking ||
                                             ev.getY() > getActionBarTop() + getActionBarFullHeight() && (chatInputViewsContainer == null || chatInputViewsContainer.getVisibility() != VISIBLE || ev.getY() < chatInputViewsContainer.getY())
                             ) && (
+                            !org.telegram.messenger.KronoConfig.disableTabsSwipe || initialDialogsType != DIALOGS_TYPE_DEFAULT
+                            ) && (
                             initialDialogsType == DIALOGS_TYPE_FORWARD ||
                                     SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_FOLDERS ||
                                     SharedConfig.getChatSwipeAction(currentAccount) == SwipeGestureSettingsView.SWIPE_GESTURE_ARCHIVE &&
@@ -1545,6 +1555,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                     viewPages[1] = tempPage;
                                     filterTabsView.selectTabWithId(viewPages[0].selectedType, 1.0f);
                                     updateCounters(false);
+                                    updateKronoHeaderTitle();
                                     viewPages[0].dialogsAdapter.resume();
                                     viewPages[1].dialogsAdapter.pause();
                                 }
@@ -3438,12 +3449,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 statusDrawable.center = true;
                 logoDrawable = context.getResources().getDrawable(R.drawable.telegram_logo_2).mutate();
                 logoDrawable.setBounds(0, dp(2), logoDrawable.getIntrinsicWidth(), dp(2) + logoDrawable.getIntrinsicHeight());
-                // a new drawable (also when the view is recreated after a theme switch made elsewhere): remember its tint, the
-                // theme hook only recolors when the color differs from the last one applied
                 logoDrawable.setColorFilter(lastLogoDrawableColor = getThemedColor(Theme.key_telegram_color_dialogsLogo), PorterDuff.Mode.MULTIPLY);
-                SpannableStringBuilder ssb = new SpannableStringBuilder(getString(R.string.AppName));
-                ssb.setSpan(new ImageSpan(logoDrawable), 0, ssb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                actionBar.setTitle(ssb, statusDrawable);
+                actionBar.setTitle(getString(R.string.AppName), statusDrawable);
                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
             }
             if (folderId == 0) {
@@ -3465,6 +3472,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 scrollToTop(true, true);
             }
         });
+        if (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0 && communityId == 0) {
+            actionBar.setTitleLongClickRunnable(() -> {
+                if (actionBar.isActionModeShowed() || searching) {
+                    return;
+                }
+                KronoHiddenLockHelper.authenticate(
+                        DialogsActivity.this,
+                        "Bóveda oculta",
+                        "Verifica tu identidad para abrir la bóveda",
+                        () -> presentFragment(new KronoHiddenVaultActivity())
+                );
+            });
+        }
 
         if (
             (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) &&
@@ -3498,6 +3518,26 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             filterTabsView.setDelegate(new FilterTabsView.FilterTabsViewDelegate() {
 
                 private void showDeleteAlert(MessagesController.DialogFilter dialogFilter) {
+                    if (dialogFilter == null) {
+                        return;
+                    }
+                    if (dialogFilter.isLocalFavorites()) {
+                        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+                        builder.setTitle("Ocultar carpeta «Favoritos»");
+                        builder.setMessage("La carpeta «Favoritos» se ocultará de la barra de pestañas, pero tus chats favoritos guardados se conservarán. Puedes volver a activarla en Ajustes de KronoGram.");
+                        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+                        builder.setPositiveButton("Ocultar", (dialog2, which2) -> {
+                            org.telegram.messenger.KronoConfig.toggleShowFavoritesFolder();
+                            getMessagesController().syncLocalFavoritesFilter(true);
+                        });
+                        AlertDialog alertDialog = builder.create();
+                        showDialog(alertDialog);
+                        TextView button = (TextView) alertDialog.getButton(DialogInterface.BUTTON_POSITIVE);
+                        if (button != null) {
+                            ThemeBind.textColor(button, Theme.key_text_RedBold, DialogsActivity.this.getResourceProvider());
+                        }
+                        return;
+                    }
                     if (dialogFilter.isChatlist()) {
                         FolderBottomSheet.showForDeletion(DialogsActivity.this, dialogFilter.id, null);
                     } else {
@@ -3584,6 +3624,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         viewPages[1].setVisibility(View.GONE);
                         showScrollbars(true);
                         updateCounters(false);
+                        updateKronoHeaderTitle();
                         filterTabsView.stopAnimatingIndicator();
                         checkListLoad(viewPages[0]);
                         viewPages[0].dialogsAdapter.resume();
@@ -3597,7 +3638,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         return 0;
                     }
                     if (tabId == filterTabsView.getDefaultTabId()) {
-                        return getMessagesStorage().getMainUnreadCount();
+                        int count = getMessagesStorage().getMainUnreadCount();
+                        if (count > 0 && org.telegram.messenger.KronoConfig.hasAnyHiddenItems(currentAccount)) {
+                            ArrayList<TLRPC.Dialog> all = getMessagesController().getDialogs(folderId);
+                            int hiddenUnread = 0;
+                            for (int i = 0, n = all.size(); i < n; i++) {
+                                TLRPC.Dialog d = all.get(i);
+                                if (d != null && !(d instanceof TLRPC.TL_dialogFolder)
+                                        && (d.unread_count > 0 || d.unread_mark)
+                                        && !getMessagesController().isDialogMuted(d.id, d.folder_id)
+                                        && org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, d.id)) {
+                                    hiddenUnread++;
+                                }
+                            }
+                            count = Math.max(0, count - hiddenUnread);
+                        }
+                        return count;
                     }
                     ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
                     if (tabId < 0 || tabId >= dialogFilters.size()) {
@@ -3686,6 +3742,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         }
                     }
 
+                    final boolean isFavoritesTab = dialogFilter != null && dialogFilter.isLocalFavorites();
                     filterOptions = ItemOptions.makeOptions(DialogsActivity.this, tabView)
                             .setScrimViewBackground(new Drawable() {
                                 private Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -3722,7 +3779,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 filterTabsView.setIsEditing(true);
                                 showDoneItem(true);
                             })
-                            .add(R.drawable.msg_edit, defaultTab ? LocaleController.getString(R.string.FilterEditAll) : LocaleController.getString(R.string.FilterEdit), () -> {
+                            .addIf(!isFavoritesTab, R.drawable.msg_edit, defaultTab ? LocaleController.getString(R.string.FilterEditAll) : LocaleController.getString(R.string.FilterEdit), () -> {
                                 presentFragment(defaultTab ? new FiltersSetupActivity() : new FilterCreateActivity(dialogFilter));
                             })
                             .addIf(dialogFilter != null && !dialogs.isEmpty(), muteAll ? R.drawable.msg_mute : R.drawable.msg_unmute, muteAll ? LocaleController.getString(R.string.FilterMuteAll) : LocaleController.getString(R.string.FilterUnmuteAll), () -> {
@@ -3739,14 +3796,25 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             .addIf(hasUnread, R.drawable.msg_markread, LocaleController.getString(R.string.MarkAllAsRead), () -> {
                                 markDialogsAsRead(dialogs);
                             })
-                            .addIf(hasShare, R.drawable.msg_share, FilterCreateActivity.withNew(filter != null && filter.isMyChatlist() ? -1 : 0, LocaleController.getString(R.string.LinkActionShare), true), () -> {
+                            .addIf(hasShare && !isFavoritesTab, R.drawable.msg_share, FilterCreateActivity.withNew(filter != null && filter.isMyChatlist() ? -1 : 0, LocaleController.getString(R.string.LinkActionShare), true), () -> {
                                 if (shareEmpty[0]) {
                                     presentFragment(new FilterChatlistActivity(finalFilter, null));
                                 } else {
                                     FilterCreateActivity.FilterInvitesBottomSheet.show(DialogsActivity.this, finalFilter, null);
                                 }
                             })
-                            .addIf(!defaultTab, R.drawable.msg_delete, LocaleController.getString(R.string.FilterDeleteItem), true, () -> {
+                            .addIf(!defaultTab && !isFavoritesTab && !org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, dialogFilter.id), R.drawable.msg_archive_hide, "Ocultar carpeta", () -> {
+                                KronoHiddenLockHelper.ensureProtectionConfigured(DialogsActivity.this, () -> {
+                                    org.telegram.messenger.KronoConfig.setFilterHidden(currentAccount, dialogFilter.id, true);
+                                    updateFilterTabs(true, true);
+                                    getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
+                                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
+                                            R.drawable.msg_archive_hide,
+                                            "Carpeta ocultada. Mantén pulsado el título «KronoGram» para abrir la bóveda"
+                                    ).show();
+                                });
+                            })
+                            .addIf(!defaultTab, R.drawable.msg_delete, isFavoritesTab ? "Ocultar carpeta «Favoritos»" : LocaleController.getString(R.string.FilterDeleteItem), true, () -> {
                                 showDeleteAlert(dialogFilter);
                             })
                             .setDimAlpha(0x60)
@@ -3764,7 +3832,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                 @Override
                 public void onDeletePressed(int id) {
-                    showDeleteAlert(getMessagesController().getDialogFilters().get(id));
+                    ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
+                    if (id >= 0 && id < filters.size()) {
+                        showDeleteAlert(filters.get(id));
+                    }
                 }
             });
         }
@@ -3841,6 +3912,33 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     FiltersListBottomSheet sheet = new FiltersListBottomSheet(DialogsActivity.this, selectedDialogs);
                     sheet.setDelegate((filter, checked) -> {
                         ArrayList<Long> alwaysShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, selectedDialogs, true, false);
+                        if (filter != null && filter.isLocalFavorites()) {
+                            if (checked) {
+                                for (int a = 0; a < selectedDialogs.size(); a++) {
+                                    long did = selectedDialogs.get(a);
+                                    org.telegram.messenger.KronoConfig.setFavoriteDialog(did, false);
+                                    filter.pinnedDialogs.delete(did);
+                                }
+                                getMessagesController().syncLocalFavoritesFilter(true);
+                                long did = selectedDialogs.size() == 1 ? selectedDialogs.get(0) : 0;
+                                final UndoView undoView = getUndoView();
+                                if (undoView != null) {
+                                    undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, selectedDialogs.size(), filter, null, null);
+                                }
+                            } else {
+                                for (int a = 0; a < alwaysShow.size(); a++) {
+                                    org.telegram.messenger.KronoConfig.setFavoriteDialog(alwaysShow.get(a), true);
+                                }
+                                getMessagesController().syncLocalFavoritesFilter(true);
+                                long did = alwaysShow.size() == 1 ? alwaysShow.get(0) : 0;
+                                final UndoView undoView = getUndoView();
+                                if (undoView != null) {
+                                    undoView.showWithAction(did, UndoView.ACTION_ADDED_TO_FOLDER, alwaysShow.size(), filter, null, null);
+                                }
+                            }
+                            hideActionMode(true);
+                            return;
+                        }
                         if (!checked) {
                             int currentCount;
                             if (filter != null) {
@@ -3897,7 +3995,26 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     });
                     showDialog(sheet);
                 } else if (id == remove_from_folder) {
-                    MessagesController.DialogFilter filter = getMessagesController().getDialogFilters().get(viewPages[0].selectedType);
+                    ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
+                    if (viewPages[0].selectedType < 0 || viewPages[0].selectedType >= filters.size()) {
+                        return;
+                    }
+                    MessagesController.DialogFilter filter = filters.get(viewPages[0].selectedType);
+                    if (filter.isLocalFavorites()) {
+                        for (int a = 0; a < selectedDialogs.size(); a++) {
+                            long did = selectedDialogs.get(a);
+                            org.telegram.messenger.KronoConfig.setFavoriteDialog(did, false);
+                            filter.pinnedDialogs.delete(did);
+                        }
+                        getMessagesController().syncLocalFavoritesFilter(true);
+                        long did = selectedDialogs.size() == 1 ? selectedDialogs.get(0) : 0;
+                        final UndoView undoView = getUndoView();
+                        if (undoView != null) {
+                            undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, selectedDialogs.size(), filter, null, null);
+                        }
+                        hideActionMode(false);
+                        return;
+                    }
                     ArrayList<Long> neverShow = FiltersListBottomSheet.getDialogsCount(DialogsActivity.this, filter, selectedDialogs, false, false);
 
                     int currentCount;
@@ -3933,6 +4050,41 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, neverShow.size(), filter, null, null);
                     }
                     hideActionMode(false);
+                } else if (id == toggle_favorite) {
+                    boolean allFavorites = !selectedDialogs.isEmpty();
+                    for (int a = 0; a < selectedDialogs.size(); a++) {
+                        if (!org.telegram.messenger.KronoConfig.isFavoriteDialog(selectedDialogs.get(a))) {
+                            allFavorites = false;
+                            break;
+                        }
+                    }
+                    for (int a = 0; a < selectedDialogs.size(); a++) {
+                        org.telegram.messenger.KronoConfig.setFavoriteDialog(selectedDialogs.get(a), !allFavorites);
+                    }
+                    getMessagesController().syncLocalFavoritesFilter(true);
+                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
+                        allFavorites ? R.drawable.msg_unfave : R.drawable.msg_fave,
+                        allFavorites ? "Eliminado de Favoritos" : "Añadido a Favoritos"
+                    ).show();
+                    hideActionMode(true);
+                } else if (id == hide_chat) {
+                    if (selectedDialogs.isEmpty()) {
+                        return;
+                    }
+                    final ArrayList<Long> toHide = new ArrayList<>(selectedDialogs);
+                    KronoHiddenLockHelper.ensureProtectionConfigured(DialogsActivity.this, () -> {
+                        for (int a = 0; a < toHide.size(); a++) {
+                            org.telegram.messenger.KronoConfig.setDialogHidden(currentAccount, toHide.get(a), true);
+                        }
+                        getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
+                        BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
+                                R.drawable.msg_archive_hide,
+                                toHide.size() == 1
+                                        ? "Chat ocultado. Mantén pulsado el título «KronoGram» para abrir la bóveda"
+                                        : toHide.size() + " chats ocultados en la bóveda"
+                        ).show();
+                        hideActionMode(true);
+                    });
                 } else if (id == pin || id == read || id == delete || id == clear || id == mute || id == archive || id == block || id == archive2 || id == pin2) {
                     performSelectedDialogsAction(selectedDialogs, id, true, false);
                 }
@@ -4639,7 +4791,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         searchTabsAndFiltersLayout.setPadding(0, dp(7), 0, dp(7));
         searchTabsAndFiltersLayout.setBlurredBackground(searchTabsViewBackground);
 
-        filtersView = new FiltersView(getParentActivity(), null);
+        filtersView = new FiltersView(getParentActivity(), resourceProvider);
         filtersView.setPadding(0, dp(3), 0, dp(3));
         filtersView.drawDivider = false;
         filtersView.setOnItemClickListener((view, position) -> {
@@ -5065,12 +5217,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         if (filterTabsView != null) {
-            BlurredBackgroundDrawable filterTabsViewBackground = iBlur3FactoryLiquidGlass.create(filterTabsView, BlurredBackgroundProviderImpl.topPanel(resourceProvider));
-            filterTabsViewBackground.setRadius(dp(18));
-            filterTabsViewBackground.setPadding(dp(6.666f));
+            filterTabsViewBackground = iBlur3FactoryLiquidGlass.create(filterTabsView, BlurredBackgroundProviderImpl.topPanel(resourceProvider));
             filterTabsView.setPadding(0, dp(7), 0, dp(7));
-            filterTabsView.setBlurredBackground(filterTabsViewBackground);
             contentView.addView(filterTabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36 + 7 + 7, Gravity.TOP, 4, 0, 4, 0));
+            updateFilterTabsAppearance();
         }
 
         if (fragmentSearchField != null) {
@@ -6671,6 +6821,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         pin2Item = otherItem.addSubItem(pin2, R.drawable.msg_pin, LocaleController.getString(R.string.DialogPin));
         addToFolderItem = otherItem.addSubItem(add_to_folder, R.drawable.msg_addfolder, LocaleController.getString(R.string.FilterAddTo));
         removeFromFolderItem = otherItem.addSubItem(remove_from_folder, R.drawable.msg_removefolder, LocaleController.getString(R.string.FilterRemoveFrom));
+        favoriteItem = otherItem.addSubItem(toggle_favorite, R.drawable.msg_fave, "Añadir a Favoritos");
+        hideChatItem = otherItem.addSubItem(hide_chat, R.drawable.msg_archive_hide, "Ocultar chat");
         readItem = otherItem.addSubItem(read, R.drawable.msg_markread, LocaleController.getString(R.string.MarkAsRead));
         clearItem = otherItem.addSubItem(clear, R.drawable.msg_clear, LocaleController.getString(R.string.ClearHistory));
         blockItem = otherItem.addSubItem(block, R.drawable.msg_block, LocaleController.getString(R.string.BlockUser));
@@ -6704,21 +6856,28 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 return;
             }
         }
-        int index = filterTabsView.getTabsCount() - 1;
         ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
+        if (fid == 0 && org.telegram.messenger.KronoConfig.hideAllChatsTab && filters.size() > 1 && filterTabsView.getTabsCount() > 0) {
+            FilterTabsView.Tab firstTab = filterTabsView.getTab(0);
+            if (firstTab != null && (viewPages == null || viewPages.length == 0 || viewPages[0].selectedType != firstTab.id)) {
+                filterTabsView.scrollToTab(firstTab, 0);
+            }
+            return;
+        }
+        int filterIndex = -1;
         for (int i = 0; i < filters.size(); ++i) {
             if (filters.get(i).id == fid) {
-                index = i;
+                filterIndex = i;
                 break;
             }
         }
-
-        FilterTabsView.Tab tab = filterTabsView.getTab(index);
+        int tabPos = filterIndex >= 0 ? filterTabsView.getPositionForTabId(filterIndex) : filterTabsView.getTabsCount() - 1;
+        FilterTabsView.Tab tab = filterTabsView.getTab(tabPos);
         if (tab != null) {
             if (viewPages != null && viewPages.length > 0 && viewPages[0].selectedType == tab.id) {
                 return;
             }
-            filterTabsView.scrollToTab(tab, index);
+            filterTabsView.scrollToTab(tab, tabPos);
         } else {
             filterTabsView.selectLastTab();
         }
@@ -6753,6 +6912,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         viewPages[a].dialogsAdapter.setDialogsType(viewPages[a].dialogsType);
         viewPages[a].layoutManager.scrollToPositionWithOffset(viewPages[a].dialogsType == DIALOGS_TYPE_DEFAULT && hasHiddenArchive() && viewPages[a].archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN ? 1 : 0, (int) scrollYOffset);
         checkListLoad(viewPages[a]);
+        updateKronoHeaderTitle();
     }
 
     private boolean scrollBarVisible = true;
@@ -6792,36 +6952,67 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 boolean updateCurrentTab = filterTabsView.isEmpty();
                 updateFilterTabsVisibility(animated);
                 int id = filterTabsView.getCurrentTabId();
-                int stableId = filterTabsView.getCurrentTabStableId();
+                int stableId = filterTabsView.getStableIdForTabId(viewPages[0].selectedType);
+                if (stableId < 0) {
+                    stableId = filterTabsView.getCurrentTabStableId();
+                }
                 boolean selectWithStableId = false;
                 if (id != filterTabsView.getDefaultTabId() && id >= filters.size()) {
                     filterTabsView.resetTabId();
                     selectWithStableId = true;
                 }
+                boolean hasVisibleCustomFilter = false;
+                for (int a = 0, N = filters.size(); a < N; a++) {
+                    MessagesController.DialogFilter f = filters.get(a);
+                    if (f != null && !f.isDefault() && !org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, f.id)) {
+                        hasVisibleCustomFilter = true;
+                        break;
+                    }
+                }
                 filterTabsView.removeTabs();
                 for (int a = 0, N = filters.size(); a < N; a++) {
-                    if (filters.get(a).isDefault()) {
-                        filterTabsView.addTab(a, 0, LocaleController.getString(R.string.FilterAllChats), null, false, true, filters.get(a).locked);
+                    final MessagesController.DialogFilter filter = filters.get(a);
+                    if (filter.isDefault()) {
+                        if (org.telegram.messenger.KronoConfig.hideAllChatsTab && hasVisibleCustomFilter) {
+                            continue;
+                        }
+                        int defaultIcon = org.telegram.messenger.FolderIconHelper.getTabIconResId(currentAccount, filter, true);
+                        filterTabsView.addTab(a, 0, LocaleController.getString(R.string.FilterAllChats), null, false, true, filter.locked, defaultIcon);
                     } else {
-                        final MessagesController.DialogFilter filter = filters.get(a);
-                        filterTabsView.addTab(a, filter.localId, filter.name, filter.entities, filter.title_noanimate, false, filters.get(a).locked);
+                        if (org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, filter.id)) {
+                            continue;
+                        }
+                        int filterIcon = org.telegram.messenger.FolderIconHelper.getTabIconResId(currentAccount, filter, false);
+                        filterTabsView.addTab(a, filter.localId, filter.name, filter.entities, filter.title_noanimate, false, filter.locked, filterIcon);
                     }
                 }
                 if (stableId >= 0) {
                     if (selectWithStableId) {
                         if (!filterTabsView.selectTabWithStableId(stableId)) {
-                            while (id >= 0 && !filterTabsView.selectTabWithStableId(filterTabsView.getStableId(id))) {
+                            while (id >= 0 && !filterTabsView.selectTabWithStableId(filterTabsView.getStableIdForTabId(id))) {
                                 id--;
                             }
                             if (id < 0) {
-                                id = 0;
+                                id = filterTabsView.getFirstTabId();
                             }
                         }
+                    } else {
+                        filterTabsView.selectTabWithStableId(stableId);
                     }
-                    if (filterTabsView.getStableId(viewPages[0].selectedType) != stableId) {
+                    if (!filterTabsView.hasTab(viewPages[0].selectedType) || !filterTabsView.hasTab(filterTabsView.getCurrentTabId())) {
+                        int firstTabId = filterTabsView.getFirstTabId();
+                        viewPages[0].selectedType = firstTabId;
+                        filterTabsView.selectTabWithStableId(filterTabsView.getStableIdForTabId(firstTabId));
                         updateCurrentTab = true;
-                        viewPages[0].selectedType = id;
+                    } else if (filterTabsView.getStableIdForTabId(viewPages[0].selectedType) != stableId) {
+                        updateCurrentTab = true;
+                        viewPages[0].selectedType = filterTabsView.getCurrentTabId();
                     }
+                } else if (!filterTabsView.isEmpty() && !filterTabsView.hasTab(viewPages[0].selectedType)) {
+                    int firstTabId = filterTabsView.getFirstTabId();
+                    viewPages[0].selectedType = firstTabId;
+                    filterTabsView.selectTabWithStableId(filterTabsView.getStableIdForTabId(firstTabId));
+                    updateCurrentTab = true;
                 }
                 for (int a = 0; a < viewPages.length; a++) {
                     if (viewPages[a].selectedType >= filters.size()) {
@@ -6830,6 +7021,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     viewPages[a].listView.setScrollingTouchSlop(RecyclerView.TOUCH_SLOP_PAGING);
                 }
                 filterTabsView.finishAddingTabs(animatedUpdateItems);
+                filterTabsView.requestLayout();
+                filterTabsView.invalidate();
                 if (updateCurrentTab) {
                     switchToCurrentSelectedMode(false);
                 }
@@ -6848,8 +7041,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     viewPages[0].setTranslationX(0);
                     viewPages[1].setTranslationX(viewPages[0].getMeasuredWidth());
                 }
-                if (viewPages[0].selectedType != filterTabsView.getDefaultTabId()) {
-                    viewPages[0].selectedType = filterTabsView.getDefaultTabId();
+                int defaultTabId = Math.max(0, filterTabsView.getDefaultTabId());
+                if (viewPages[0].selectedType != defaultTabId) {
+                    viewPages[0].selectedType = defaultTabId;
                     viewPages[0].dialogsAdapter.setDialogsType(0);
                     viewPages[0].dialogsType = initialDialogsType;
                     viewPages[0].dialogsAdapter.notifyDataSetChanged();
@@ -6894,6 +7088,52 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     switchToCurrentSelectedMode(false);
                 }
             }
+        }
+        updateKronoHeaderTitle();
+    }
+
+    private boolean kronoHeaderTitleApplied = false;
+
+    private void updateFilterTabsAppearance() {
+        if (filterTabsView == null) {
+            return;
+        }
+        int style = org.telegram.messenger.KronoConfig.tabStyle;
+        if (style == org.telegram.messenger.KronoConfig.TAB_STYLE_VKUI || style == org.telegram.messenger.KronoConfig.TAB_STYLE_TEXT_ONLY) {
+            filterTabsView.setBlurredBackground(null);
+        } else if (filterTabsViewBackground != null) {
+            filterTabsViewBackground.setRadius(dp(style == org.telegram.messenger.KronoConfig.TAB_STYLE_ROUNDED ? 12 : 18));
+            filterTabsViewBackground.setPadding(dp(6.666f));
+            filterTabsView.setBlurredBackground(filterTabsViewBackground);
+        }
+        filterTabsView.refreshTabsAppearance();
+    }
+
+    private void updateKronoHeaderTitle() {
+        if (actionBar == null || initialDialogsType != DIALOGS_TYPE_DEFAULT || onlySelect || folderId != 0 || communityId != 0 || !TextUtils.isEmpty(searchString) || searching || inPreviewMode) {
+            return;
+        }
+        if (org.telegram.messenger.KronoConfig.folderNameInHeader && filterTabsView != null && filterTabsView.getVisibility() == View.VISIBLE && viewPages != null && viewPages.length > 0) {
+            ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
+            int idx = viewPages[0].selectedType;
+            String title = LocaleController.getString(R.string.FilterAllChats);
+            if (idx >= 0 && idx < filters.size()) {
+                MessagesController.DialogFilter filter = filters.get(idx);
+                if (filter != null && filter.isDefault() && org.telegram.messenger.KronoConfig.hideAllChatsTab && filterTabsView.getTabsCount() > 0) {
+                    FilterTabsView.Tab firstTab = filterTabsView.getTab(0);
+                    if (firstTab != null && firstTab.id >= 0 && firstTab.id < filters.size()) {
+                        filter = filters.get(firstTab.id);
+                    }
+                }
+                if (filter != null && !filter.isDefault() && !TextUtils.isEmpty(filter.name)) {
+                    title = filter.name;
+                }
+            }
+            actionBar.setTitle(title, statusDrawable);
+            kronoHeaderTitleApplied = true;
+        } else if (kronoHeaderTitleApplied) {
+            actionBar.setTitle(LocaleController.getString(R.string.AppName), statusDrawable);
+            kronoHeaderTitleApplied = false;
         }
     }
 
@@ -6962,6 +7202,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (commentView != null) {
             commentView.onResume();
         }
+        updateFilterTabsAppearance();
+        updateKronoHeaderTitle();
         if (!onlySelect && folderId == 0 && communityId == 0) {
             getMediaDataController().checkStickers(MediaDataController.TYPE_EMOJI);
         }
@@ -6979,9 +7221,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             Activity activity = getParentActivity();
             if (activity != null) {
                 checkPermission = false;
-                boolean hasNotContactsPermission = activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED;
+                boolean hasNotContactsPermission = askAboutContacts && getUserConfig().syncContacts && activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED;
                 boolean hasNotStoragePermission = (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE) && activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED;
-                boolean hasNotNotificationsPermission = Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED;
+                boolean hasNotNotificationsPermission = Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && NotificationPermissionDialog.shouldAsk(activity);
                 AndroidUtilities.runOnUIThread(() -> {
                     if (getParentActivity() == null) {
                         return;
@@ -6989,7 +7231,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     afterSignup = false;
                     if (hasNotNotificationsPermission || hasNotContactsPermission || hasNotStoragePermission) {
                         askingForPermissions = true;
-                        if (hasNotNotificationsPermission && NotificationPermissionDialog.shouldAsk(activity)) {
+                        if (hasNotNotificationsPermission) {
                             PermissionRequest.requestPermission(Manifest.permission.POST_NOTIFICATIONS, granted -> {
                                 if (!granted) {
                                     showDialog(new NotificationPermissionDialog(activity, !PermissionRequest.canAskPermission(Manifest.permission.POST_NOTIFICATIONS), granted2 -> {
@@ -7053,11 +7295,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 return;
             }
             if (!MessagesController.getGlobalNotificationsSettings().getBoolean("askedAboutFSILockscreen", false)) {
+                MessagesController.getGlobalNotificationsSettings().edit().putBoolean("askedAboutFSILockscreen", true).commit();
                 showDialog(new AlertDialog.Builder(getParentActivity())
                     .setTopAnimation(R.raw.permission_request_apk, AlertsCreator.PERMISSIONS_REQUEST_TOP_ICON_SIZE, false, getThemedColor(Theme.key_dialogTopBackground))
                     .setTopBackgroundColorKey(Theme.key_dialogTopBackground, getResourceProvider())
                     .setMessage(getString(R.string.PermissionFSILockscreen))
                     .setPositiveButton(getString(R.string.PermissionOpenSettings), (dialog, which) -> {
+                        MessagesController.getGlobalNotificationsSettings().edit().putBoolean("askedAboutFSILockscreen", true).commit();
                         Intent intent = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT);
                         intent.setData(Uri.parse("package:" + ApplicationLoader.applicationContext.getPackageName()));
                         if (intent != null) {
@@ -8436,10 +8680,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         dialogIdArray.add(dialogId);
 
         boolean hasFolders = communityId == 0 &&
-            getMessagesController().filtersEnabled &&
-            getMessagesController().dialogFiltersLoaded &&
             getMessagesController().dialogFilters != null &&
-            getMessagesController().dialogFilters.size() > 0;
+            getMessagesController().dialogFilters.size() > 1;
         final ActionBarPopupWindow.ActionBarPopupWindowLayout[] previewMenu = new ActionBarPopupWindow.ActionBarPopupWindowLayout[1];
 
         LinearLayout foldersMenuView = null;
@@ -8486,11 +8728,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 title = Emoji.replaceEmoji(title, folderItem.getTextView().getPaint().getFontMetricsInt(), false);
                 title = MessageObject.replaceAnimatedEmoji(title, folder.entities, folderItem.getTextView().getPaint().getFontMetricsInt());
                 folderItem.setEmojiCacheType(folder.title_noanimate ? AnimatedEmojiDrawable.CACHE_TYPE_NOANIMATE_FOLDER : AnimatedEmojiDrawable.CACHE_TYPE_MESSAGES);
-                folderItem.setTextAndIcon(title, 0, new FolderDrawable(getContext(), R.drawable.msg_folders, folder.color));
+                folderItem.setTextAndIcon(title, 0, new FolderDrawable(getContext(), folder.isLocalFavorites() ? R.drawable.msg_fave : R.drawable.msg_folders, folder.color));
                 folderItem.getTextView().setEmojiColor(getThemedColor(Theme.key_featuredStickers_addButton));
                 folderItem.setMinimumWidth(160);
                 folderItem.setOnClickListener(e -> {
-                    if (!contains) {
+                    if (folder.isLocalFavorites()) {
+                        org.telegram.messenger.KronoConfig.setFavoriteDialog(dialogId, !contains);
+                        getMessagesController().syncLocalFavoritesFilter(true);
+                        getUndoView().showWithAction(dialogId, contains ? UndoView.ACTION_REMOVED_FROM_FOLDER : UndoView.ACTION_ADDED_TO_FOLDER, 1, folder, null, null);
+                    } else if (!contains) {
                         if (!alwaysShow.isEmpty()) {
                             for (int a = 0; a < alwaysShow.size(); a++) {
                                 folder.neverShow.remove(alwaysShow.get(a));
@@ -8567,8 +8813,54 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             });
         }
 
+        boolean addedQuickFavorite = false;
+        if (!isCommunityCell && org.telegram.messenger.KronoConfig.showFavoritesFolder && communityId == 0) {
+            final boolean isFav = org.telegram.messenger.KronoConfig.isFavoriteDialog(dialogId);
+            ActionBarMenuSubItem favSubItem = new ActionBarMenuSubItem(getParentActivity(), !hasFolders, false);
+            favSubItem.setTextAndIcon(isFav ? "Quitar de Favoritos" : "Añadir a Favoritos", isFav ? R.drawable.msg_unfave : R.drawable.msg_fave);
+            favSubItem.setMinimumWidth(160);
+            favSubItem.setOnClickListener(e -> {
+                boolean nowFav = org.telegram.messenger.KronoConfig.toggleFavoriteDialog(dialogId);
+                getMessagesController().syncLocalFavoritesFilter(true);
+                BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
+                    nowFav ? R.drawable.msg_fave : R.drawable.msg_unfave,
+                    nowFav ? "Añadido a Favoritos" : "Eliminado de Favoritos"
+                ).show();
+                finishPreviewFragment();
+            });
+            previewMenu[0].addView(favSubItem);
+            addedQuickFavorite = true;
+        }
+
+        boolean addedHideChat = false;
+        if (!isCommunityCell && folderId == 0 && communityId == 0) {
+            final boolean isHidden = org.telegram.messenger.KronoConfig.isDialogHiddenDirectly(currentAccount, dialogId);
+            ActionBarMenuSubItem hideSubItem = new ActionBarMenuSubItem(getParentActivity(), !hasFolders && !addedQuickFavorite, false);
+            hideSubItem.setTextAndIcon(isHidden ? "Mostrar chat" : "Ocultar chat", isHidden ? R.drawable.msg_archive_show : R.drawable.msg_archive_hide);
+            hideSubItem.setMinimumWidth(160);
+            hideSubItem.setOnClickListener(e -> {
+                finishPreviewFragment();
+                if (isHidden) {
+                    org.telegram.messenger.KronoConfig.setDialogHidden(currentAccount, dialogId, false);
+                    getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
+                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.drawable.msg_archive_show, "Chat restaurado a la lista principal").show();
+                } else {
+                    KronoHiddenLockHelper.ensureProtectionConfigured(DialogsActivity.this, () -> {
+                        org.telegram.messenger.KronoConfig.setDialogHidden(currentAccount, dialogId, true);
+                        getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
+                        BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
+                                R.drawable.msg_archive_hide,
+                                "Chat ocultado. Mantén pulsado el título «KronoGram» para abrir la bóveda"
+                        ).show();
+                    });
+                }
+            });
+            previewMenu[0].addView(hideSubItem);
+            addedHideChat = true;
+        }
+
         if (!isCommunityCell) {
-            ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), !hasFolders, false);
+            ActionBarMenuSubItem markAsUnreadItem = new ActionBarMenuSubItem(getParentActivity(), !hasFolders && !addedQuickFavorite && !addedHideChat, false);
             if (cell.getHasUnread()) {
                 markAsUnreadItem.setTextAndIcon(LocaleController.getString(R.string.MarkAsRead), R.drawable.msg_markread);
             } else {
@@ -8642,7 +8934,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     maxPinnedCount = getMessagesController().maxPinnedDialogsCountDefault;
                 }
             }
-            hasPinAction[0] = !(newPinnedSecretCount + pinnedSecretCount > maxPinnedCount || newPinnedCount + pinnedCount - alreadyAdded > maxPinnedCount);
+            hasPinAction[0] = org.telegram.messenger.KronoConfig.unlimitedPinnedChats || !(newPinnedSecretCount + pinnedSecretCount > maxPinnedCount || newPinnedCount + pinnedCount - alreadyAdded > maxPinnedCount);
         }
 
         if (hasPinAction[0]) {
@@ -9076,7 +9368,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (filter != null) {
             return filter.pinnedDialogs.indexOfKey(dialog.id) >= 0;
         }
-        return dialog.pinned;
+        return dialog.pinned || org.telegram.messenger.KronoConfig.isLocallyPinned(dialog.id);
     }
 
     private void performSelectedDialogsAction(ArrayList<Long> selectedDialogs, int action, boolean alert, boolean longPress) {
@@ -9174,7 +9466,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             } else {
                 maxPinnedCount = getUserConfig().isPremium() ? getMessagesController().dialogFiltersPinnedLimitPremium : getMessagesController().dialogFiltersPinnedLimitDefault;
             }
-            if (newPinnedSecretCount + pinnedSecretCount > maxPinnedCount || newPinnedCount + pinnedCount - alreadyAdded > maxPinnedCount) {
+            if (!org.telegram.messenger.KronoConfig.unlimitedPinnedChats && (newPinnedSecretCount + pinnedSecretCount > maxPinnedCount || newPinnedCount + pinnedCount - alreadyAdded > maxPinnedCount)) {
                 if (folderId != 0 || filter != null) {
                     AlertsCreator.showSimpleAlert(DialogsActivity.this, LocaleController.formatString("PinFolderLimitReached", R.string.PinFolderLimitReached, LocaleController.formatPluralString("Chats", maxPinnedCount)));
                 } else {
@@ -9879,10 +10171,34 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         }
         if (addToFolderItem != null) {
-            if (folderId == 1 || filterTabsView != null && getFilterTabsVisibilityFactor(false) > 0.5f && filterTabsView.currentTabIsDefault() && !FiltersListBottomSheet.getCanAddDialogFilters(this, selectedDialogs).isEmpty()) {
+            boolean hasAnyCustomFolders = getMessagesController().dialogFilters != null && getMessagesController().dialogFilters.size() > 1;
+            if (folderId == 1 || (hasAnyCustomFolders && !FiltersListBottomSheet.getCanAddDialogFilters(this, selectedDialogs).isEmpty()) || (hasAnyCustomFolders && selectedDialogs.size() > 0)) {
                 addToFolderItem.setVisibility(View.VISIBLE);
             } else {
                 addToFolderItem.setVisibility(View.GONE);
+            }
+        }
+        if (favoriteItem != null) {
+            if (folderId == 0 && communityId == 0 && org.telegram.messenger.KronoConfig.showFavoritesFolder && !selectedDialogs.isEmpty()) {
+                boolean allFavorites = true;
+                for (int a = 0; a < selectedDialogs.size(); a++) {
+                    if (!org.telegram.messenger.KronoConfig.isFavoriteDialog(selectedDialogs.get(a))) {
+                        allFavorites = false;
+                        break;
+                    }
+                }
+                favoriteItem.setTextAndIcon(allFavorites ? "Quitar de Favoritos" : "Añadir a Favoritos", allFavorites ? R.drawable.msg_unfave : R.drawable.msg_fave);
+                favoriteItem.setVisibility(View.VISIBLE);
+            } else {
+                favoriteItem.setVisibility(View.GONE);
+            }
+        }
+        if (hideChatItem != null) {
+            if (folderId == 0 && communityId == 0 && !selectedDialogs.isEmpty()) {
+                hideChatItem.setTextAndIcon(selectedDialogs.size() == 1 ? "Ocultar chat" : "Ocultar chats", R.drawable.msg_archive_hide);
+                hideChatItem.setVisibility(View.VISIBLE);
+            } else {
+                hideChatItem.setVisibility(View.GONE);
             }
         }
         if (muteItem != null) {
@@ -10310,14 +10626,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             permissons.add(Manifest.permission.GET_ACCOUNTS);
         }
         if (Build.VERSION.SDK_INT >= 33) {
-            if (activity.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                permissons.add(Manifest.permission.READ_MEDIA_IMAGES);
-            }
-            if (activity.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
-                permissons.add(Manifest.permission.READ_MEDIA_VIDEO);
-            }
-            if (activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissons.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            if (!MessagesController.getGlobalNotificationsSettings().getBoolean("askedAboutMediaPermissions", false)) {
+                MessagesController.getGlobalNotificationsSettings().edit().putBoolean("askedAboutMediaPermissions", true).commit();
+                if (activity.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                    permissons.add(Manifest.permission.READ_MEDIA_IMAGES);
+                }
+                if (activity.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
+                    permissons.add(Manifest.permission.READ_MEDIA_VIDEO);
+                }
             }
         } else if ((Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE) && activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             permissons.add(Manifest.permission.READ_EXTERNAL_STORAGE);
@@ -10673,6 +10989,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         } else if (id == NotificationCenter.dialogFiltersUpdated) {
             updateFilterTabs(true, true);
+            updateFilterTabsAppearance();
         } else if (id == NotificationCenter.filterSettingsUpdated) {
             showFiltersHint();
         } else if (id == NotificationCenter.newSuggestionsAvailable) {
@@ -10931,7 +11248,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         MessagesController messagesController = AccountInstance.getInstance(currentAccount).getMessagesController();
         if (dialogsType == DIALOGS_TYPE_DEFAULT) {
-            return messagesController.getDialogs(folderId);
+            return filterHiddenDialogs(currentAccount, messagesController.getDialogs(folderId));
         } else if (dialogsType == DIALOGS_TYPE_WIDGET || dialogsType == DIALOGS_TYPE_IMPORT_HISTORY) {
             return messagesController.dialogsServerOnly;
         } else if (dialogsType == DIALOGS_TYPE_ADD_USERS_TO) {
@@ -10961,22 +11278,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             return dialogs;
         } else if (dialogsType == DIALOGS_TYPE_FORWARD) {
-            return messagesController.dialogsForward;
+            return filterHiddenDialogs(currentAccount, messagesController.dialogsForward);
         } else if (dialogsType == DIALOGS_TYPE_USERS_ONLY || dialogsType == DIALOGS_TYPE_IMPORT_HISTORY_USERS) {
-            return messagesController.dialogsUsersOnly;
+            return filterHiddenDialogs(currentAccount, messagesController.dialogsUsersOnly);
         } else if (dialogsType == DIALOGS_TYPE_CHANNELS_ONLY) {
-            return messagesController.dialogsChannelsOnly;
+            return filterHiddenDialogs(currentAccount, messagesController.dialogsChannelsOnly);
         } else if (dialogsType == DIALOGS_TYPE_GROUPS_ONLY || dialogsType == DIALOGS_TYPE_IMPORT_HISTORY_GROUPS) {
-            return messagesController.dialogsGroupsOnly;
+            return filterHiddenDialogs(currentAccount, messagesController.dialogsGroupsOnly);
         } else if (dialogsType == 7 || dialogsType == 8) {
             MessagesController.DialogFilter dialogFilter = messagesController.selectedDialogFilter[dialogsType == 7 ? 0 : 1];
             if (dialogFilter == null) {
-                return messagesController.getDialogs(folderId);
+                return filterHiddenDialogs(currentAccount, messagesController.getDialogs(folderId));
             } else {
                 if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
-                    return dialogFilter.dialogsForward;
+                    return filterHiddenDialogs(currentAccount, dialogFilter.dialogsForward);
                 }
-                return dialogFilter.dialogs;
+                return filterHiddenDialogs(currentAccount, dialogFilter.dialogs);
             }
         } else if (dialogsType == DIALOGS_TYPE_BLOCK) {
             return messagesController.dialogsForBlock;
@@ -11066,6 +11383,28 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             return dialogs;
         }
         return new ArrayList<>();
+    }
+
+    private ArrayList<TLRPC.Dialog> filterHiddenDialogs(int currentAccount, ArrayList<TLRPC.Dialog> source) {
+        if (source == null || source.isEmpty() || !org.telegram.messenger.KronoConfig.hasAnyHiddenItems(currentAccount)) {
+            return source;
+        }
+        ArrayList<TLRPC.Dialog> filtered = null;
+        for (int i = 0, N = source.size(); i < N; i++) {
+            TLRPC.Dialog dialog = source.get(i);
+            if (dialog != null && !(dialog instanceof TLRPC.TL_dialogFolder)
+                    && org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, dialog.id)) {
+                if (filtered == null) {
+                    filtered = new ArrayList<>(N);
+                    for (int j = 0; j < i; j++) {
+                        filtered.add(source.get(j));
+                    }
+                }
+            } else if (filtered != null) {
+                filtered.add(dialog);
+            }
+        }
+        return filtered != null ? filtered : source;
     }
 
     private boolean meetRequestPeerRequirements(TLRPC.User user) {
@@ -13279,6 +13618,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         final boolean isActionBarTouch = ev.getY() < actionBar.getMeasuredHeight();
         if (isActionBarTouch) {
             return true;
+        }
+
+        if (org.telegram.messenger.KronoConfig.infiniteFolderScroll
+                && !org.telegram.messenger.KronoConfig.disableTabsSwipe
+                && filterTabsView != null && filterTabsView.getTabsCount() >= 2) {
+            return false;
         }
 
         final boolean isFirstTab = filterTabsView == null || filterTabsView.getTabsCount() < 2 || filterTabsView.getCurrentTabId() == filterTabsView.getFirstTabId();

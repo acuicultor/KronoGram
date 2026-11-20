@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <memory.h>
 #include <openssl/rand.h>
+#include <openssl/sha.h>
 #include <zlib.h>
 #include <memory>
 #include <string>
@@ -44,7 +45,6 @@ jmethodID jclass_ByteBuffer_allocateDirect = nullptr;
 #endif
 
 static bool done = false;
-static constexpr int32_t MAX_CAPTCHA_CHECKS = 5;
 
 ConnectionsManager::ConnectionsManager(int32_t instance) {
     instanceNum = instance;
@@ -152,9 +152,18 @@ ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
             static ConnectionsManager instance3(3);
             return instance3;
         case 4:
-        default:
             static ConnectionsManager instance4(4);
             return instance4;
+        case 5:
+            static ConnectionsManager instance5(5);
+            return instance5;
+        case 6:
+            static ConnectionsManager instance6(6);
+            return instance6;
+        case 7:
+        default:
+            static ConnectionsManager instance7(7);
+            return instance7;
     }
 }
 
@@ -698,7 +707,7 @@ void ConnectionsManager::onConnectionClosed(Connection *connection, int reason) 
     if (connection->getConnectionType() == ConnectionTypeGeneric) {
         if (datacenter->getDatacenterId() == currentDatacenterId) {
             sendingPing = false;
-            if (!connection->isSuspended() && (proxyAddress.empty() || connection->hasTlsHashMismatch())) {
+            if (networkAvailable && !networkPaused && !connection->isSuspended() && (proxyAddress.empty() || connection->hasTlsHashMismatch())) {
                 if (reason == 2) {
                     disconnectTimeoutAmount += connection->getTimeout();
                 } else {
@@ -792,6 +801,10 @@ void ConnectionsManager::onConnectionClosed(Connection *connection, int reason) 
 void ConnectionsManager::onConnectionConnected(Connection *connection) {
     Datacenter *datacenter = connection->getDatacenter();
     ConnectionType connectionType = connection->getConnectionType();
+    if (disconnectTimeoutAmount > 0 && connection->getConnectionType() == ConnectionTypeGeneric && datacenter->getDatacenterId() == currentDatacenterId) {
+        if (LOGS_ENABLED) DEBUG_D("reset disconnect timeout");
+        disconnectTimeoutAmount = 0;
+    }
     if ((connectionType == ConnectionTypeGeneric || connectionType == ConnectionTypeGenericMedia) && datacenter->isHandshakingAny()) {
         datacenter->onHandshakeConnectionConnected(connection);
         return;
@@ -1048,17 +1061,6 @@ TLObject *ConnectionsManager::getRequestWithMessageId(int64_t messageId) {
 }
 
 TLObject *ConnectionsManager::TLdeserialize(TLObject *request, uint32_t bytes, NativeByteBuffer *data) {
-    if (deserializeDepth >= MAX_DESERIALIZE_DEPTH) {
-        if (LOGS_ENABLED) DEBUG_E("too deep nesting in deserialize");
-        return nullptr;
-    }
-    deserializeDepth++;
-    TLObject *object = TLdeserializeInternal(request, bytes, data);
-    deserializeDepth--;
-    return object;
-}
-
-TLObject *ConnectionsManager::TLdeserializeInternal(TLObject *request, uint32_t bytes, NativeByteBuffer *data) {
     bool error = false;
     uint32_t position = data->position();
     uint32_t constructor = data->readUint32(&error);
@@ -1080,10 +1082,6 @@ TLObject *ConnectionsManager::TLdeserializeInternal(TLObject *request, uint32_t 
             auto apiRequest = dynamic_cast<TL_api_request *>(request);
             if (apiRequest != nullptr) {
                 object = apiRequest->deserializeResponse(data, bytes, instanceNum, error);
-                if (object != nullptr && error) {
-                    delete object;
-                    object = nullptr;
-                }
                 if (LOGS_ENABLED) DEBUG_D("api request constructor 0x%x, don't parse", constructor);
             } else {
                 object = request->deserializeResponse(data, constructor, instanceNum, error);
@@ -1354,7 +1352,7 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
                             if (delegate != nullptr) {
                                 delegate->onIntegrityCheckClassic(instanceNum, request->requestToken, project, nonce);
                             }
-                        } else if (error->error_code == 403 && error->error_message.find(captchaCheck) != std::string::npos && request->captchaCheckGeneration < MAX_CAPTCHA_CHECKS && delegate != nullptr) {
+                        } else if (error->error_code == 403 && error->error_message.find(captchaCheck) != std::string::npos) {
                             discardResponse = true;
                             std::string err = error->error_message;
                             int index = err.find('_', captchaCheck.size());
@@ -1362,11 +1360,10 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
                             std::string key_id = err.substr(captchaCheck.size() + action.size() + 2, err.size() - (captchaCheck.size() + action.size() + 1));
                             request->awaitingIntegrityCheck = false;
                             request->awaitingCaptchaCheck = true;
-                            request->captchaCheckGeneration++;
                             request->startTime = 0;
                             request->startTimeMillis = 0;
                             if (delegate != nullptr) {
-                                delegate->onCaptchaCheck(instanceNum, request->requestToken, request->captchaCheckGeneration, action, key_id);
+                                delegate->onCaptchaCheck(instanceNum, request->requestToken, action, key_id);
                             }
                         } else {
                             bool failServerErrors = (request->requestFlags & RequestFlagFailOnServerErrors) == 0 || processEvenFailed;
@@ -2255,57 +2252,34 @@ void ConnectionsManager::receivedIntegrityCheckClassic(int32_t requestToken, std
     });
 }
 
-// Remove previous captcha tokens, including those inside other owned RPC wrappers.
-// Drop cached compression when inspecting its original request: its bytes contain old tokens.
-static void removeCaptchaWrappers(std::unique_ptr<TLObject> &rpcRequest) {
-    auto *query = &rpcRequest;
-    while (*query != nullptr) {
-        if (auto captcha = dynamic_cast<invokeWithReCaptcha *>(query->get())) {
-            auto inner = std::move(captcha->query);
-            *query = std::move(inner);
-        } else if (auto packed = dynamic_cast<TL_gzip_packed *>(query->get())) {
-            if (packed->originalRequest == nullptr) {
-                break;
+void ConnectionsManager::receivedCaptchaResult(int32_t requestTokensCount, int32_t* requestTokens, std::string token) {
+    scheduleTask([&, requestTokensCount, requestTokens, token] {
+        for (int i = 0; i < requestTokensCount; ++i) {
+            auto requestToken = requestTokens[i];
+            for (auto iter = runningRequests.begin(); iter != runningRequests.end(); iter++) {
+                Request *request = iter->get();
+                if (requestToken != 0 && request->requestToken == requestToken) {
+                    auto invoke = new invokeWithReCaptcha();
+                    invoke->token = token;
+                    invoke->query = std::move(request->rpcRequest);
+                    request->rpcRequest = std::unique_ptr<invokeWithReCaptcha>(invoke);
+                    request->serializedLength = request->rpcRequest->getObjectSize();
+
+                    request->awaitingCaptchaCheck = false;
+                    request->requestFlags &=~ RequestFlagFailOnServerErrors;
+
+                    if (LOGS_ENABLED) DEBUG_D("account%d: received captcha result token, wrapping %s", instanceNum, token.c_str());
+
+                    processRequestQueue(request->connectionType, request->datacenterId);
+
+                    return;
+                }
             }
-            auto inner = std::move(packed->originalRequest);
-            *query = std::move(inner);
-        } else if (auto integrity = dynamic_cast<invokeWithGooglePlayIntegrity *>(query->get())) {
-            query = &integrity->query;
-        } else if (auto layer = dynamic_cast<invokeWithLayer *>(query->get())) {
-            query = &layer->query;
-        } else if (auto init = dynamic_cast<initConnection *>(query->get())) {
-            query = &init->query;
-        } else {
-            break;
+
+            if (LOGS_ENABLED) DEBUG_E("account%d: received captcha result token but no request %d found", instanceNum, requestToken);
         }
-    }
-}
 
-void ConnectionsManager::receivedCaptchaResult(int32_t requestToken, int32_t generation, std::string token) {
-    scheduleTask([this, requestToken, generation, token] {
-        for (auto &runningRequest : runningRequests) {
-            Request *request = runningRequest.get();
-            if (requestToken == 0 || request->requestToken != requestToken) {
-                continue;
-            }
-            if (request->cancelled || request->completed || !request->awaitingCaptchaCheck ||
-                    request->captchaCheckGeneration != generation) {
-                return;
-            }
-
-            removeCaptchaWrappers(request->rpcRequest);
-            auto invoke = new invokeWithReCaptcha();
-            invoke->token = token;
-            invoke->query = std::move(request->rpcRequest);
-            request->rpcRequest = std::unique_ptr<invokeWithReCaptcha>(invoke);
-            request->serializedLength = request->rpcRequest->getObjectSize();
-            request->awaitingCaptchaCheck = false;
-            request->requestFlags &= ~RequestFlagFailOnServerErrors;
-
-            if (LOGS_ENABLED) DEBUG_D("account%d: received captcha result for request %d, generation %d", instanceNum, requestToken, generation);
-            processRequestQueue(request->connectionType, request->datacenterId);
-            return;
-        }
+        delete[] requestTokens;
     });
 }
 
@@ -3985,12 +3959,12 @@ void ConnectionsManager::checkProxyInternal(ProxyCheckInfo *proxyCheckInfo) {
         Datacenter *datacenter = getDatacenterWithId(DEFAULT_DATACENTER_ID);
         Connection *connection = datacenter->getProxyConnection((uint8_t) freeConnectionNum, true, false);
         if (connection != nullptr) {
-            connection->setOverrideProxy(proxyCheckInfo->address, proxyCheckInfo->port, proxyCheckInfo->username, proxyCheckInfo->password, proxyCheckInfo->secret);
+            if (proxyCheckInfo->address != "ping.neko") connection->setOverrideProxy(proxyCheckInfo->address, proxyCheckInfo->port, proxyCheckInfo->username, proxyCheckInfo->password, proxyCheckInfo->secret);
             connection->suspendConnection();
             proxyCheckInfo->connectionNum = freeConnectionNum;
             auto request = new TL_ping();
             request->ping_id = proxyCheckInfo->pingId;
-            proxyCheckInfo->requestToken = sendRequest(request, nullptr, nullptr, nullptr, RequestFlagEnableUnauthorized | RequestFlagWithoutLogin, DEFAULT_DATACENTER_ID, connectionType, true, 0);
+            proxyCheckInfo->requestToken = sendRequest(request, nullptr, nullptr, nullptr, RequestFlagEnableUnauthorized | RequestFlagWithoutLogin, proxyCheckInfo->address != "ping.neko" ? DEFAULT_DATACENTER_ID : proxyCheckInfo->port, connectionType, true, 0);
             proxyActiveChecks.push_back(std::unique_ptr<ProxyCheckInfo>(proxyCheckInfo));
         } else if (PFS_ENABLED) {
             if (datacenter->isHandshaking(false)) {
@@ -3999,6 +3973,56 @@ void ConnectionsManager::checkProxyInternal(ProxyCheckInfo *proxyCheckInfo) {
             proxyCheckQueue.push_back(std::unique_ptr<ProxyCheckInfo>(proxyCheckInfo));
         }
     }
+}
+
+void ConnectionsManager::importAuthKey(uint32_t dcId, const uint8_t *keyBytes) {
+    scheduleTask([this, dcId, keyBytes]() {
+        Datacenter *datacenter = getDatacenterWithId(dcId);
+        if (datacenter == nullptr) {
+            DEBUG_E("datacenter %u not found", dcId);
+            return;
+        }
+
+        uint8_t sha1Buffer[SHA_DIGEST_LENGTH];
+        SHA1(keyBytes, 256, sha1Buffer);
+        int64_t newAuthKeyId = *(int64_t *)(sha1Buffer + 12);
+
+        if (datacenter->authKeyPerm != nullptr) {
+            delete datacenter->authKeyPerm;
+            datacenter->authKeyPerm = nullptr;
+        }
+
+        datacenter->authKeyPerm = new ByteArray((uint8_t *) keyBytes, 256);
+        datacenter->authKeyPermId = newAuthKeyId;
+
+        if (datacenter->authKeyTemp != nullptr) {
+            delete datacenter->authKeyTemp;
+            datacenter->authKeyTemp = nullptr;
+            datacenter->authKeyTempId = 0;
+        }
+
+        currentDatacenterId = dcId;
+        movingToDatacenterId = DEFAULT_DATACENTER_ID;
+
+        datacenter->recreateSessions(HandshakeTypeAll);
+
+        saveConfig();
+
+        DEBUG_D("successfully imported authKey for DC %u (authKeyId=%lld)", dcId, (long long)newAuthKeyId);
+    });
+}
+
+ByteArray *ConnectionsManager::exportAuthKey(uint32_t dcId) {
+    if (dcId == 0) {
+        dcId = currentDatacenterId;
+    }
+
+    Datacenter *datacenter = getDatacenterWithId(dcId);
+    if (datacenter == nullptr || datacenter->authKeyPerm == nullptr) {
+        return nullptr;
+    }
+
+    return new ByteArray(datacenter->authKeyPerm);
 }
 
 #ifdef ANDROID

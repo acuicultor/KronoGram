@@ -484,8 +484,16 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         if (filters == null || filters.size() <= 1) return false;
 
         final ItemOptions o = ItemOptions.makeOptions(this, anchor);
+        int visibleCount = 0;
         for (int i = 0; i < filters.size(); i++) {
             final MessagesController.DialogFilter folder = filters.get(i);
+            if (folder.isDefault() && org.telegram.messenger.KronoConfig.hideAllChatsTab && filters.size() > 1) {
+                continue;
+            }
+            if (!folder.isDefault() && org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, folder.id)) {
+                continue;
+            }
+            visibleCount++;
             final ActionBarMenuSubItem folderItem = new ActionBarMenuSubItem(getParentActivity(), 2, false, false, getResourceProvider());
             folderItem.setPadding(dp(18), 0, dp(18), 0);
             CharSequence title = folder.isDefault() ? getString(R.string.FilterAllChats) : folder.name;
@@ -525,6 +533,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 openFolder(folder.id);
             });
             o.addView(folderItem, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+        if (visibleCount <= 1) {
+            return false;
         }
 //        o.setBlur(true);
         o.translate(-dp(8), -dp(4));

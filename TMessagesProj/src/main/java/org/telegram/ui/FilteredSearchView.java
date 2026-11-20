@@ -17,6 +17,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Bundle;
 import android.text.SpannableStringBuilder;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -37,10 +38,12 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.ChatObject;
+import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageReceiver;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
@@ -48,6 +51,7 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.browser.Browser;
@@ -72,18 +76,22 @@ import org.telegram.ui.Cells.SharedDocumentCell;
 import org.telegram.ui.Cells.SharedLinkCell;
 import org.telegram.ui.Cells.SharedMediaSectionCell;
 import org.telegram.ui.Cells.SharedPhotoVideoCell;
+import org.telegram.ui.ChatActivity;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.AnimatedTextView;
 import org.telegram.ui.Components.BackupImageView;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.ColoredImageSpan;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.EmbedBottomSheet;
 import org.telegram.ui.Components.FlickerLoadingView;
 import org.telegram.ui.Components.Forum.ForumUtilities;
+import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 import org.telegram.ui.Components.SearchViewPager;
 import org.telegram.ui.Components.StickerEmptyView;
+import org.telegram.ui.Components.UndoView;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.capture.IBlur3Capture;
 import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
@@ -288,13 +296,15 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
     private final Runnable hideFloatingDateRunnable = () -> hideFloatingDateView();
 
     private UiCallback uiCallback;
+    private final Theme.ResourcesProvider resourcesProvider;
 
     public FilteredSearchView(@NonNull BaseFragment fragment) {
         super(fragment.getParentActivity());
         parentFragment = fragment;
+        resourcesProvider = fragment.getResourceProvider();
         Context context = parentActivity = fragment.getParentActivity();
-        ThemeBind.backgroundColor(this, Theme.key_windowBackgroundWhite);
-        recyclerListView = new RecyclerListView(context) {
+        ThemeBind.backgroundColor(this, Theme.key_windowBackgroundWhite, resourcesProvider);
+        recyclerListView = new RecyclerListView(context, resourcesProvider) {
 
             @Override
             protected void dispatchDraw(Canvas canvas) {
@@ -371,7 +381,7 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
 
         layoutManager = new LinearLayoutManager(context);
         recyclerListView.setLayoutManager(layoutManager);
-        addView(loadingView = new FlickerLoadingView(context) {
+        addView(loadingView = new FlickerLoadingView(context, resourcesProvider) {
             @Override
             public int getColumnsCount() {
                 return columnsCount;
@@ -451,7 +461,7 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
         sharedAudioAdapter = new SharedDocumentsAdapter(getContext(), 4);
         sharedVoiceAdapter = new SharedDocumentsAdapter(getContext(), 2);
 
-        emptyView = new StickerEmptyView(context, loadingView, StickerEmptyView.STICKER_TYPE_SEARCH);
+        emptyView = new StickerEmptyView(context, loadingView, StickerEmptyView.STICKER_TYPE_SEARCH, resourcesProvider);
         addView(emptyView);
         recyclerListView.setEmptyView(emptyView);
         emptyView.setVisibility(View.GONE);
@@ -462,7 +472,7 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
 
     public void setBlurredBackgroundDrawableFactory(BlurredBackgroundDrawableViewFactory factory) {
         blurredBackgroundDrawableFactory = factory;
-        floatingDateView.setBlurredBackgroundDrawable(factory.create(floatingDateView, BlurredBackgroundProviderImpl.searchFloatingDate(null)));
+        floatingDateView.setBlurredBackgroundDrawable(factory.create(floatingDateView, BlurredBackgroundProviderImpl.searchFloatingDate(resourcesProvider)));
     }
 
     public static CharSequence createFromInfoString(MessageObject messageObject, int arrowType) {
@@ -1040,12 +1050,12 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
                     });
                     break;
                 case 2:
-                    view = new GraySectionCell(mContext);
-                    view.setBackgroundColor(Theme.getColor(Theme.key_graySection) & 0xf2ffffff);
+                    view = new GraySectionCell(mContext, resourcesProvider);
+                    view.setBackgroundColor(Theme.multAlpha(Theme.getColor(Theme.key_graySection, resourcesProvider), 0.95f));
                     break;
                 case 1:
                 default:
-                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(mContext) {
+                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(mContext, resourcesProvider) {
                         @Override
                         public int getColumnsCount() {
                             return columnsCount;
@@ -1277,8 +1287,8 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
         @Override
         public View getSectionHeaderView(int section, View view) {
             if (view == null) {
-                view = new GraySectionCell(mContext);
-                view.setBackgroundColor(Theme.getColor(Theme.key_graySection) & 0xf2ffffff);
+                view = new GraySectionCell(mContext, resourcesProvider);
+                view.setBackgroundColor(Theme.multAlpha(Theme.getColor(Theme.key_graySection, resourcesProvider), 0.95f));
             }
             if (section == 0) {
                 view.setAlpha(0f);
@@ -1300,15 +1310,15 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
             View view;
             switch (viewType) {
                 case 0:
-                    view = new GraySectionCell(mContext);
+                    view = new GraySectionCell(mContext, resourcesProvider);
                     break;
                 case 1:
-                    view = new SharedLinkCell(mContext, SharedLinkCell.VIEW_TYPE_GLOBAL_SEARCH);
+                    view = new SharedLinkCell(mContext, SharedLinkCell.VIEW_TYPE_GLOBAL_SEARCH, resourcesProvider);
                     ((SharedLinkCell) view).setDelegate(sharedLinkCellDelegate);
                     break;
                 case 2:
                 default:
-                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(mContext);
+                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(mContext, resourcesProvider);
                     flickerLoadingView.setViewType(FlickerLoadingView.LINKS_TYPE);
                     flickerLoadingView.setIsSingleCell(true);
                     view = flickerLoadingView;
@@ -1337,6 +1347,11 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
                         MessageObject messageObject = messageObjects.get(position);
                         boolean animated = sharedLinkCell.getMessage() != null && sharedLinkCell.getMessage().getId() == messageObject.getId();
                         sharedLinkCell.setLink(messageObject, position != messageObjects.size() - 1 || section == sections.size() - 1 && isLoading);
+                        if (KronoConfig.quickGoToMessageInSearch && !uiCallback.actionModeShowing() && !DialogObject.isEncryptedDialog(messageObject.getDialogId())) {
+                            sharedLinkCell.setGoToMessageClickListener(v -> uiCallback.goToMessage(messageObject));
+                        } else {
+                            sharedLinkCell.setGoToMessageClickListener(null);
+                        }
                         sharedLinkCell.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
                             @Override
                             public boolean onPreDraw() {
@@ -1418,8 +1433,8 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
         @Override
         public View getSectionHeaderView(int section, View view) {
             if (view == null) {
-                view = new GraySectionCell(mContext);
-                view.setBackgroundColor(Theme.getColor(Theme.key_graySection) & 0xf2ffffff);
+                view = new GraySectionCell(mContext, resourcesProvider);
+                view.setBackgroundColor(Theme.multAlpha(Theme.getColor(Theme.key_graySection, resourcesProvider), 0.95f));
             }
             if (section == 0) {
                 view.setAlpha(0f);
@@ -1442,13 +1457,13 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
             View view;
             switch (viewType) {
                 case 0:
-                    view = new GraySectionCell(mContext);
+                    view = new GraySectionCell(mContext, resourcesProvider);
                     break;
                 case 1:
-                    view = new SharedDocumentCell(mContext, SharedDocumentCell.VIEW_TYPE_GLOBAL_SEARCH);
+                    view = new SharedDocumentCell(mContext, SharedDocumentCell.VIEW_TYPE_GLOBAL_SEARCH, resourcesProvider);
                     break;
                 case 2:
-                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(mContext);
+                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(mContext, resourcesProvider);
                     if (currentType == 2 || currentType == 4) {
                         flickerLoadingView.setViewType(FlickerLoadingView.AUDIO_TYPE);
                     } else {
@@ -1459,7 +1474,7 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
                     break;
                 case 3:
                 default:
-                    view = new SharedAudioCell(mContext, SharedAudioCell.VIEW_TYPE_GLOBAL_SEARCH, null) {
+                    view = new SharedAudioCell(mContext, SharedAudioCell.VIEW_TYPE_GLOBAL_SEARCH, resourcesProvider) {
                         @Override
                         public boolean needPlayMessage(MessageObject messageObject) {
                             if (messageObject.isVoice() || messageObject.isRoundVideo()) {
@@ -1503,6 +1518,11 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
                         MessageObject messageObject = messageObjects.get(position);
                         boolean animated = sharedDocumentCell.getMessage() != null && sharedDocumentCell.getMessage().getId() == messageObject.getId();
                         sharedDocumentCell.setDocument(messageObject, position != messageObjects.size() - 1 || section == sections.size() - 1 && isLoading);
+                        if (KronoConfig.quickGoToMessageInSearch && !uiCallback.actionModeShowing() && !DialogObject.isEncryptedDialog(messageObject.getDialogId())) {
+                            sharedDocumentCell.setGoToMessageClickListener(v -> uiCallback.goToMessage(messageObject));
+                        } else {
+                            sharedDocumentCell.setGoToMessageClickListener(null);
+                        }
                         sharedDocumentCell.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
                             @Override
                             public boolean onPreDraw() {
@@ -1526,6 +1546,11 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
                         MessageObject messageObject = messageObjects.get(position);
                         boolean animated = sharedAudioCell.getMessage() != null && sharedAudioCell.getMessage().getId() == messageObject.getId();
                         sharedAudioCell.setMessageObject(messageObject, position != messageObjects.size() - 1 || section == sections.size() - 1 && isLoading);
+                        if (KronoConfig.quickGoToMessageInSearch && !uiCallback.actionModeShowing() && !DialogObject.isEncryptedDialog(messageObject.getDialogId())) {
+                            sharedAudioCell.setGoToMessageClickListener(v -> uiCallback.goToMessage(messageObject));
+                        } else {
+                            sharedAudioCell.setGoToMessageClickListener(null);
+                        }
                         sharedAudioCell.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
                             @Override
                             public boolean onPreDraw() {
@@ -1612,7 +1637,99 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
         }
     }
 
+    private boolean isMessageNoForwards(MessageObject messageObject) {
+        if (messageObject == null) {
+            return true;
+        }
+        if (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass()) {
+            return false;
+        }
+        if (messageObject.messageOwner != null && messageObject.messageOwner.noforwards) {
+            return true;
+        }
+        long did = messageObject.getDialogId();
+        if (DialogObject.isChatDialog(did)) {
+            TLRPC.Chat chat = AccountInstance.getInstance(UserConfig.selectedAccount).getMessagesController().getChat(-did);
+            if (AccountInstance.getInstance(UserConfig.selectedAccount).getMessagesController().isChatNoForwards(chat)) {
+                return true;
+            }
+        } else if (DialogObject.isUserDialog(did)) {
+            TLRPC.UserFull userFull = AccountInstance.getInstance(UserConfig.selectedAccount).getMessagesController().getUserFull(did);
+            if (userFull != null && AccountInstance.getInstance(UserConfig.selectedAccount).getMessagesController().isUserNoForwards(userFull)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void forwardSingleMessage(MessageObject item) {
+        if (parentFragment == null || item == null) {
+            return;
+        }
+        Bundle args = new Bundle();
+        args.putBoolean("onlySelect", true);
+        args.putBoolean("canSelectTopics", true);
+        args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
+        DialogsActivity fragment = new DialogsActivity(args);
+        fragment.setDelegate((fragment1, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
+            ArrayList<MessageObject> fmessages = new ArrayList<>(1);
+            fmessages.add(item);
+            if (dids.size() > 1 || dids.get(0).dialogId == parentFragment.getUserConfig().getClientUserId() || message != null) {
+                for (int a = 0; a < dids.size(); a++) {
+                    long did = dids.get(a).dialogId;
+                    if (message != null) {
+                        parentFragment.getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of(message.toString(), did, null, null, null, true, null, null, null, true, 0, 0, null, false));
+                    }
+                    parentFragment.getSendMessagesHelper().sendMessage(fmessages, did, false, false, true, 0, 0);
+                }
+                fragment1.finishFragment();
+                BulletinFactory.of(parentFragment).createSimpleBulletin(R.raw.forward, LocaleController.formatPluralString("FwdMessageCount", 1)).show();
+            } else {
+                long did = dids.get(0).dialogId;
+                Bundle args1 = new Bundle();
+                args1.putBoolean("scrollToTopOnResume", true);
+                if (DialogObject.isEncryptedDialog(did)) {
+                    args1.putInt("enc_id", DialogObject.getEncryptedChatId(did));
+                } else {
+                    if (DialogObject.isUserDialog(did)) {
+                        args1.putLong("user_id", did);
+                    } else {
+                        args1.putLong("chat_id", -did);
+                    }
+                    if (!parentFragment.getMessagesController().checkCanOpenChat(args1, fragment1)) {
+                        return true;
+                    }
+                }
+                parentFragment.getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
+                ChatActivity chatActivity = new ChatActivity(args1);
+                ForumUtilities.applyTopic(chatActivity, dids.get(0));
+                fragment1.presentFragment(chatActivity, true);
+                chatActivity.showFieldPanelForForward(true, fmessages);
+            }
+            return true;
+        });
+        parentFragment.presentFragment(fragment);
+    }
+
     private boolean onItemLongClick(MessageObject item, View view, int a) {
+        if (!uiCallback.actionModeShowing() && KronoConfig.longClickMediaShowsMenu && parentFragment != null && item != null) {
+            ItemOptions options = ItemOptions.makeOptions(parentFragment, view);
+            options.add(R.drawable.msg_message, getString(R.string.AccDescrGoToMessage), () -> uiCallback.goToMessage(item));
+            options.add(R.drawable.msg_select, getString(R.string.StoriesAlbumMenuSelect), () -> {
+                if (!uiCallback.actionModeShowing()) {
+                    uiCallback.showActionMode();
+                }
+                if (uiCallback.actionModeShowing()) {
+                    uiCallback.toggleItemSelection(item, view, a);
+                }
+            });
+            if (!DialogObject.isEncryptedDialog(item.getDialogId()) && !isMessageNoForwards(item)) {
+                options.add(R.drawable.msg_forward, getString(R.string.Forward), () -> forwardSingleMessage(item));
+            }
+            options.setScrimViewBackground(Theme.createRoundRectDrawable(dp(8), Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider)));
+            options.show();
+            return true;
+        }
         if (!uiCallback.actionModeShowing()) {
             uiCallback.showActionMode();
         }
@@ -1663,7 +1780,7 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
             View view;
             switch (viewType) {
                 case 0:
-                    view = new DialogCell(null, parent.getContext(), true, true) {
+                    view = new DialogCell(null, parent.getContext(), true, true, UserConfig.selectedAccount, resourcesProvider) {
                         @Override
                         public boolean isForumCell() {
                             return false;
@@ -1671,14 +1788,14 @@ public class FilteredSearchView extends FrameLayout implements Theme.Colorable, 
                     };
                     break;
                 case 3:
-                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(parent.getContext());
+                    FlickerLoadingView flickerLoadingView = new FlickerLoadingView(parent.getContext(), resourcesProvider);
                     flickerLoadingView.setIsSingleCell(true);
                     flickerLoadingView.setViewType(FlickerLoadingView.DIALOG_TYPE);
                     view = flickerLoadingView;
                     break;
                 default:
                 case 2:
-                    GraySectionCell cell = new GraySectionCell(parent.getContext());
+                    GraySectionCell cell = new GraySectionCell(parent.getContext(), resourcesProvider);
                     cell.setText(LocaleController.getString(R.string.SearchMessages));
                     view = cell;
                     break;

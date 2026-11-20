@@ -45,7 +45,9 @@ import androidx.media3.exoplayer.ExoPlayer;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
+import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
@@ -239,7 +241,8 @@ public class SecretVoicePlayer extends Dialog {
             WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR |
             WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS |
             WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION;
-        if (!BuildVars.DEBUG_PRIVATE_VERSION) {
+        final boolean allowSecretBypass = KronoConfig.isAllowRestrictedContentBypass() && messageObject != null && DialogObject.isEncryptedDialog(messageObject.getDialogId());
+        if (!BuildVars.DEBUG_PRIVATE_VERSION && !KronoConfig.viewOnceAllowSaveAndScreenshots && !allowSecretBypass) {
             params.flags |= WindowManager.LayoutParams.FLAG_SECURE;
             AndroidUtilities.logFlagSecure();
         }
@@ -675,7 +678,7 @@ public class SecretVoicePlayer extends Dialog {
         }
         closeButton.setPadding(dp(12), dp(6), dp(12), dp(6));
         ScaleStateListAnimator.apply(closeButton);
-        closeButton.setText(LocaleController.getString(isOut ? R.string.VoiceOnceClose : R.string.VoiceOnceDeleteClose));
+        closeButton.setText(LocaleController.getString(isOut || KronoConfig.unlimitedViewOnce ? R.string.VoiceOnceClose : R.string.VoiceOnceDeleteClose));
         closeButton.setOnClickListener(v -> {
             dismiss();
         });

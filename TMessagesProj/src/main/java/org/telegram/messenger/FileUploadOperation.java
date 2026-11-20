@@ -561,21 +561,22 @@ public class FileUploadOperation {
         final int currentOperationGuid = operationGuid;
 
         int connectionType;
-        if (slowNetwork) {
+        if (slowNetwork || uploadConnectionsCount <= 1) {
             connectionType = ConnectionsManager.ConnectionTypeUpload;
         } else {
             // Like TDLib's SessionMultiProxy: the connection with the fewest parts in flight, so a slow
             // connection gets fewer parts instead of every Nth one holding up the whole upload.
-            int connectionNum = requestNumFinal % uploadConnectionsCount;
-            for (int a = 1; a < uploadConnectionsCount; a++) {
-                int num = (requestNumFinal + a) % uploadConnectionsCount;
+            int activeConnections = Math.min(uploadConnectionsCount, uploadRequestsPerConnection.length);
+            int connectionNum = requestNumFinal % activeConnections;
+            for (int a = 1; a < activeConnections; a++) {
+                int num = (requestNumFinal + a) % activeConnections;
                 if (uploadRequestsPerConnection[num] < uploadRequestsPerConnection[connectionNum]) {
                     connectionNum = num;
                 }
             }
             connectionType = ConnectionsManager.ConnectionTypeUpload | (connectionNum << 16);
         }
-        final int requestConnectionNum = connectionType >> 16;
+        final int requestConnectionNum = Math.max(0, Math.min(uploadRequestsPerConnection.length - 1, connectionType >> 16));
         uploadRequestsPerConnection[requestConnectionNum]++;
         long time = System.currentTimeMillis();
         int[] requestToken = new int[1];

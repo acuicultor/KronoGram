@@ -1904,7 +1904,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                                     .allowCover(false)
                                     .setCount(1)
                                     .isEdit(false)
-                                    .set(storyViewer.livePlayer != null && storyViewer.livePlayer.areMessagesEnabled(), currentStory.allowScreenshots(), currentStory.storyItem != null && currentStory.storyItem.pinned, storyViewer.livePlayer == null ? 0 : (int) storyViewer.livePlayer.getSendPaidMessagesStars());
+                                    .set(storyViewer.livePlayer != null && storyViewer.livePlayer.areMessagesEnabled(), currentStory.storyItem != null ? !currentStory.storyItem.noforwards : currentStory.allowScreenshots(), currentStory.storyItem != null && currentStory.storyItem.pinned, storyViewer.livePlayer == null ? 0 : (int) storyViewer.livePlayer.getSendPaidMessagesStars());
                                 sheet.whenSelectedRules((privacy, allowComments, allowScreenshots, keepInProfile, isRtmpStream, sendAs, pricePerComment, whenDone, cancelled) -> {
                                     if ((currentStory.storyItem != null && currentStory.storyItem.pinned) != keepInProfile) {
                                         MessagesController.getInstance(currentAccount).getStoriesController().updateStoriesPinned(dialogId, storyItems, keepInProfile, null);
@@ -7167,6 +7167,9 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
         public boolean allowScreenshots() {
             if (uploadingStory != null) {
                 return uploadingStory.entry.allowScreenshots;
+            }
+            if (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass()) {
+                return true;
             }
             if (storyItem != null) {
                 if (storyItem.noforwards) {

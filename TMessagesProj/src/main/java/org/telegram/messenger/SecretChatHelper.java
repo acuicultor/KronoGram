@@ -1839,6 +1839,10 @@ public class SecretChatHelper extends BaseController {
     }
 
     public void acceptSecretChat(TLRPC.EncryptedChat encryptedChat) {
+        if (org.telegram.messenger.KronoConfig.blockSecretChats) {
+            declineSecretChat(encryptedChat.id, false);
+            return;
+        }
         if (acceptingChats.get(encryptedChat.id) != null) {
             return;
         }
@@ -1939,7 +1943,7 @@ public class SecretChatHelper extends BaseController {
     }
 
     public void startSecretChat(Context context, TLRPC.User user) {
-        if (user == null || context == null) {
+        if (user == null || context == null || org.telegram.messenger.KronoConfig.blockSecretChats) {
             return;
         }
         if (getMessagesController().isFrozen()) {

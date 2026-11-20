@@ -2,6 +2,8 @@ package org.telegram.messenger;
 
 import static org.telegram.messenger.LocaleController.getString;
 
+import android.content.Context;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Base64;
@@ -30,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 @Keep
 public class PushListenerController {
@@ -44,7 +47,9 @@ public class PushListenerController {
     public @interface PushType {}
 
     public static final int NOTIFICATION_ID = 1;
-    private static CountDownLatch countDownLatch = new CountDownLatch(1);
+    public static volatile long lastPushReceiveTime = 0L;
+    public static volatile String lastPushType = "";
+    public static volatile String lastTokenError = "";
 
     public static void sendRegistrationToServer(@PushType int pushType, String token) {
         Utilities.stageQueue.postRunnable(() -> {
@@ -65,7 +70,7 @@ public class PushListenerController {
                 userConfig.saveConfig(false);
                 if (userConfig.getClientUserId() != 0) {
                     final int currentAccount = a;
-                    if (sendStat) {
+                    if (sendStat && !KronoConfig.isBlockTelegramTelemetry()) {
                         String tag = pushType == PUSH_TYPE_FIREBASE ? "fcm" : "hcm";
                         TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
                         TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();
@@ -95,8 +100,23 @@ public class PushListenerController {
 
     public static void processRemoteMessage(@PushType int pushType, String data, long time) {
         String tag = pushType == PUSH_TYPE_FIREBASE ? "FCM" : "HCM";
+        lastPushReceiveTime = System.currentTimeMillis();
+        lastPushType = tag;
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d(tag + " PRE START PROCESSING");
+        }
+        final CountDownLatch countDownLatch = new CountDownLatch(1);
+        PowerManager.WakeLock wakeLock = null;
+        try {
+            if (ApplicationLoader.applicationContext != null) {
+                PowerManager pm = (PowerManager) ApplicationLoader.applicationContext.getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "kronogram:push_wake");
+                    wakeLock.setReferenceCounted(false);
+                    wakeLock.acquire(30_000L);
+                }
+            }
+        } catch (Throwable ignore) {
         }
         long receiveTime = SystemClock.elapsedRealtime();
         AndroidUtilities.runOnUIThread(() -> {
@@ -114,13 +134,22 @@ public class PushListenerController {
                 int currentAccount = -1;
                 String loc_key = null;
                 String jsonString = null;
+                boolean handedOffToNotifications = false;
                 try {
+                    if (TextUtils.isEmpty(data)) {
+                        onDecryptError(countDownLatch);
+                        return;
+                    }
                     byte[] bytes = Base64.decode(data, Base64.URL_SAFE);
                     NativeByteBuffer buffer = new NativeByteBuffer(bytes.length);
                     buffer.writeBytes(bytes);
                     buffer.position(0);
 
                     if (SharedConfig.pushAuthKeyId == null) {
+                        if (SharedConfig.pushAuthKey == null) {
+                            onDecryptError(countDownLatch);
+                            return;
+                        }
                         SharedConfig.pushAuthKeyId = new byte[8];
                         byte[] authKeyHash = Utilities.computeSHA1(SharedConfig.pushAuthKey);
                         System.arraycopy(authKeyHash, authKeyHash.length - 8, SharedConfig.pushAuthKeyId, 0, 8);
@@ -128,7 +157,7 @@ public class PushListenerController {
                     byte[] inAuthKeyId = new byte[8];
                     buffer.readBytes(inAuthKeyId, true);
                     if (!Arrays.equals(SharedConfig.pushAuthKeyId, inAuthKeyId)) {
-                        onDecryptError();
+                        onDecryptError(countDownLatch);
                         if (BuildVars.LOGS_ENABLED) {
                             FileLog.d(String.format(Locale.US, tag + " DECRYPT ERROR 2 k1=%s k2=%s, key=%s", Utilities.bytesToHex(SharedConfig.pushAuthKeyId), Utilities.bytesToHex(inAuthKeyId), Utilities.bytesToHex(SharedConfig.pushAuthKey)));
                         }
@@ -143,7 +172,7 @@ public class PushListenerController {
 
                     byte[] messageKeyFull = Utilities.computeSHA256(SharedConfig.pushAuthKey, 88 + 8, 32, buffer.buffer, 24, buffer.buffer.limit());
                     if (!Utilities.arraysEquals(messageKey, 0, messageKeyFull, 8)) {
-                        onDecryptError();
+                        onDecryptError(countDownLatch);
                         if (BuildVars.LOGS_ENABLED) {
                             FileLog.d(String.format(tag + " DECRYPT ERROR 3, key = %s", Utilities.bytesToHex(SharedConfig.pushAuthKey)));
                         }
@@ -157,7 +186,6 @@ public class PushListenerController {
                     JSONObject json = new JSONObject(jsonString);
 
                     if (ApplicationLoader.applicationLoaderInstance != null && ApplicationLoader.applicationLoaderInstance.consumePush(currentAccount, json)) {
-                        countDownLatch.countDown();
                         return;
                     }
 
@@ -317,6 +345,7 @@ public class PushListenerController {
                             ArrayList<MessageObject> arrayList = new ArrayList<>();
                             arrayList.add(messageObject);
                             FileLog.d("PushListenerController push OAUTH notification to NotificationsController of " + messageOwner.dialog_id);
+                            handedOffToNotifications = true;
                             NotificationsController.getInstance(currentAccount).processNewMessages(arrayList, true, true, countDownLatch);
                             return;
                         }
@@ -1508,6 +1537,7 @@ public class PushListenerController {
                                         final int mid = msg_id;
                                         AndroidUtilities.runOnUIThread(() -> MessagesController.getInstance(accountFinal).reportMessageDelivery(did, mid, true));
                                     }
+                                    handedOffToNotifications = true;
                                     NotificationsController.getInstance(currentAccount).processNewMessages(arrayList, true, true, countDownLatch);
                                 }
                             } else if ("CONF_CALL_MISSED".equalsIgnoreCase(loc_key)) {
@@ -1517,30 +1547,43 @@ public class PushListenerController {
                         }
                     }
                     if (canRelease) {
-                        countDownLatch.countDown();
+                        handedOffToNotifications = false;
                     }
 
                     ConnectionsManager.onInternalPushReceived(currentAccount);
                     ConnectionsManager.getInstance(currentAccount).resumeNetworkMaybe();
                 } catch (Throwable e) {
+                    handedOffToNotifications = false;
                     if (currentAccount != -1) {
                         ConnectionsManager.onInternalPushReceived(currentAccount);
                         ConnectionsManager.getInstance(currentAccount).resumeNetworkMaybe();
-                        countDownLatch.countDown();
                     } else {
-                        onDecryptError();
+                        onDecryptError(countDownLatch);
                     }
                     if (BuildVars.LOGS_ENABLED) {
                         FileLog.e("error in loc_key = " + loc_key + " json " + jsonString);
                     }
                     FileLog.e(e);
+                } finally {
+                    if (!handedOffToNotifications) {
+                        countDownLatch.countDown();
+                    }
                 }
             });
         });
         try {
-            countDownLatch.await();
+            countDownLatch.await(25, TimeUnit.SECONDS);
         } catch (Throwable ignore) {
 
+        } finally {
+            if (wakeLock != null) {
+                try {
+                    if (wakeLock.isHeld()) {
+                        wakeLock.release();
+                    }
+                } catch (Throwable ignore) {
+                }
+            }
         }
         if (BuildVars.DEBUG_VERSION) {
             FileLog.d("finished " + tag + " service, time = " + (SystemClock.elapsedRealtime() - receiveTime));
@@ -1763,14 +1806,16 @@ public class PushListenerController {
         return null;
     }
 
-    private static void onDecryptError() {
+    private static void onDecryptError(CountDownLatch latch) {
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             if (UserConfig.getInstance(a).isClientActivated()) {
                 ConnectionsManager.onInternalPushReceived(a);
                 ConnectionsManager.getInstance(a).resumeNetworkMaybe();
             }
         }
-        countDownLatch.countDown();
+        if (latch != null) {
+            latch.countDown();
+        }
     }
 
     @Keep
@@ -1801,6 +1846,12 @@ public class PushListenerController {
 
         @Override
         public void onRequestPushToken() {
+            if (KronoConfig.isDisableFirebasePush()) {
+                KronoConfig.applyFirebasePushPreference();
+                SharedConfig.pushStringStatus = "__FIREBASE_DISABLED__";
+                PushListenerController.sendRegistrationToServer(getPushType(), null);
+                return;
+            }
             String currentPushString = SharedConfig.pushString;
             if (!TextUtils.isEmpty(currentPushString)) {
                 if (BuildVars.DEBUG_PRIVATE_VERSION && BuildVars.LOGS_ENABLED) {
@@ -1819,8 +1870,10 @@ public class PushListenerController {
                             .addOnCompleteListener(task -> {
                                 SharedConfig.pushStringGetTimeEnd = SystemClock.elapsedRealtime();
                                 if (!task.isSuccessful()) {
+                                    Exception ex = task.getException();
+                                    lastTokenError = ex != null && !TextUtils.isEmpty(ex.getMessage()) ? ex.getMessage() : "Error al obtener token FCM";
                                     if (BuildVars.LOGS_ENABLED) {
-                                        FileLog.d("Failed to get regid");
+                                        FileLog.d("Failed to get regid: " + lastTokenError);
                                     }
                                     SharedConfig.pushStringStatus = "__FIREBASE_FAILED__";
                                     PushListenerController.sendRegistrationToServer(getPushType(), null);
@@ -1828,10 +1881,12 @@ public class PushListenerController {
                                 }
                                 String token = task.getResult();
                                 if (!TextUtils.isEmpty(token)) {
+                                    lastTokenError = "";
                                     PushListenerController.sendRegistrationToServer(getPushType(), token);
                                 }
                             });
                 } catch (Throwable e) {
+                    lastTokenError = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     FileLog.e(e);
                 }
             });

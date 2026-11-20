@@ -2694,6 +2694,7 @@ public class MessagesStorage extends BaseController {
 
                 boolean updateCounters = false;
                 boolean hasDefaultFilter = false;
+                MessagesController.DialogFilter favoritesFilter = null;
                 while (filtersCursor.next()) {
                     MessagesController.DialogFilter filter = new MessagesController.DialogFilter();
                     filter.id = filtersCursor.intValue(0);
@@ -2760,6 +2761,8 @@ public class MessagesStorage extends BaseController {
                     }
                     if (filter.id == 0) {
                         hasDefaultFilter = true;
+                    } else if (filter.isLocalFavorites()) {
+                        favoritesFilter = filter;
                     }
                 }
                 filtersCursor.dispose();
@@ -2795,11 +2798,40 @@ public class MessagesStorage extends BaseController {
                     entitiesBuffer.reuse();
                 }
 
+                KronoConfig.loadConfig();
+                if (KronoConfig.showFavoritesFolder) {
+                    if (favoritesFilter == null) {
+                        favoritesFilter = getMessagesController().createLocalFavoritesFilter();
+                        dialogFilters.add(favoritesFilter);
+                        dialogFiltersMap.put(favoritesFilter.id, favoritesFilter);
+                        filtersById.put(favoritesFilter.id, favoritesFilter);
+                        saveDialogFilterInternal(favoritesFilter, false, true);
+                        updateCounters = true;
+                    } else {
+                        favoritesFilter.name = "Favoritos";
+                        favoritesFilter.emoticon = "⭐";
+                        favoritesFilter.locked = false;
+                        favoritesFilter.alwaysShow.clear();
+                        favoritesFilter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs());
+                        favoritesFilter.neverShow.clear();
+                        favoritesFilter.pendingUnreadCount = -1;
+                        updateCounters = true;
+                    }
+                } else if (favoritesFilter != null) {
+                    deleteDialogFilterInternal(favoritesFilter);
+                }
+
                 Collections.sort(dialogFilters, (o1, o2) -> {
                     if (o1.order > o2.order) {
                         return 1;
                     } else if (o1.order < o2.order) {
                         return -1;
+                    }
+                    if (o1.isDefault() != o2.isDefault()) {
+                        return o1.isDefault() ? -1 : 1;
+                    }
+                    if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
+                        return o1.isLocalFavorites() ? -1 : 1;
                     }
                     return 0;
                 });
@@ -3392,6 +3424,9 @@ public class MessagesStorage extends BaseController {
                 SparseArray<MessagesController.DialogFilter> filtersToDelete = new SparseArray<>();
                 for (int a = 0, N = dialogFilters.size(); a < N; a++) {
                     MessagesController.DialogFilter filter = dialogFilters.get(a);
+                    if (filter.isLocalFavorites()) {
+                        continue;
+                    }
                     filtersToDelete.put(filter.id, filter);
                 }
                 ArrayList<Integer> filtersOrder = new ArrayList<>();
@@ -3458,6 +3493,11 @@ public class MessagesStorage extends BaseController {
                         final int color = (newFilter.flags & 134217728) != 0 ? newFilter.color : -1;
                         if (filter.color != color) {
                             filter.color = color;
+                            changed = true;
+                        }
+                        final String newEmoticon = (newFilter.flags & TLRPC.TL_dialogFilter.FLAG_25) != 0 ? newFilter.emoticon : null;
+                        if (!TextUtils.equals(filter.emoticon, newEmoticon)) {
+                            filter.emoticon = newEmoticon;
                             changed = true;
                         }
                         if (filter.flags != newFlags) {
@@ -3597,6 +3637,7 @@ public class MessagesStorage extends BaseController {
                         filter.entities = newFilter.title.entities;
                         filter.title_noanimate = newFilter.title_noanimate;
                         filter.color = (newFilter.flags & 134217728) != 0 ? newFilter.color : -1;
+                        filter.emoticon = (newFilter.flags & TLRPC.TL_dialogFilter.FLAG_25) != 0 ? newFilter.emoticon : null;
                         filter.pendingUnreadCount = -1;
                         for (int c = 0; c < 2; c++) {
                             if (c == 0) {
@@ -3715,9 +3756,27 @@ public class MessagesStorage extends BaseController {
             saveDialogFilterInternal(filtersToSave.get(a), false, true);
             anythingChanged = true;
         }
+        KronoConfig.loadConfig();
         boolean orderChanged = false;
+        MessagesController.DialogFilter favoritesFilter = null;
         for (int a = 0, N = dialogFilters.size(); a < N; a++) {
             MessagesController.DialogFilter filter = dialogFilters.get(a);
+            if (filter.isLocalFavorites()) {
+                favoritesFilter = filter;
+                int preservedOrder = Math.max(1, filter.order);
+                if (filter.order != preservedOrder) {
+                    filter.order = preservedOrder;
+                    orderChanged = true;
+                }
+                filter.name = "Favoritos";
+                filter.emoticon = "⭐";
+                filter.locked = false;
+                filter.alwaysShow.clear();
+                filter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs());
+                filter.neverShow.clear();
+                filter.pendingUnreadCount = -1;
+                continue;
+            }
             int order = filtersOrder.indexOf(filter.id);
             if (filter.order != order) {
                 filter.order = order;
@@ -3725,12 +3784,30 @@ public class MessagesStorage extends BaseController {
                 orderChanged = true;
             }
         }
+        if (KronoConfig.showFavoritesFolder) {
+            if (favoritesFilter == null) {
+                favoritesFilter = getMessagesController().createLocalFavoritesFilter();
+                saveDialogFilterInternal(favoritesFilter, false, true);
+                anythingChanged = true;
+                orderChanged = true;
+            }
+        } else if (favoritesFilter != null) {
+            deleteDialogFilterInternal(favoritesFilter);
+            anythingChanged = true;
+            orderChanged = true;
+        }
         if (orderChanged) {
             Collections.sort(dialogFilters, (o1, o2) -> {
                 if (o1.order > o2.order) {
                     return 1;
                 } else if (o1.order < o2.order) {
                     return -1;
+                }
+                if (o1.isDefault() != o2.isDefault()) {
+                    return o1.isDefault() ? -1 : 1;
+                }
+                if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
+                    return o1.isLocalFavorites() ? -1 : 1;
                 }
                 return 0;
             });
@@ -4860,6 +4937,9 @@ public class MessagesStorage extends BaseController {
     }
 
     public void emptyMessagesMedia(long dialogId, ArrayList<Integer> mids) {
+        if (KronoConfig.unlimitedViewOnce) {
+            return;
+        }
         storageQueue.postRunnable(() -> {
             SQLiteCursor cursor = null;
             SQLitePreparedStatement state = null;
@@ -8405,7 +8485,7 @@ public class MessagesStorage extends BaseController {
                 }
 
                 //TODO topics maybe read all topics when all messages read
-                if (prevUnreadCount != 0 && unreadCount == 0 && !isForum(dialogId, FORUM_TYPE_CHAT | FORUM_TYPE_BOT | FORUM_TYPE_DIRECT)) {
+                if ((prevUnreadCount != 0 || dialogsWithUnread.indexOfKey(dialogId) >= 0) && unreadCount == 0 && !isForum(dialogId, FORUM_TYPE_CHAT | FORUM_TYPE_BOT | FORUM_TYPE_DIRECT)) {
                     LongSparseIntArray dialogsToUpdate = new LongSparseIntArray();
                     dialogsToUpdate.put(dialogId, unreadCount);
                     updateFiltersReadCounter(dialogsToUpdate, null, true);
@@ -14489,7 +14569,7 @@ public class MessagesStorage extends BaseController {
         try {
             String midsStr = TextUtils.join(",", mids);
             database.executeFast(String.format(Locale.US, "UPDATE messages_v2 SET read_state = read_state | 2 WHERE mid IN (%s) AND uid = %d", midsStr, dialogId)).stepThis().dispose();
-            if (date != 0) {
+            if (date != 0 && !KronoConfig.unlimitedViewOnce) {
                 cursor = database.queryFinalized(String.format(Locale.US, "SELECT mid, ttl FROM messages_v2 WHERE mid IN (%s) AND uid = %d AND ttl > 0", midsStr, dialogId));
                 ArrayList<Integer> arrayList = null;
                 while (cursor.next()) {
@@ -14696,9 +14776,249 @@ public class MessagesStorage extends BaseController {
     }
 
     private ArrayList<Long> markMessagesAsDeletedInternal(long dialogId, ArrayList<Integer> messages, boolean deleteFiles, int mode, int threadMessageId) {
+        return markMessagesAsDeletedInternal(dialogId, messages, deleteFiles, mode, threadMessageId, false);
+    }
+
+    private ArrayList<Long> markMessagesAsDeletedInternal(long dialogId, ArrayList<Integer> messages, boolean deleteFiles, int mode, int threadMessageId, boolean keepAsDeleted) {
         SQLiteCursor cursor = null;
         SQLitePreparedStatement state = null;
         try {
+            if (keepAsDeleted && mode == 0) {
+                ArrayList<Long> dialogsIds = new ArrayList<>();
+                LongSparseArray<Integer[]> dialogsToUpdate = new LongSparseArray<>();
+                HashMap<TopicKey, int[]> topicsMessagesToUpdate = new HashMap<>();
+                ArrayList<TopicsController.TopicUpdate> topicUpdatesInUi = null;
+                ArrayList<long[]> rowsToMarkV2 = new ArrayList<>();
+                ArrayList<long[]> rowsToMarkTopics = new ArrayList<>();
+                ArrayList<NativeByteBuffer> paramsToMarkV2 = new ArrayList<>();
+                ArrayList<NativeByteBuffer> paramsToMarkTopics = new ArrayList<>();
+                long currentUser = getUserConfig().getClientUserId();
+                String ids = TextUtils.join(",", messages);
+
+                if (dialogId != 0) {
+                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT uid, read_state, out, mid, custom_params FROM messages_v2 WHERE mid IN(%s) AND uid = %d", ids, dialogId));
+                } else {
+                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT uid, read_state, out, mid, custom_params FROM messages_v2 WHERE mid IN(%s) AND is_channel = 0", ids));
+                }
+                while (cursor.next()) {
+                    long did = cursor.longValue(0);
+                    if (DialogObject.isEncryptedDialog(did)) {
+                        continue;
+                    }
+                    int read_state = cursor.intValue(1);
+                    int out = cursor.intValue(2);
+                    int mid = cursor.intValue(3);
+                    if (did != currentUser && out == 0) {
+                        Integer[] unread_count = dialogsToUpdate.get(did);
+                        if (unread_count == null) {
+                            unread_count = new Integer[]{0, 0};
+                            dialogsToUpdate.put(did, unread_count);
+                        }
+                        if (read_state < 2) {
+                            unread_count[1]++;
+                        }
+                        if (read_state == 0 || read_state == 2) {
+                            unread_count[0]++;
+                        }
+                    }
+                    NativeByteBuffer existingParams = cursor.byteBufferValue(4);
+                    TLRPC.Message tempMsg = new TLRPC.TL_message();
+                    if (existingParams != null) {
+                        try {
+                            MessageCustomParamsHelper.readLocalParams(tempMsg, existingParams);
+                        } catch (Exception ignore) {
+                        }
+                        existingParams.reuse();
+                    }
+                    if (!tempMsg.kronoDeleted) {
+                        tempMsg.kronoDeleted = true;
+                        rowsToMarkV2.add(new long[]{did, mid});
+                        paramsToMarkV2.add(MessageCustomParamsHelper.writeLocalParams(tempMsg));
+                    }
+                }
+                cursor.dispose();
+                cursor = null;
+
+                if (dialogId != 0) {
+                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT uid, data, read_state, out, mid, custom_params FROM messages_topics WHERE mid IN(%s) AND uid = %d", ids, dialogId));
+                } else {
+                    cursor = database.queryFinalized(String.format(Locale.US, "SELECT uid, data, read_state, out, mid, custom_params FROM messages_topics WHERE mid IN(%s) AND uid != 0", ids));
+                }
+                while (cursor.next()) {
+                    long did = cursor.longValue(0);
+                    int read_state = cursor.intValue(2);
+                    int out = cursor.intValue(3);
+                    int mid = cursor.intValue(4);
+                    long topicId = 0;
+                    NativeByteBuffer data = cursor.byteBufferValue(1);
+                    if (data != null) {
+                        TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                        if (message != null) {
+                            message.readAttachPath(data, currentUser);
+                            topicId = MessageObject.getTopicId(currentAccount, message, getForumTypeFlags(did));
+                        }
+                        data.reuse();
+                    }
+                    if (topicId != 0 && out == 0) {
+                        TopicKey topicKey = TopicKey.of(did, topicId);
+                        int[] count = topicsMessagesToUpdate.get(topicKey);
+                        if (count == null) {
+                            count = new int[3];
+                            topicsMessagesToUpdate.put(topicKey, count);
+                        }
+                        if (read_state < 2) {
+                            count[1]++;
+                        }
+                        if (read_state == 0 || read_state == 2) {
+                            count[0]++;
+                        }
+                    }
+                    NativeByteBuffer existingParams = cursor.byteBufferValue(5);
+                    TLRPC.Message tempMsg = new TLRPC.TL_message();
+                    if (existingParams != null) {
+                        try {
+                            MessageCustomParamsHelper.readLocalParams(tempMsg, existingParams);
+                        } catch (Exception ignore) {
+                        }
+                        existingParams.reuse();
+                    }
+                    if (!tempMsg.kronoDeleted) {
+                        tempMsg.kronoDeleted = true;
+                        rowsToMarkTopics.add(new long[]{did, mid});
+                        paramsToMarkTopics.add(MessageCustomParamsHelper.writeLocalParams(tempMsg));
+                    }
+                }
+                cursor.dispose();
+                cursor = null;
+
+                database.beginTransaction();
+                if (!rowsToMarkV2.isEmpty()) {
+                    state = database.executeFast("UPDATE messages_v2 SET custom_params = ? WHERE mid = ? AND uid = ?");
+                    for (int i = 0; i < rowsToMarkV2.size(); i++) {
+                        long[] key = rowsToMarkV2.get(i);
+                        NativeByteBuffer params = paramsToMarkV2.get(i);
+                        state.requery();
+                        if (params != null) {
+                            state.bindByteBuffer(1, params);
+                        } else {
+                            state.bindNull(1);
+                        }
+                        state.bindInteger(2, (int) key[1]);
+                        state.bindLong(3, key[0]);
+                        state.step();
+                        if (params != null) {
+                            params.reuse();
+                        }
+                    }
+                    state.dispose();
+                    state = null;
+                }
+                if (!rowsToMarkTopics.isEmpty()) {
+                    state = database.executeFast("UPDATE messages_topics SET custom_params = ? WHERE mid = ? AND uid = ?");
+                    for (int i = 0; i < rowsToMarkTopics.size(); i++) {
+                        long[] key = rowsToMarkTopics.get(i);
+                        NativeByteBuffer params = paramsToMarkTopics.get(i);
+                        state.requery();
+                        if (params != null) {
+                            state.bindByteBuffer(1, params);
+                        } else {
+                            state.bindNull(1);
+                        }
+                        state.bindInteger(2, (int) key[1]);
+                        state.bindLong(3, key[0]);
+                        state.step();
+                        if (params != null) {
+                            params.reuse();
+                        }
+                    }
+                    state.dispose();
+                    state = null;
+                }
+                for (int a = 0; a < dialogsToUpdate.size(); a++) {
+                    long did = dialogsToUpdate.keyAt(a);
+                    Integer[] counts = dialogsToUpdate.valueAt(a);
+                    if (counts[0] == 0 && counts[1] == 0) {
+                        continue;
+                    }
+                    cursor = database.queryFinalized("SELECT unread_count, unread_count_i FROM dialogs WHERE did = " + did);
+                    int old_unread_count = 0;
+                    int old_mentions_count = 0;
+                    if (cursor.next()) {
+                        old_unread_count = cursor.intValue(0);
+                        old_mentions_count = cursor.intValue(1);
+                    }
+                    cursor.dispose();
+                    cursor = null;
+                    dialogsIds.add(did);
+                    state = database.executeFast("UPDATE dialogs SET unread_count = ?, unread_count_i = ? WHERE did = ?");
+                    state.requery();
+                    state.bindInteger(1, Math.max(0, old_unread_count - counts[0]));
+                    state.bindInteger(2, Math.max(0, old_mentions_count - counts[1]));
+                    state.bindLong(3, did);
+                    state.step();
+                    state.dispose();
+                    state = null;
+                }
+                if (!topicsMessagesToUpdate.isEmpty()) {
+                    HashSet<Long> dialogsToCheck = null;
+                    for (TopicKey topicKey : topicsMessagesToUpdate.keySet()) {
+                        cursor = database.queryFinalized(String.format(Locale.US, "SELECT unread_count, unread_mentions, total_messages_count FROM topics WHERE did = %d AND topic_id = %d", topicKey.dialogId, topicKey.topicId));
+                        int old_unread_count = 0;
+                        int old_mentions_count = 0;
+                        int old_total_count = 0;
+                        if (cursor.next()) {
+                            old_unread_count = cursor.intValue(0);
+                            old_mentions_count = cursor.intValue(1);
+                            old_total_count = cursor.intValue(2);
+                        }
+                        cursor.dispose();
+                        cursor = null;
+
+                        int[] counts = topicsMessagesToUpdate.get(topicKey);
+                        int newUnreadCount = Math.max(0, old_unread_count - counts[0]);
+                        int newUnreadMentionsCount = Math.max(0, old_mentions_count - counts[1]);
+                        state = database.executeFast("UPDATE topics SET unread_count = ?, unread_mentions = ? WHERE did = ? AND topic_id = ?");
+                        state.requery();
+                        state.bindInteger(1, newUnreadCount);
+                        state.bindInteger(2, newUnreadMentionsCount);
+                        state.bindLong(3, topicKey.dialogId);
+                        state.bindLong(4, topicKey.topicId);
+                        state.step();
+                        state.dispose();
+                        state = null;
+
+                        if (newUnreadCount == 0) {
+                            if (dialogsToCheck == null) {
+                                dialogsToCheck = new HashSet<>();
+                            }
+                            dialogsToCheck.add(topicKey.dialogId);
+                        }
+                        TopicsController.TopicUpdate topicUpdate = new TopicsController.TopicUpdate();
+                        topicUpdate.dialogId = topicKey.dialogId;
+                        topicUpdate.topicId = topicKey.topicId;
+                        topicUpdate.unreadCount = newUnreadCount;
+                        topicUpdate.totalMessagesCount = old_total_count;
+                        topicUpdate.onlyCounters = true;
+                        if (topicUpdatesInUi == null) {
+                            topicUpdatesInUi = new ArrayList<>();
+                        }
+                        topicUpdatesInUi.add(topicUpdate);
+                    }
+                    if (dialogsToCheck != null) {
+                        for (Long dialogToResert : dialogsToCheck) {
+                            resetForumBadgeIfNeed(dialogToResert);
+                        }
+                    }
+                }
+                database.commitTransaction();
+                if (dialogsToUpdate.size() != 0) {
+                    resetAllUnreadCounters(false);
+                }
+                if (topicUpdatesInUi != null) {
+                    getMessagesController().getTopicsController().processUpdate(topicUpdatesInUi);
+                }
+                return dialogsIds;
+            }
             if (getUserConfig().getClientUserId() == dialogId) {
                 database.executeFast(String.format(Locale.US, "DELETE FROM tag_message_id WHERE mid IN(%s)", TextUtils.join(",", messages))).stepThis().dispose();
             }
@@ -15496,13 +15816,17 @@ public class MessagesStorage extends BaseController {
     }
 
     public ArrayList<Long> markMessagesAsDeleted(long dialogId, ArrayList<Integer> messages, boolean useQueue, boolean deleteFiles, int mode, int topicId) {
+        return markMessagesAsDeleted(dialogId, messages, useQueue, deleteFiles, mode, topicId, false);
+    }
+
+    public ArrayList<Long> markMessagesAsDeleted(long dialogId, ArrayList<Integer> messages, boolean useQueue, boolean deleteFiles, int mode, int topicId, boolean keepAsDeleted) {
         if (messages.isEmpty()) {
             return null;
         }
         if (useQueue) {
-            storageQueue.postRunnable(() -> markMessagesAsDeletedInternal(dialogId, messages, deleteFiles, mode, topicId));
+            storageQueue.postRunnable(() -> markMessagesAsDeletedInternal(dialogId, messages, deleteFiles, mode, topicId, keepAsDeleted));
         } else {
-            return markMessagesAsDeletedInternal(dialogId, messages, deleteFiles, mode, topicId);
+            return markMessagesAsDeletedInternal(dialogId, messages, deleteFiles, mode, topicId, keepAsDeleted);
         }
         return null;
     }

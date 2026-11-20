@@ -379,7 +379,11 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
                     continue;
                 }
             }
-            if (filter != null && (always && filter.alwaysShow.contains(did) || !always && filter.neverShow.contains(did))) {
+            if (filter != null && filter.isLocalFavorites()) {
+                if (always && org.telegram.messenger.KronoConfig.isFavoriteDialog(did)) {
+                    continue;
+                }
+            } else if (filter != null && (always && filter.alwaysShow.contains(did) || !always && filter.neverShow.contains(did))) {
                 continue;
             }
             dids.add(did);
@@ -408,7 +412,13 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
         @Override
         public int getItemCount() {
             int count = dialogFilters.size();
-            if (count < 10) {
+            int nonFavoritesCount = 0;
+            for (int i = 0; i < dialogFilters.size(); ++i) {
+                if (!dialogFilters.get(i).isLocalFavorites()) {
+                    nonFavoritesCount++;
+                }
+            }
+            if (nonFavoritesCount < 10) {
                 count++;
             }
             return count;
@@ -440,7 +450,9 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
                 MessagesController.DialogFilter filter = dialogFilters.get(position);
                 ThemeBind.textColor(cell.getTextView(), Theme.key_dialogTextBlack);
                 int icon;
-                if ((filter.flags & MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) == (MessagesController.DIALOG_FILTER_FLAG_CONTACTS | MessagesController.DIALOG_FILTER_FLAG_NON_CONTACTS)) {
+                if (filter.isLocalFavorites()) {
+                    icon = R.drawable.msg_fave;
+                } else if ((filter.flags & MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) == (MessagesController.DIALOG_FILTER_FLAG_CONTACTS | MessagesController.DIALOG_FILTER_FLAG_NON_CONTACTS)) {
                     icon = R.drawable.msg_openprofile;
                 } else if ((filter.flags & MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_READ) != 0 && (filter.flags & MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) == MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) {
                     icon = R.drawable.msg_markunread;

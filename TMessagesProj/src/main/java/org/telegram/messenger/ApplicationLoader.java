@@ -18,6 +18,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -103,7 +104,20 @@ public class ApplicationLoader extends Application {
     }
 
     protected IMapsProvider onCreateMapsProvider() {
-        return new GoogleMapsProvider();
+        try {
+            if (applicationContext != null) {
+                ApplicationInfo info = applicationContext.getPackageManager().getApplicationInfo(applicationContext.getPackageName(), PackageManager.GET_META_DATA);
+                if (info != null && info.metaData != null) {
+                    String apiKey = info.metaData.getString("com.google.android.geo.API_KEY");
+                    if (apiKey != null && !apiKey.trim().isEmpty() && !apiKey.contains("YOUR_API_KEY")) {
+                        return new GoogleMapsProvider();
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+        return new OsmMapsProvider();
     }
 
     public static PushListenerController.IPushListenerServiceProvider getPushProvider() {
@@ -295,11 +309,13 @@ public class ApplicationLoader extends Application {
         }
 
         super.onCreate();
-
         // The widget engine's isolated process has no files, network or accounts: none of the client starts there.
         if (org.telegram.utils.twidget.WidgetEngineService.isEngineProcess()) {
             return;
         }
+        KronoConfig.loadConfig();
+        KronoConfig.applyFirebaseAnalyticsPreference(applicationContext);
+        KronoConfig.applyFirebasePushPreference();
 
         // AndroidUtilities must be initialized before FileLog
         final String helloWorld = AndroidUtilities.getHelloWorld();
@@ -377,20 +393,51 @@ public class ApplicationLoader extends Application {
 
     public static void startPushService() {
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
+        boolean antiKill = KronoConfig.isPersistentForegroundService();
+        boolean fcmDisabled = KronoConfig.isDisableFirebasePush();
         boolean enabled;
-        if (preferences.contains("pushService")) {
+        if (antiKill || fcmDisabled) {
+            enabled = true;
+        } else if (preferences.contains("pushService")) {
             enabled = preferences.getBoolean("pushService", true);
         } else {
             enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", false);
         }
         if (enabled) {
+            NotificationsService.clearTimeoutCooldownIfForeground();
+            Intent intent = new Intent(applicationContext, NotificationsService.class);
+            boolean canStartForeground = !mainInterfacePaused || !NotificationsService.isInTimeoutCooldown();
+            intent.putExtra("foreground", antiKill && canStartForeground);
+            if (antiKill && canStartForeground && Build.VERSION.SDK_INT >= 26) {
+                if (!mainInterfacePaused || NotificationsService.isRunningInForeground) {
+                    try {
+                        androidx.core.content.ContextCompat.startForegroundService(applicationContext, intent);
+                        return;
+                    } catch (Throwable e) {
+                        FileLog.e(e);
+                    }
+                } else {
+                    KeepAliveJob.startJob();
+                    return;
+                }
+            }
+            if (NotificationsService.isInTimeoutCooldown() && mainInterfacePaused) {
+                KeepAliveJob.startJob();
+                return;
+            }
             try {
-                applicationContext.startService(new Intent(applicationContext, NotificationsService.class));
+                applicationContext.startService(intent);
+            } catch (Throwable e) {
+                if (fcmDisabled || antiKill) {
+                    KeepAliveJob.startJob();
+                }
+            }
+        } else {
+            try {
+                applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
             } catch (Throwable ignore) {
 
             }
-        } else {
-            applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
         }
     }
 
@@ -407,8 +454,38 @@ public class ApplicationLoader extends Application {
         }
     }
 
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        KronoVoiceTranscriber.releaseCachedModelAsync();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_UI_HIDDEN) {
+            KronoVoiceTranscriber.releaseCachedModelAsync();
+        }
+    }
+
+    public static void reinitPushServices() {
+        if (applicationLoaderInstance != null) {
+            applicationLoaderInstance.initPushServices();
+        }
+        startPushService();
+    }
+
     private void initPushServices() {
         AndroidUtilities.runOnUIThread(() -> {
+            if (KronoConfig.isDisableFirebasePush() && getPushProvider().getPushType() == PushListenerController.PUSH_TYPE_FIREBASE) {
+                if (BuildVars.LOGS_ENABLED) {
+                    FileLog.d("Firebase Push (FCM) disabled by KronoConfig.");
+                }
+                SharedConfig.pushStringStatus = "__FIREBASE_DISABLED__";
+                PushListenerController.sendRegistrationToServer(getPushProvider().getPushType(), null);
+                startPushService();
+                return;
+            }
             if (getPushProvider().hasServices()) {
                 getPushProvider().onRequestPushToken();
             } else {
