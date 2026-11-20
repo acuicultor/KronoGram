@@ -14932,6 +14932,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             public int guid;
             public int num;
             public String link;
+            public String searchKeywords;
 
             public SearchResult(int g, String search, int icon, Runnable open) {
                 this(g, search, null, null, null, icon, open);
@@ -14960,6 +14961,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             public SearchResult withLink(String link) {
                 this.link = link;
+                return this;
+            }
+
+            public SearchResult withKeywords(String keywords) {
+                this.searchKeywords = keywords;
                 return this;
             }
 
@@ -15330,6 +15336,87 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     new SearchResult(402, getString(R.string.AskAQuestion), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> f.showDialog(AlertsCreator.createSupportAlert(f, null))).withLink("tg://settings/ask-question"),
                     new SearchResult(403, getString(R.string.TelegramFAQ), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.TelegramFaqUrl))).withLink("tg://settings/faq"),
                     new SearchResult(404, getString(R.string.PrivacyPolicy), getString(R.string.SettingsHelp), R.drawable.msg2_help, () -> Browser.openUrl(f.getParentActivity(), getString(R.string.PrivacyPolicyUrl))).withLink("tg://settings/privacy-policy"),
+
+                    new SearchResult(1000, "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_MAIN))).withKeywords("kronogram configuracion mod opciones"),
+                    new SearchResult(1001, "Privacidad y seguridad", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram modo fantasma ghost boveda oculta anti-borrado 1 vista telemetria"),
+                    new SearchResult(1002, "Apariencia", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram temas material you monet estilo interfaz ios clasico"),
+                    new SearchResult(1003, "Chats", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas pestanas gestos anclados ilimitados cache almacenamiento"),
+                    new SearchResult(1004, "Voz y Traducción", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram transcripcion vosk ia motores traduccion"),
+                    new SearchResult(1005, "Notificaciones y Diagnóstico", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram servicio anti-cierre estado fcm push bateria pruebas"),
+
+                    new SearchResult(1010, "Activar Modo Fantasma completo", "ghostMasterRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram ghost mode oculta lectura historias escribiendo en linea"),
+                    new SearchResult(1011, "No marcar mensajes como leídos", "ghostDontReadMessagesRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram modo fantasma ghost mode lectura double check"),
+                    new SearchResult(1012, "No marcar historias como vistas", "ghostDontReadStoriesRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram modo fantasma ghost mode stories"),
+                    new SearchResult(1013, "Ocultar estado «escribiendo...»", "ghostDontSendTypingRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram modo fantasma ghost mode typing"),
+                    new SearchResult(1014, "Ocultar estado «en línea»", "ghostDontSendOnlineRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram modo fantasma ghost mode online"),
+                    new SearchResult(1015, "Abrir bóveda oculta", "hiddenVaultOpenRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram chats carpetas ocultos privacidad"),
+                    new SearchResult(1016, "Método de bloqueo", "hiddenVaultLockMethodRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram boveda oculta pin contrasena patron"),
+                    new SearchResult(1017, "Desbloqueo biométrico", "hiddenVaultBiometricRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram boveda oculta huella rostro biometria"),
+                    new SearchResult(1018, "Silenciar notificaciones de ocultos", "hiddenVaultMuteNotifRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram boveda oculta previsualizaciones"),
+                    new SearchResult(1019, "Ocultar chats de carpetas ocultas", "hiddenVaultHideFolderChatsRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram boveda oculta pestana todos busqueda"),
+                    new SearchResult(1020, "Bloquear bóveda al salir", "hiddenVaultAutoLockRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram boveda oculta segundo plano bloqueo automatico"),
+                    new SearchResult(1021, "Ocultar número de teléfono", "hidePhoneNumberRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram privacidad avanzada cajon perfil ajustes"),
+                    new SearchResult(1022, "Ocultar nombres y avatares en lista", "hideChatListNamesRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram modo privacidad pantalla principal"),
+                    new SearchResult(1023, "Bloquear inicio de chats secretos", "blockSecretChatsRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram privacidad avanzada"),
+                    new SearchResult(1024, "Guardar mensajes eliminados", "antiDeleteMessagesRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram anti-borrado antiborrado mensajes borrados"),
+                    new SearchResult(1025, "Excluir canales en anti-borrado", "antiDeleteExcludeChannelsRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram antiborrado mensajes eliminados"),
+                    new SearchResult(1026, "Ver multimedia de 1 sola vista sin límite", "unlimitedViewOnceRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram efimera temporal fotos videos audios notas redondas"),
+                    new SearchResult(1027, "Permitir capturas y guardado en 1 vista", "viewOnceAllowSaveRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram efimera screenshot galeria"),
+                    new SearchResult(1028, "Omitir restricciones en chats y canales", "allowRestrictedContentBypassRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram capturas grabacion copia guardado reenvio contenido restringido"),
+                    new SearchResult(1029, "Cero telemetría / Sin rastreadores", "zeroTelemetryRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram bloqueo integral privacidad trackers"),
+                    new SearchResult(1030, "Bloquear telemetría interna de Telegram", "blockTelegramTelemetryRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram applog estadisticas dispositivo rastreadores"),
+                    new SearchResult(1031, "Desactivar Firebase Analytics", "disableFirebaseAnalyticsRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram telemetria analiticas publicidad"),
+                    new SearchResult(1032, "Bloquear anuncios y métricas patrocinadas", "blockSponsoredMessagesRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram spam publicidad mensajes patrocinados"),
+                    new SearchResult(1033, "Limpiar rastreadores en enlaces", "stripUrlTrackersRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram utm fbclid gclid igshid urls links"),
+                    new SearchResult(1034, "Desactivar Push de Google (FCM)", "disableFirebasePushRow", "Ajustes de KronoGram", "Privacidad y seguridad", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram firebase telemetria notificaciones"),
+
+                    new SearchResult(1040, "Temas", "openThemesRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia colores"),
+                    new SearchResult(1041, "Tema Monet (Material You)", "monetThemeRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia monet light dark amoled colores"),
+                    new SearchResult(1042, "Estilo visual de interfaz", "uiStyleRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia material you ios cupertino clasico tarjetas"),
+                    new SearchResult(1043, "Quitar efecto marquee en los títulos", "disableTitleMarqueeRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia desplazamiento continuo titulos"),
+
+                    new SearchResult(1050, "Contenido de las pestañas", "tabModeRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas iconos texto"),
+                    new SearchResult(1051, "Estilo de las pestañas", "tabStyleRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas pildora chips"),
+                    new SearchResult(1052, "Contorno en pestaña activa", "tabStyleStrokeRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas borde"),
+                    new SearchResult(1053, "Ocultar contadores en pestañas", "hideTabsCountersRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas globo no leidos"),
+                    new SearchResult(1054, "Nombre de carpeta en cabecera", "folderNameInHeaderRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas barra superior titulo"),
+                    new SearchResult(1055, "Desactivar deslizamiento entre carpetas", "disableTabsSwipeRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram pestanas swipe"),
+                    new SearchResult(1056, "Scroll infinito entre carpetas", "infiniteFolderScrollRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram pestanas deslizar bucle"),
+                    new SearchResult(1057, "Mostrar carpeta «Favoritos»", "showFavoritesFolderRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas favoritos estrella"),
+                    new SearchResult(1058, "Eliminar carpeta «Todos»", "hideAllChatsTabRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram ocultar pestana todos"),
+                    new SearchResult(1059, "Acción al deslizar sobre un mensaje", "messageSwipeActionRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram gesto responder reenviar copiar"),
+                    new SearchResult(1060, "Editar mensaje enviado con gesto", "swipeToEditOwnRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram deslizar izquierda mensaje propio"),
+                    new SearchResult(1061, "«Borrar para todos» por defecto", "deleteForAllDefaultRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram eliminar mensajes casilla"),
+                    new SearchResult(1062, "Hora exacta con segundos", "showTimeWithSecondsRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram reloj envio recepcion mensajes"),
+                    new SearchResult(1063, "Chats anclados ilimitados (local)", "unlimitedPinnedChatsRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram fijar chats limite"),
+                    new SearchResult(1064, getString(R.string.KronoQuickGoToMessage), "quickGoToMessageRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram ir al mensaje busqueda saltar archivos enlaces audios"),
+                    new SearchResult(1065, getString(R.string.KronoLongClickMediaMenu), "longClickMediaMenuRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram menu contextual mantener pulsado multimedia busqueda"),
+                    new SearchResult(1066, "Desactivar salto al siguiente canal o tema", "disablePullToNextChannelRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram pull next channel scroll"),
+                    new SearchResult(1067, "Filtro de palabras ocultas bajo Spoiler", "spoilerWordsToggleRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram censura palabras ocultas"),
+                    new SearchResult(1068, "Configurar palabras en Spoiler", "spoilerWordsEditRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram filtro lista palabras ocultas"),
+                    new SearchResult(1069, "Guardar archivos con nombre original", "keepOriginalFilenameRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram documentos descargas prefijos"),
+                    new SearchResult(1070, "Borrar archivos del caché ahora", "clearCacheNowRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram almacenamiento limpiar cache"),
+                    new SearchResult(1071, "Administrador avanzado de almacenamiento", "openStorageUsageRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram uso almacenamiento cache"),
+
+                    new SearchResult(1080, "Transcripción de voz gratuita", "freeVoiceTranscriptionRow", "Ajustes de KronoGram", "Voz y Traducción", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram audio voz a texto premium gratis"),
+                    new SearchResult(1081, "Modo de transcripción", "voiceTranscriptionModeRow", "Ajustes de KronoGram", "Voz y Traducción", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram voz vosk whisper modo"),
+                    new SearchResult(1082, "Idioma de transcripción local", "voiceTranscriptionLanguageRow", "Ajustes de KronoGram", "Voz y Traducción", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram voz idioma espanol ingles"),
+                    new SearchResult(1083, "Modelos de voz offline (Vosk)", "voiceTranscriptionModelsRow", "Ajustes de KronoGram", "Voz y Traducción", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram transcripcion descargar modelo local"),
+                    new SearchResult(1084, "Traducir chats completos gratis", "freeChatTranslationRow", "Ajustes de KronoGram", "Voz y Traducción", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram traduccion canales premium gratis"),
+                    new SearchResult(1085, "Motor de traducción alternativo", "translationProviderRow", "Ajustes de KronoGram", "Voz y Traducción", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram traductor proveedor google deepl"),
+
+                    new SearchResult(1090, "Servicio persistente (anti-cierre OEM)", "persistentForegroundServiceRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram notificaciones doze xiaomi samsung huawei segundo plano"),
+                    new SearchResult(1091, "Conexión TCP en segundo plano", "backgroundPushConnectionRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram notificaciones socket mtproto fcm"),
+                    new SearchResult(1092, "Servicios de Google Play", "diagPlayServicesRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico push gms"),
+                    new SearchResult(1093, "Firebase Push (FCM)", "diagFcmStatusRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico notificaciones estado"),
+                    new SearchResult(1094, "Token FCM y registro", "diagFcmTokenRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico push registro"),
+                    new SearchResult(1095, "Permiso de notificaciones", "diagNotifPermRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico permiso sistema"),
+                    new SearchResult(1096, "Optimización de batería", "diagBatteryOptRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico sin restricciones doze"),
+                    new SearchResult(1097, "Servicio anti-cierre", "diagServiceRunningRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico primer plano"),
+                    new SearchResult(1098, "Último push FCM recibido", "diagLastPushRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico notificaciones"),
+                    new SearchResult(1099, "Forzar re-registro de token FCM", "diagRefreshPushRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico push token"),
+                    new SearchResult(1100, "Enviar notificación local de prueba", "diagTestNotificationRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico probar notificacion"),
+                    new SearchResult(1101, "Ajustes de batería del sistema", "diagSystemBatteryRow", "Ajustes de KronoGram", "Notificaciones y Diagnóstico", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram diagnostico xiaomi inicio automatico"),
             };
         }
 
@@ -15618,40 +15705,73 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 ArrayList<SearchResult> results = new ArrayList<>();
                 ArrayList<MessagesController.FaqSearchResult> faqResults = new ArrayList<>();
                 ArrayList<CharSequence> names = new ArrayList<>();
-                String[] searchArgs = text.split(" ");
-                String[] translitArgs = new String[searchArgs.length];
-                for (int a = 0; a < searchArgs.length; a++) {
-                    translitArgs[a] = LocaleController.getInstance().getTranslitString(searchArgs[a]);
-                    if (translitArgs[a].equals(searchArgs[a])) {
-                        translitArgs[a] = null;
+                String[] rawArgs = text.trim().split("\\s+");
+                ArrayList<String> queryTokens = new ArrayList<>();
+                ArrayList<String> translitTokens = new ArrayList<>();
+                for (int a = 0; a < rawArgs.length; a++) {
+                    String raw = rawArgs[a];
+                    if (raw.isEmpty()) {
+                        continue;
+                    }
+                    String translit = LocaleController.getInstance().getTranslitString(raw.toLowerCase(Locale.ROOT));
+                    String normRaw = normalizeForSearch(raw).trim();
+                    if (normRaw.isEmpty()) {
+                        continue;
+                    }
+                    String[] subTokens = normRaw.split("\\s+");
+                    String[] subTranslit = (translit != null && !translit.equalsIgnoreCase(raw))
+                            ? normalizeForSearch(translit).trim().split("\\s+")
+                            : null;
+                    for (int j = 0; j < subTokens.length; j++) {
+                        if (!subTokens[j].isEmpty()) {
+                            queryTokens.add(subTokens[j]);
+                            String t = (subTranslit != null && j < subTranslit.length && !subTranslit[j].isEmpty() && !subTranslit[j].equals(subTokens[j]))
+                                    ? subTranslit[j]
+                                    : null;
+                            translitTokens.add(t);
+                        }
                     }
                 }
 
-                for (int a = 0; a < searchArray.length; a++) {
-                    SearchResult result = searchArray[a];
-                    if (result == null) {
-                        continue;
-                    }
-                    String title = " " + result.searchTitle.toLowerCase();
-                    SpannableStringBuilder stringBuilder = null;
-                    for (int i = 0; i < searchArgs.length; i++) {
-                        if (searchArgs[i].length() != 0) {
-                            String searchString = searchArgs[i];
-                            int index = title.indexOf(" " + searchString);
-                            if (index < 0 && translitArgs[i] != null) {
-                                searchString = translitArgs[i];
-                                index = title.indexOf(" " + searchString);
+                if (!queryTokens.isEmpty()) {
+                    for (int a = 0; a < searchArray.length; a++) {
+                        SearchResult result = searchArray[a];
+                        if (result == null || result.searchTitle == null) {
+                            continue;
+                        }
+                        NormalizedText normTitle = buildNormalizedText(result.searchTitle);
+                        String normKeywords = !TextUtils.isEmpty(result.searchKeywords)
+                                ? (" " + normalizeForSearch(result.searchKeywords))
+                                : null;
+                        SpannableStringBuilder stringBuilder = null;
+                        boolean matchedAll = true;
+                        for (int i = 0; i < queryTokens.size(); i++) {
+                            String searchString = queryTokens.get(i);
+                            int index = normTitle.normalized.indexOf(" " + searchString);
+                            if (index < 0 && translitTokens.get(i) != null) {
+                                searchString = translitTokens.get(i);
+                                index = normTitle.normalized.indexOf(" " + searchString);
                             }
                             if (index >= 0) {
                                 if (stringBuilder == null) {
                                     stringBuilder = new SpannableStringBuilder(result.searchTitle);
                                 }
-                                stringBuilder.setSpan(new ForegroundColorSpan(fragment.getThemedColor(Theme.key_windowBackgroundWhiteBlueText4)), index, index + searchString.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                int start = normTitle.startMap[index + 1];
+                                int end = normTitle.endMap[index + searchString.length()];
+                                if (start >= 0 && end > start && end <= result.searchTitle.length()) {
+                                    stringBuilder.setSpan(new ForegroundColorSpan(fragment.getThemedColor(Theme.key_windowBackgroundWhiteBlueText4)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                }
+                            } else if (normKeywords != null && (normKeywords.contains(" " + queryTokens.get(i))
+                                    || (translitTokens.get(i) != null && normKeywords.contains(" " + translitTokens.get(i))))) {
+                                if (stringBuilder == null) {
+                                    stringBuilder = new SpannableStringBuilder(result.searchTitle);
+                                }
                             } else {
+                                matchedAll = false;
                                 break;
                             }
                         }
-                        if (stringBuilder != null && i == searchArgs.length - 1) {
+                        if (matchedAll && stringBuilder != null) {
                             if (result.guid == 502) {
                                 int freeAccount = -1;
                                 for (int b = 0; b < UserConfig.MAX_ACCOUNT_COUNT; b++) {
@@ -15668,30 +15788,37 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             names.add(stringBuilder);
                         }
                     }
-                }
-                if (faqWebPage != null) {
-                    for (int a = 0, N = faqSearchArray.size(); a < N; a++) {
-                        MessagesController.FaqSearchResult result = faqSearchArray.get(a);
-                        String title = " " + result.title.toLowerCase();
-                        SpannableStringBuilder stringBuilder = null;
-                        for (int i = 0; i < searchArgs.length; i++) {
-                            if (searchArgs[i].length() != 0) {
-                                String searchString = searchArgs[i];
-                                int index = title.indexOf(" " + searchString);
-                                if (index < 0 && translitArgs[i] != null) {
-                                    searchString = translitArgs[i];
-                                    index = title.indexOf(" " + searchString);
+                    if (faqWebPage != null) {
+                        for (int a = 0, N = faqSearchArray.size(); a < N; a++) {
+                            MessagesController.FaqSearchResult result = faqSearchArray.get(a);
+                            if (result == null || result.title == null) {
+                                continue;
+                            }
+                            NormalizedText normTitle = buildNormalizedText(result.title);
+                            SpannableStringBuilder stringBuilder = null;
+                            boolean matchedAll = true;
+                            for (int i = 0; i < queryTokens.size(); i++) {
+                                String searchString = queryTokens.get(i);
+                                int index = normTitle.normalized.indexOf(" " + searchString);
+                                if (index < 0 && translitTokens.get(i) != null) {
+                                    searchString = translitTokens.get(i);
+                                    index = normTitle.normalized.indexOf(" " + searchString);
                                 }
                                 if (index >= 0) {
                                     if (stringBuilder == null) {
                                         stringBuilder = new SpannableStringBuilder(result.title);
                                     }
-                                    stringBuilder.setSpan(new ForegroundColorSpan(fragment.getThemedColor(Theme.key_windowBackgroundWhiteBlueText4)), index, index + searchString.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                    int start = normTitle.startMap[index + 1];
+                                    int end = normTitle.endMap[index + searchString.length()];
+                                    if (start >= 0 && end > start && end <= result.title.length()) {
+                                        stringBuilder.setSpan(new ForegroundColorSpan(fragment.getThemedColor(Theme.key_windowBackgroundWhiteBlueText4)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                                    }
                                 } else {
+                                    matchedAll = false;
                                     break;
                                 }
                             }
-                            if (stringBuilder != null && i == searchArgs.length - 1) {
+                            if (matchedAll && stringBuilder != null) {
                                 faqResults.add(result);
                                 names.add(stringBuilder);
                             }
@@ -15727,6 +15854,69 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
         public boolean isSearchWas() {
             return searchWas;
+        }
+
+        private static final class NormalizedText {
+            final String normalized;
+            final int[] startMap;
+            final int[] endMap;
+
+            NormalizedText(String normalized, int[] startMap, int[] endMap) {
+                this.normalized = normalized;
+                this.startMap = startMap;
+                this.endMap = endMap;
+            }
+        }
+
+        private static String normalizeForSearch(String src) {
+            if (src == null || src.isEmpty()) {
+                return "";
+            }
+            String decomposed = java.text.Normalizer.normalize(src.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD);
+            StringBuilder sb = new StringBuilder(decomposed.length());
+            for (int i = 0; i < decomposed.length(); i++) {
+                char c = decomposed.charAt(i);
+                if (Character.getType(c) != Character.NON_SPACING_MARK) {
+                    sb.append(Character.isLetterOrDigit(c) ? c : ' ');
+                }
+            }
+            return sb.toString();
+        }
+
+        private static NormalizedText buildNormalizedText(String src) {
+            int maxLen = Math.max(16, src.length() * 2 + 2);
+            StringBuilder norm = new StringBuilder(maxLen);
+            int[] startMap = new int[maxLen];
+            int[] endMap = new int[maxLen];
+            norm.append(' ');
+            startMap[0] = 0;
+            endMap[0] = 0;
+
+            int i = 0;
+            while (i < src.length()) {
+                int charCount = Character.charCount(src.codePointAt(i));
+                int nextI = i + charCount;
+                String piece = src.substring(i, nextI).toLowerCase(Locale.ROOT);
+                String decomposed = java.text.Normalizer.normalize(piece, java.text.Normalizer.Form.NFD);
+                for (int j = 0; j < decomposed.length(); j++) {
+                    char c = decomposed.charAt(j);
+                    if (Character.getType(c) == Character.NON_SPACING_MARK) {
+                        continue;
+                    }
+                    char out = Character.isLetterOrDigit(c) ? c : ' ';
+                    int pos = norm.length();
+                    if (pos >= startMap.length) {
+                        int newCap = startMap.length * 2;
+                        startMap = Arrays.copyOf(startMap, newCap);
+                        endMap = Arrays.copyOf(endMap, newCap);
+                    }
+                    norm.append(out);
+                    startMap[pos] = i;
+                    endMap[pos] = nextI;
+                }
+                i = nextI;
+            }
+            return new NormalizedText(norm.toString(), startMap, endMap);
         }
     }
 
