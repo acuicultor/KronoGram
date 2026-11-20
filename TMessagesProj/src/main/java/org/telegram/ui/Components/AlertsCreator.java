@@ -8035,6 +8035,10 @@ public class AlertsCreator {
                 } else {
                     cell.setText(LocaleController.getString(R.string.DeleteMessagesOption), "", false, false);
                 }
+                if (org.telegram.messenger.KronoConfig.deleteForAllByDefault) {
+                    deleteForAll[0] = true;
+                    cell.setChecked(true, false);
+                }
                 cell.setPadding(LocaleController.isRTL ? dp(16) : dp(8), 0, LocaleController.isRTL ? dp(8) : dp(16), 0);
                 frameLayout.addView(cell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP | Gravity.LEFT, 0, 0, 0, 0));
                 cell.setOnClickListener(v -> {
@@ -8094,8 +8098,15 @@ public class AlertsCreator {
                 } else {
                     cell.setText(LocaleController.getString(R.string.DeleteMessagesOption), "", false, false);
                 }
+                if (org.telegram.messenger.KronoConfig.deleteForAllByDefault) {
+                    deleteForAll[0] = true;
+                    cell.setChecked(true, false);
+                }
                 cell.setPadding(LocaleController.isRTL ? dp(16) : dp(8), 0, LocaleController.isRTL ? dp(8) : dp(16), 0);
                 frameLayout.addView(cell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP | Gravity.LEFT, 0, 0, 0, 0));
+                if (org.telegram.messenger.KronoConfig.deleteForAllByDefault) {
+                    cell.setChecked(deleteForAll[0] = true, false);
+                }
                 cell.setOnClickListener(v -> {
                     CheckBoxCell cell1 = (CheckBoxCell) v;
                     deleteForAll[0] = !deleteForAll[0];

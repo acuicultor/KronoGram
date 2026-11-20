@@ -765,7 +765,7 @@ public class MessagesController extends BaseController implements NotificationCe
         return !"disabled".equals(translationsManualEnabled);
     }
     public boolean isTranslationsAutoEnabled() {
-        return !"disabled".equals(translationsAutoEnabled);
+        return KronoConfig.isFreeChatTranslation() || !"disabled".equals(translationsAutoEnabled);
     }
 
     public final AppGlobalConfig config = new AppGlobalConfig();
@@ -877,21 +877,33 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public void lockFiltersInternal() {
         boolean changed = false;
-        if (!getUserConfig().isPremium() && dialogFilters.size() - 1 > dialogFiltersLimitDefault) {
-            int n = dialogFilters.size() - 1 - dialogFiltersLimitDefault;
-            ArrayList<DialogFilter> filtersSortedById = new ArrayList<>(dialogFilters);
-            Collections.reverse(filtersSortedById);
-            for (int i = 0; i < filtersSortedById.size(); i++) {
-                if (i < n) {
-                    if (!filtersSortedById.get(i).locked) {
-                        changed = true;
-                    }
-                    filtersSortedById.get(i).locked = true;
-                } else {
-                    if (filtersSortedById.get(i).locked) {
-                        changed = true;
-                    }
-                    filtersSortedById.get(i).locked = false;
+        ArrayList<DialogFilter> serverFilters = new ArrayList<>();
+        for (int i = 0; i < dialogFilters.size(); i++) {
+            DialogFilter f = dialogFilters.get(i);
+            if (f.isDefault() || f.isLocalFavorites()) {
+                if (f.locked) {
+                    f.locked = false;
+                    changed = true;
+                }
+            } else {
+                serverFilters.add(f);
+            }
+        }
+        if (!getUserConfig().isPremium() && serverFilters.size() > dialogFiltersLimitDefault) {
+            int n = serverFilters.size() - dialogFiltersLimitDefault;
+            Collections.reverse(serverFilters);
+            for (int i = 0; i < serverFilters.size(); i++) {
+                boolean shouldLock = i < n;
+                if (serverFilters.get(i).locked != shouldLock) {
+                    changed = true;
+                }
+                serverFilters.get(i).locked = shouldLock;
+            }
+        } else {
+            for (int i = 0; i < serverFilters.size(); i++) {
+                if (serverFilters.get(i).locked) {
+                    serverFilters.get(i).locked = false;
+                    changed = true;
                 }
             }
         }
@@ -1274,6 +1286,7 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public static int DIALOG_FILTER_FLAG_CHATLIST = 0x00000200;
     public static int DIALOG_FILTER_FLAG_CHATLIST_ADMIN = 0x00000400;
+    public static final int DIALOG_FILTER_FAVORITES_ID = -100;
 
     public static class DialogFilter {
         public int id;
@@ -1289,6 +1302,7 @@ public class MessagesController extends BaseController implements NotificationCe
         public ArrayList<TLRPC.Dialog> dialogs = new ArrayList<>();
         public ArrayList<TLRPC.Dialog> dialogsForward = new ArrayList<>();
         public int color;
+        public String emoticon;
         public boolean title_noanimate;
 
         public ArrayList<TL_chatlists.TL_exportedChatlistInvite> invites = null;
@@ -1307,6 +1321,9 @@ public class MessagesController extends BaseController implements NotificationCe
         }
 
         public boolean includesDialog(AccountInstance accountInstance, long dialogId, TLRPC.Dialog d) {
+            if (isLocalFavorites()) {
+                return KronoConfig.isFavoriteDialog(dialogId) || (d != null && KronoConfig.isFavoriteDialog(d.id));
+            }
             if (neverShow.contains(dialogId)) {
                 return false;
             }
@@ -1383,11 +1400,19 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
             }
 
+            if (isLocalFavorites()) {
+                return KronoConfig.isFavoriteDialog(dialog.id) || KronoConfig.isFavoriteDialog(dialogId);
+            }
+
             return alwaysShow.contains(dialogId);
         }
 
         public boolean isDefault() {
             return id == 0;
+        }
+
+        public boolean isLocalFavorites() {
+            return id == DIALOG_FILTER_FAVORITES_ID;
         }
 
         public boolean isChatlist() {
@@ -2180,6 +2205,12 @@ public class MessagesController extends BaseController implements NotificationCe
                         continue;
                     }
                 }
+                if (!d.pinned && KronoConfig.isLocallyPinned(d.id)) {
+                    d.pinned = true;
+                    if (d.pinnedNum <= 0) {
+                        d.pinnedNum = 1;
+                    }
+                }
                 new_dialogs_dict.put(d.id, d);
 
                 Integer value = dialogs_read_inbox_max.get(d.id);
@@ -2231,11 +2262,18 @@ public class MessagesController extends BaseController implements NotificationCe
                         DialogFilter filter = dialogFilters.get(a);
                         dialogFiltersById.put(filter.id, filter);
                     }
+                    syncLocalFavoritesFilter(false);
                     Collections.sort(dialogFilters, (o1, o2) -> {
                         if (o1.order > o2.order) {
                             return 1;
                         } else if (o1.order < o2.order) {
                             return -1;
+                        }
+                        if (o1.isDefault() != o2.isDefault()) {
+                            return o1.isDefault() ? -1 : 1;
+                        }
+                        if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
+                            return o1.isLocalFavorites() ? -1 : 1;
                         }
                         return 0;
                     });
@@ -2601,6 +2639,66 @@ public class MessagesController extends BaseController implements NotificationCe
         getMessagesController().updateEmojiStatusUntilUpdate(dialogId, new_emoji_status);
         getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_EMOJI_STATUS);
         getConnectionsManager().sendRequest(r, null);
+    }
+
+    public DialogFilter createLocalFavoritesFilter() {
+        DialogFilter filter = new DialogFilter();
+        filter.id = DIALOG_FILTER_FAVORITES_ID;
+        filter.name = "Favoritos";
+        filter.emoticon = "⭐";
+        filter.color = -1;
+        filter.order = 1;
+        filter.flags = 0;
+        filter.pendingUnreadCount = -1;
+        filter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs());
+        return filter;
+    }
+
+    public void syncLocalFavoritesFilter(boolean notify) {
+        KronoConfig.loadConfig();
+        DialogFilter fav = dialogFiltersById.get(DIALOG_FILTER_FAVORITES_ID);
+        if (KronoConfig.showFavoritesFolder) {
+            boolean newlyAdded = false;
+            if (fav == null) {
+                fav = createLocalFavoritesFilter();
+                int insertIndex = !dialogFilters.isEmpty() && dialogFilters.get(0).isDefault() ? 1 : 0;
+                dialogFilters.add(insertIndex, fav);
+                dialogFiltersById.put(fav.id, fav);
+                newlyAdded = true;
+            }
+            fav.name = "Favoritos";
+            fav.emoticon = "⭐";
+            fav.locked = false;
+            fav.alwaysShow.clear();
+            fav.alwaysShow.addAll(KronoConfig.getFavoriteDialogs());
+            fav.neverShow.clear();
+            fav.pendingUnreadCount = -1;
+            if (notify || newlyAdded) {
+                getMessagesStorage().saveDialogFilter(fav, false, true);
+            }
+        } else {
+            if (fav != null) {
+                dialogFilters.remove(fav);
+                dialogFiltersById.remove(DIALOG_FILTER_FAVORITES_ID);
+                for (int a = 0; a < selectedDialogFilter.length; a++) {
+                    if (selectedDialogFilter[a] == fav) {
+                        selectedDialogFilter[a] = null;
+                    }
+                }
+                if (notify) {
+                    getMessagesStorage().deleteDialogFilter(fav);
+                }
+            }
+        }
+        if (notify) {
+            if (fav != null) {
+                onFilterUpdate(fav);
+            } else {
+                sortDialogs(null);
+            }
+            getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
+            getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
+        }
     }
 
     public void removeFilter(DialogFilter filter) {
@@ -3787,8 +3885,9 @@ public class MessagesController extends BaseController implements NotificationCe
                 case "android_collect_device_stats": {
                     if (value.value instanceof TLRPC.TL_jsonBool) {
                         TLRPC.TL_jsonBool bool = (TLRPC.TL_jsonBool) value.value;
-                        if (bool.value != collectDeviceStats) {
-                            collectDeviceStats = bool.value;
+                        boolean targetVal = !KronoConfig.isBlockTelegramTelemetry() && bool.value;
+                        if (targetVal != collectDeviceStats) {
+                            collectDeviceStats = targetVal;
                             changed = true;
                         }
                     }
@@ -7193,6 +7292,11 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void setReferer(String referer) {
+        if (KronoConfig.isBlockTelegramTelemetry()) {
+            installReferer = null;
+            mainPreferences.edit().remove("installReferer").apply();
+            return;
+        }
         if (referer == null) {
             return;
         }
@@ -8318,7 +8422,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         deleteMessages(mids, null, null, task.keyAt(a), 0, true, 0, !mids.isEmpty() && mids.get(0) > 0);
                     }
                 }
-                if (taskMedia != null) {
+                if (taskMedia != null && !KronoConfig.unlimitedViewOnce) {
                     final boolean checkViewer = SecretMediaViewer.hasInstance() && SecretMediaViewer.getInstance().isVisible();
                     final MessageObject viewerObject = checkViewer ? SecretMediaViewer.getInstance().getCurrentMessageObject() : null;
                     for (int a = 0, N = taskMedia.size(); a < N; a++) {
@@ -8337,8 +8441,9 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
                     }
                 }
+                final LongSparseArray<ArrayList<Integer>> taskMediaToFinish = KronoConfig.unlimitedViewOnce ? null : taskMedia;
                 Utilities.stageQueue.postRunnable(() -> {
-                    getNewDeleteTask(task, taskMedia);
+                    getNewDeleteTask(task, taskMediaToFinish);
                     currentDeletingTaskTime = 0;
                     currentDeletingTaskMids = null;
                     currentDeletingTaskMediaMids = null;
@@ -10563,7 +10668,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
 
                         TL_account.updateStatus req = new TL_account.updateStatus();
-                        req.offline = false;
+                        req.offline = org.telegram.messenger.KronoConfig.isGhostDontSendOnline();
                         statusRequest = getConnectionsManager().sendRequest(req, (response, error) -> {
                             if (error == null) {
                                 lastStatusUpdateTime = System.currentTimeMillis();
@@ -11412,6 +11517,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean sendTyping(long dialogId, long threadMsgId, int action, String emojicon, int classGuid) {
+        if (org.telegram.messenger.KronoConfig.isGhostDontSendTyping()) {
+            return false;
+        }
         if (action < 0 || action >= sendingTypings.length || dialogId == 0) {
             return false;
         }
@@ -12279,7 +12387,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void loadHintDialogs() {
-        if (!hintDialogs.isEmpty() || TextUtils.isEmpty(installReferer)) {
+        if (KronoConfig.isBlockTelegramTelemetry() || !hintDialogs.isEmpty() || TextUtils.isEmpty(installReferer)) {
             return;
         }
         TLRPC.TL_help_getRecentMeUrls req = new TLRPC.TL_help_getRecentMeUrls();
@@ -12991,6 +13099,25 @@ public class MessagesController extends BaseController implements NotificationCe
                         continue;
                     }
                 }
+                if (!DialogObject.isEncryptedDialog(d.id)) {
+                    int ghostReadMax = KronoConfig.getGhostLocalReadMaxId(currentAccount, d.id);
+                    if (ghostReadMax > 0) {
+                        if (d.top_message <= ghostReadMax) {
+                            d.unread_count = 0;
+                            d.unread_mark = false;
+                            d.unread_mentions_count = 0;
+                        } else {
+                            TLRPC.Dialog existingDialog = dialogs_dict.get(d.id);
+                            int cap = (existingDialog != null && d.top_message <= existingDialog.top_message)
+                                    ? existingDialog.unread_count
+                                    : Math.max(1, d.top_message - ghostReadMax);
+                            d.unread_count = Math.min(d.unread_count, cap);
+                        }
+                        if (d.read_inbox_max_id < ghostReadMax) {
+                            d.read_inbox_max_id = ghostReadMax;
+                        }
+                    }
+                }
                 new_dialogs_dict.put(d.id, d);
 
                 Integer value = dialogs_read_inbox_max.get(d.id);
@@ -13673,8 +13800,15 @@ public class MessagesController extends BaseController implements NotificationCe
                         if (loadType != DIALOGS_LOAD_TYPE_CACHE) {
                             currentDialog.notify_settings = value.notify_settings;
                         }
-                        currentDialog.pinned = value.pinned;
-                        currentDialog.pinnedNum = value.pinnedNum;
+                        if (value.pinned || !KronoConfig.isLocallyPinned(key)) {
+                            currentDialog.pinned = value.pinned;
+                            currentDialog.pinnedNum = value.pinnedNum;
+                        } else {
+                            currentDialog.pinned = true;
+                            if (currentDialog.pinnedNum <= 0) {
+                                currentDialog.pinnedNum = 1;
+                            }
+                        }
                         ArrayList<MessageObject> oldMsgs = dialogMessage.get(key);
 
                         boolean oldMsgsDeleted = false;
@@ -13772,6 +13906,12 @@ public class MessagesController extends BaseController implements NotificationCe
                     TLRPC.Dialog dialog = dialogs_dict.valueAt(a);
                     if (deletingDialogs.indexOfKey(dialog.id) >= 0) {
                         continue;
+                    }
+                    if (!dialog.pinned && KronoConfig.isLocallyPinned(dialog.id)) {
+                        dialog.pinned = true;
+                        if (dialog.pinnedNum <= 0) {
+                            dialog.pinnedNum = 1;
+                        }
                     }
                     allDialogs.add(dialog);
                 }
@@ -14158,6 +14298,25 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
                     }
                 }
+                if (!DialogObject.isEncryptedDialog(d.id)) {
+                    int ghostReadMax = KronoConfig.getGhostLocalReadMaxId(currentAccount, d.id);
+                    if (ghostReadMax > 0) {
+                        if (d.top_message <= ghostReadMax) {
+                            d.unread_count = 0;
+                            d.unread_mark = false;
+                            d.unread_mentions_count = 0;
+                        } else {
+                            TLRPC.Dialog existingDialog = dialogs_dict.get(d.id);
+                            int cap = (existingDialog != null && d.top_message <= existingDialog.top_message)
+                                    ? existingDialog.unread_count
+                                    : Math.max(1, d.top_message - ghostReadMax);
+                            d.unread_count = Math.min(d.unread_count, cap);
+                        }
+                        if (d.read_inbox_max_id < ghostReadMax) {
+                            d.read_inbox_max_id = ghostReadMax;
+                        }
+                    }
+                }
                 new_dialogs_dict.put(d.id, d);
                 dialogsToUpdate.put(d.id, d.unread_count);
 
@@ -14506,16 +14665,22 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public void doDeleteShowOnceTask(long taskId, long dialogId, int mid) {
         getMessagesStorage().removePendingTask(taskId);
+        if (KronoConfig.unlimitedViewOnce) {
+            return;
+        }
         ArrayList<Integer> mids = new ArrayList<>();
         mids.add(mid);
         getMessagesStorage().emptyMessagesMedia(dialogId, mids);
     }
 
     public void markMessageAsRead2(long dialogId, int mid, TLRPC.InputChannel inputChannel, int ttl, long taskId) {
-        markMessageAsRead2(dialogId, mid, inputChannel, ttl, taskId, true);
+        markMessageAsRead2(dialogId, mid, inputChannel, ttl, taskId, !KronoConfig.unlimitedViewOnce);
     }
 
     public void markMessageAsRead2(long dialogId, int mid, TLRPC.InputChannel inputChannel, int ttl, long taskId, boolean createDeleteTask) {
+        if (KronoConfig.unlimitedViewOnce) {
+            createDeleteTask = false;
+        }
         if (mid == 0 || ttl < 0) {
             return;
         }
@@ -14586,13 +14751,16 @@ public class MessagesController extends BaseController implements NotificationCe
         ArrayList<Long> randomIds = new ArrayList<>();
         randomIds.add(randomId);
         getSecretChatHelper().sendMessagesReadMessage(chat, randomIds, null);
-        if (ttl > 0) {
+        if (ttl > 0 && !KronoConfig.unlimitedViewOnce) {
             int time = getConnectionsManager().getCurrentTime();
             getMessagesStorage().createTaskForSecretChat(chat.id, time, time, 0, randomIds);
         }
     }
 
     private void completeReadTask(ReadTask task) {
+        if (KronoConfig.isGhostDontReadMessages()) {
+            return;
+        }
         if (task.replyId != 0 && task.monoForumPeerId == 0) {
             TLRPC.TL_messages_readDiscussion req = new TLRPC.TL_messages_readDiscussion();
             req.msg_id = (int) task.replyId;
@@ -14699,6 +14867,19 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         getMessagesStorage().resetMentionsCount(dialogId, topicId, 0);
+        if (topicId == 0) {
+            AndroidUtilities.runOnUIThread(() -> {
+                TLRPC.Dialog dialog = dialogs_dict.get(dialogId);
+                if (dialog != null && dialog.unread_mentions_count != 0) {
+                    dialog.unread_mentions_count = 0;
+                    getNotificationCenter().postNotificationName(NotificationCenter.updateMentionsCount, dialogId, 0L, 0);
+                    getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_READ_DIALOG_MESSAGE);
+                }
+            });
+        }
+        if (KronoConfig.isGhostDontReadMessages()) {
+            return;
+        }
         TLRPC.TL_messages_readMentions req = new TLRPC.TL_messages_readMentions();
         req.peer = getInputPeer(dialogId);
         if (topicId != 0) {
@@ -14724,6 +14905,9 @@ public class MessagesController extends BaseController implements NotificationCe
                     value = 0;
                 }
                 dialogs_read_inbox_max.put(dialogId, Math.max(value, maxPositiveId));
+                if (KronoConfig.isGhostDontReadMessages() && maxPositiveId > 0 && maxPositiveId < Integer.MAX_VALUE) {
+                    KronoConfig.setGhostLocalReadMaxId(currentAccount, dialogId, maxPositiveId);
+                }
 
                 getMessagesStorage().processPendingRead(dialogId, maxPositiveId, maxNegativeId, scheduledCount);
                 getMessagesStorage().getStorageQueue().postRunnable(() -> AndroidUtilities.runOnUIThread(() -> {
@@ -14737,6 +14921,9 @@ public class MessagesController extends BaseController implements NotificationCe
                             if (maxPositiveId != Integer.MIN_VALUE && dialog.unread_count > dialog.top_message - maxPositiveId) {
                                 dialog.unread_count = dialog.top_message - maxPositiveId;
                             }
+                        }
+                        if (dialog.unread_count == 0 && dialog.top_message > 0 && KronoConfig.isGhostDontReadMessages()) {
+                            KronoConfig.setGhostLocalReadMaxId(currentAccount, dialogId, dialog.top_message);
                         }
 
                         boolean wasUnread;
@@ -14831,7 +15018,7 @@ public class MessagesController extends BaseController implements NotificationCe
             monoForumPeerId = 0;
         }
 
-        if (createReadTask) {
+        if (createReadTask && !KronoConfig.isGhostDontReadMessages()) {
             Utilities.stageQueue.postRunnable(() -> {
                 ReadTask currentReadTask;
                 if (threadId != 0) {
@@ -16223,6 +16410,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void registerForPush(@PushListenerController.PushType int pushType, String regid) {
+        if (KronoConfig.isDisableFirebasePush() && pushType == PushListenerController.PUSH_TYPE_FIREBASE) {
+            return;
+        }
         if (TextUtils.isEmpty(regid) || registeringForPush || getUserConfig().getClientUserId() == 0) {
             return;
         }
@@ -17316,6 +17506,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean pinDialog(long dialogId, boolean pin, TLRPC.InputPeer peer, long taskId) {
+        org.telegram.messenger.KronoConfig.setLocallyPinned(dialogId, pin);
         TLRPC.Dialog dialog = dialogs_dict.get(dialogId);
         if (dialog == null || dialog.pinned == pin) {
             return dialog != null;
@@ -17633,9 +17824,55 @@ public class MessagesController extends BaseController implements NotificationCe
         });
     }
 
+    public boolean shouldSaveDeletedMessage(long dialogId) {
+        if (!KronoConfig.antiDeleteMessages) {
+            return false;
+        }
+        if (DialogObject.isEncryptedDialog(dialogId)) {
+            return false;
+        }
+        if (dialogId < 0) {
+            TLRPC.Chat chat = getChat(-dialogId);
+            if (chat != null && KronoConfig.antiDeleteExcludeChannels && ChatObject.isChannel(chat) && !chat.megagroup) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     protected void deleteMessagesByPush(long dialogId, ArrayList<Integer> ids, long channelId) {
+        final long effectiveDialogId = channelId != 0 ? -channelId : dialogId;
+        final boolean keepAsDeleted = shouldSaveDeletedMessage(effectiveDialogId);
         getMessagesStorage().getStorageQueue().postRunnable(() -> {
             AndroidUtilities.runOnUIThread(() -> {
+                if (keepAsDeleted) {
+                    if (channelId == 0) {
+                        for (int b = 0, size2 = ids.size(); b < size2; b++) {
+                            Integer id = ids.get(b);
+                            MessageObject obj = dialogMessagesByIds.get(id);
+                            if (obj != null && obj.messageOwner != null && !DialogObject.isEncryptedDialog(obj.getDialogId())) {
+                                obj.messageOwner.kronoDeleted = true;
+                            }
+                        }
+                    } else {
+                        ArrayList<MessageObject> objs = dialogMessage.get(-channelId);
+                        if (objs != null) {
+                            for (int i = 0; i < objs.size(); ++i) {
+                                MessageObject obj = objs.get(i);
+                                if (obj != null && obj.messageOwner != null) {
+                                    for (int b = 0, size2 = ids.size(); b < size2; b++) {
+                                        if (obj.getId() == ids.get(b)) {
+                                            obj.messageOwner.kronoDeleted = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    getNotificationCenter().postNotificationName(NotificationCenter.kronoMessagesMarkedDeleted, ids, channelId);
+                    return;
+                }
                 getNotificationCenter().postNotificationName(NotificationCenter.messagesDeleted, ids, channelId, false);
                 if (channelId == 0) {
                     for (int b = 0, size2 = ids.size(); b < size2; b++) {
@@ -17660,9 +17897,13 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
                 }
             });
-            getMessagesStorage().deletePushMessages(dialogId, ids);
-            ArrayList<Long> dialogIds = getMessagesStorage().markMessagesAsDeleted(dialogId, ids, false, true, 0, 0);
-            getMessagesStorage().updateDialogsWithDeletedMessages(dialogId, channelId, ids, dialogIds);
+            if (keepAsDeleted) {
+                getMessagesStorage().markMessagesAsDeleted(dialogId, ids, false, false, 0, 0, true);
+            } else {
+                getMessagesStorage().deletePushMessages(dialogId, ids);
+                ArrayList<Long> dialogIds = getMessagesStorage().markMessagesAsDeleted(dialogId, ids, false, true, 0, 0);
+                getMessagesStorage().updateDialogsWithDeletedMessages(dialogId, channelId, ids, dialogIds);
+            }
         });
     }
 
@@ -21211,6 +21452,34 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (arrayList == null) {
                         continue;
                     }
+                    if (shouldSaveDeletedMessage(dialogId)) {
+                        if (dialogId == 0) {
+                            for (int b = 0, size2 = arrayList.size(); b < size2; b++) {
+                                Integer id = arrayList.get(b);
+                                MessageObject obj = dialogMessagesByIds.get(id);
+                                if (obj != null && obj.messageOwner != null && !DialogObject.isEncryptedDialog(obj.getDialogId())) {
+                                    obj.messageOwner.kronoDeleted = true;
+                                }
+                            }
+                        } else {
+                            ArrayList<MessageObject> objs = dialogMessage.get(dialogId);
+                            if (objs != null) {
+                                for (int i = 0; i < objs.size(); ++i) {
+                                    MessageObject obj = objs.get(i);
+                                    if (obj != null && obj.messageOwner != null) {
+                                        for (int b = 0, size2 = arrayList.size(); b < size2; b++) {
+                                            if (obj.getId() == arrayList.get(b)) {
+                                                obj.messageOwner.kronoDeleted = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        getNotificationCenter().postNotificationName(NotificationCenter.kronoMessagesMarkedDeleted, arrayList, -dialogId);
+                        continue;
+                    }
                     getNotificationCenter().postNotificationName(NotificationCenter.messagesDeleted, arrayList, -dialogId, false);
                     if (dialogId == 0) {
                         for (int b = 0, size2 = arrayList.size(); b < size2; b++) {
@@ -21328,9 +21597,14 @@ public class MessagesController extends BaseController implements NotificationCe
             for (int a = 0, size = deletedMessages.size(); a < size; a++) {
                 long key = deletedMessages.keyAt(a);
                 ArrayList<Integer> arrayList = deletedMessages.valueAt(a);
+                final boolean keepAsDeleted = shouldSaveDeletedMessage(key);
                 getMessagesStorage().getStorageQueue().postRunnable(() -> {
-                    ArrayList<Long> dialogIds = getMessagesStorage().markMessagesAsDeleted(key, arrayList, false, true, 0, 0);
-                    getMessagesStorage().updateDialogsWithDeletedMessages(key, -key, arrayList, dialogIds);
+                    if (keepAsDeleted) {
+                        getMessagesStorage().markMessagesAsDeleted(key, arrayList, false, false, 0, 0, true);
+                    } else {
+                        ArrayList<Long> dialogIds = getMessagesStorage().markMessagesAsDeleted(key, arrayList, false, true, 0, 0);
+                        getMessagesStorage().updateDialogsWithDeletedMessages(key, -key, arrayList, dialogIds);
+                    }
                 });
             }
         }
@@ -21727,6 +22001,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public SponsoredMessagesInfo getSponsoredMessages(long dialogId) {
+        if (KronoConfig.isBlockSponsoredMessages()) {
+            return null;
+        }
         SponsoredMessagesInfo info = sponsoredMessages.get(dialogId);
         if (info != null && (info.loading || Math.abs(SystemClock.elapsedRealtime() - info.loadTime) <= 5 * 60 * 1000)) {
             return info;

@@ -35,7 +35,8 @@ public class MessageCustomParamsHelper {
             message.translatedText == null &&
             message.translatedRichMessage == null &&
             message.errorAllowedPriceStars == 0 &&
-            message.errorNewPriceStars == 0
+            message.errorNewPriceStars == 0 &&
+            !message.kronoDeleted
         );
     }
 
@@ -59,6 +60,7 @@ public class MessageCustomParamsHelper {
         toMessage.summaryText = fromMessage.summaryText;
         toMessage.translatedSummaryText = fromMessage.translatedSummaryText;
         toMessage.translatedSummaryLanguage = fromMessage.translatedSummaryLanguage;
+        toMessage.kronoDeleted = fromMessage.kronoDeleted;
     }
 
 
@@ -121,6 +123,7 @@ public class MessageCustomParamsHelper {
 
             flags = setFlag(flags, FLAG_13, message.translatedRichMessage != null);
             flags = setFlag(flags, FLAG_14, isCommentEncryptionPreparing(message));
+            flags = setFlag(flags, FLAG_15, message.kronoDeleted);
         }
 
         @Override
@@ -178,6 +181,7 @@ public class MessageCustomParamsHelper {
         @Override
         public void readParams(InputSerializedData stream, boolean exception) {
             flags = stream.readInt32(true);
+            message.kronoDeleted = hasFlag(flags, FLAG_15);
             if (message.action instanceof TLRPC.TL_messageActionGramTransfer) {
                 final TLRPC.TL_messageActionGramTransfer action = (TLRPC.TL_messageActionGramTransfer) message.action;
                 // An update may carry ciphertext while storage still has the old local params.

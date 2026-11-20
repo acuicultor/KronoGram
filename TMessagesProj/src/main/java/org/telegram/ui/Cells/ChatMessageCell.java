@@ -6443,7 +6443,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 drawSideButton = checkNeedDrawShareButton(messageObject) ? 2 : 0;
             } else if (messageObject.searchType == ChatActivity.SEARCH_MY_MESSAGES) {
                 drawSideButton = 0;
-            } else if (MessagesController.getInstance(currentAccount).isPeerNoForwards(messageObject.getDialogId()) || (messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+            } else if (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (MessagesController.getInstance(currentAccount).isPeerNoForwards(messageObject.getDialogId()) || (messageObject.messageOwner != null && messageObject.messageOwner.noforwards))) {
                 drawSideButton = 0;
                 if (isPinnedChat && !isRepliesChat && !messageObject.isSponsored()) {
                     if (currentMessagesGroup != null && currentPosition != null) {
@@ -10551,6 +10551,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             Window window = activity == null ? null : activity.getWindow();
             if (window != null) {
                 flagSecure = new FlagSecureReason(window, () ->
+                    !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() &&
                     currentMessageObject != null && currentMessageObject.messageOwner != null && (
                         currentMessageObject.type == MessageObject.TYPE_PAID_MEDIA && (groupMedia == null || !groupMedia.hidden) ||
                         currentMessageObject.messageOwner.noforwards && !currentMessageObject.isEphemeral() ||
@@ -11172,6 +11173,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             !currentMessageObject.isRepostPreview &&
             (!currentMessageObject.isOutOwner() || currentMessageObject.isSent()) &&
             (
+                org.telegram.messenger.KronoConfig.freeVoiceTranscription
+                ||
                 UserConfig.getInstance(currentAccount).isPremium()
                 ||
                 TranscribeButton.isFreeTranscribeInChat(currentMessageObject)
@@ -14620,7 +14623,12 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             fileExists = true;
         }
         if (currentMessageObject.isSendError() || TextUtils.isEmpty(fileName) && (currentMessageObject.isAnyKindOfSticker() || !currentMessageObject.isSending() && !currentMessageObject.isEditing())) {
-            radialProgress.setIcon(MediaActionDrawable.ICON_NONE, ifSame, false);
+            if (currentMessageObject.isSendError() && documentAttachType == DOCUMENT_ATTACH_TYPE_DOCUMENT && !drawPhotoImage) {
+                buttonState = -1;
+                radialProgress.setIcon(getIconForCurrentState(), ifSame, false);
+            } else {
+                radialProgress.setIcon(MediaActionDrawable.ICON_NONE, ifSame, false);
+            }
             radialProgress.setMiniIcon(MediaActionDrawable.ICON_NONE, ifSame, false);
             videoRadialProgress.setIcon(MediaActionDrawable.ICON_NONE, ifSame, false);
             videoRadialProgress.setMiniIcon(MediaActionDrawable.ICON_NONE, ifSame, false);
@@ -15565,9 +15573,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         } else if (current.scheduled && current.messageOwner.date == 0x7FFFFFFE) {
             return "";
         } else if (current.realDate != 0) {
-            return LocaleController.formatSmallDateChat(current.realDate) + ", " + LocaleController.getInstance().getFormatterDay().format((long) (current.realDate) * 1000);
+            return LocaleController.formatSmallDateChat(current.realDate) + ", " + LocaleController.getInstance().getMessageDayFormatter().format((long) (current.realDate) * 1000);
         } else if (current.isRepostPreview) {
-            return LocaleController.formatSmallDateChat(message.messageOwner.date) + ", " + LocaleController.getInstance().getFormatterDay().format((long) (message.messageOwner.date) * 1000);
+            return LocaleController.formatSmallDateChat(message.messageOwner.date) + ", " + LocaleController.getInstance().getMessageDayFormatter().format((long) (message.messageOwner.date) * 1000);
         } else if (edited) {
             if (AppGlobalConfig.getInstance(current.currentAccount).messagePrimaryEditedDate.get()) {
                 if (editDate == 0 && current.isEditing()) {
@@ -15575,7 +15583,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 }
                 return LocaleController.formatPmEditedDate(editDate);
             }
-            return getString(R.string.EditedMessage) + " " + LocaleController.getInstance().getFormatterDay().format((long) (message.messageOwner.date) * 1000);
+            return getString(R.string.EditedMessage) + " " + LocaleController.getInstance().getMessageDayFormatter().format((long) (message.messageOwner.date) * 1000);
         } else if (current.isSaved && current.messageOwner.fwd_from != null && (current.messageOwner.fwd_from.date != 0 || current.messageOwner.fwd_from.saved_date != 0)
                 // A widget keeps its time alone in Saved Messages: the pill over its corner stays short.
                 && !(MessageObject.getMedia(current.messageOwner) instanceof TLRPC.TL_messageMediaWidget)) {
@@ -15585,7 +15593,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             }
             return LocaleController.formatSeenDate(date);
         }
-        return LocaleController.getInstance().getFormatterDay().format((long) (message.messageOwner.date) * 1000);
+        return LocaleController.getInstance().getMessageDayFormatter().format((long) (message.messageOwner.date) * 1000);
     }
 
     void measureTime(MessageObject messageObject) {
@@ -15697,6 +15705,29 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             } else {
                 currentTimeString = TextUtils.concat(formatString(R.string.MessageScheduledRepeatSeconds, period), ", ", currentTimeString);
             }
+        }
+        boolean isKronoDeleted = (currentMessageObject.messageOwner != null && currentMessageObject.messageOwner.kronoDeleted)
+                || (messageObject.messageOwner != null && messageObject.messageOwner.kronoDeleted);
+        if (!isKronoDeleted && currentMessagesGroup != null && currentMessagesGroup.messages != null) {
+            for (int a = 0, size = currentMessagesGroup.messages.size(); a < size; a++) {
+                MessageObject object = currentMessagesGroup.messages.get(a);
+                if (object != null && object.messageOwner != null && object.messageOwner.kronoDeleted) {
+                    isKronoDeleted = true;
+                    break;
+                }
+            }
+        }
+        if (isKronoDeleted && !TextUtils.isEmpty(currentTimeString)) {
+            SpannableStringBuilder deletedBadge = new SpannableStringBuilder("eliminado ");
+            if (!shouldDrawTimeOnMedia()) {
+                int color = getThemedColor(Theme.key_text_RedRegular);
+                if (color == 0) {
+                    color = 0xFFE53935;
+                }
+                deletedBadge.setSpan(new android.text.style.ForegroundColorSpan(color), 0, "eliminado".length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            deletedBadge.append(currentTimeString);
+            currentTimeString = deletedBadge;
         }
         timeTextWidth = timeWidth = (int) Math.ceil(Theme.chat_timePaint.measureText(currentTimeString, 0, currentTimeString == null ? 0 : currentTimeString.length()));
         if (currentMessageObject.scheduled && currentMessageObject.messageOwner.date == 0x7FFFFFFE || currentMessageObject.notime) {

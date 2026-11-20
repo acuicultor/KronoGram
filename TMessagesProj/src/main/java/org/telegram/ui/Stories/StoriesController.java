@@ -1326,6 +1326,9 @@ public class StoriesController {
     }
 
     public boolean markStoryAsRead(TL_stories.PeerStories userStories, TL_stories.StoryItem storyItem, boolean profile) {
+        if (org.telegram.messenger.KronoConfig.isGhostDontReadStories()) {
+            return false;
+        }
         if (storyItem == null || userStories == null) {
             return false;
         }

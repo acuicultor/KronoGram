@@ -73,10 +73,14 @@ import androidx.media3.common.C;
 import androidx.media3.exoplayer.ExoPlayer;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.BuildVars;
+import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -89,12 +93,15 @@ import org.telegram.messenger.utils.WindowVisibilityManager;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.ActionBarMenu;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.TextSelectionHelper;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
 import org.telegram.ui.Components.AnimatedEmojiSpan;
 import org.telegram.ui.Components.AnimationProperties;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.CubicBezierInterpolator;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.PlayPauseDrawable;
@@ -347,6 +354,7 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
     private VideoPlayer videoPlayer;
     private boolean isPlaying;
     private ActionBar actionBar;
+    private ActionBarMenuItem saveMenuItem;
     private AnimatorSet currentActionBarAnimation;
     private boolean videoWatchedOneTime;
     private boolean closeVideoAfterWatch;
@@ -513,6 +521,9 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
                 }
             }
         } else if (id == NotificationCenter.updateMessageMedia) {
+            if (KronoConfig.unlimitedViewOnce) {
+                return;
+            }
             TLRPC.Message message = (TLRPC.Message) args[0];
             if (currentMessageObject.getId() == message.id) {
                 if (isVideo && !videoWatchedOneTime) {
@@ -864,12 +875,18 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
         actionBar.setItemsColor(Color.WHITE, false);
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         actionBar.setTitleRightMargin(dp(70));
+        ActionBarMenu menu = actionBar.createMenu();
+        saveMenuItem = menu.addItem(1, R.drawable.msg_gallery);
+        saveMenuItem.setContentDescription(LocaleController.getString(R.string.SaveToGallery));
+        saveMenuItem.setVisibility(View.GONE);
         containerView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
                 if (id == -1) {
                     closePhoto(true, false);
+                } else if (id == 1) {
+                    saveCurrentMediaToGallery();
                 }
             }
         });
@@ -965,8 +982,10 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
                 WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR |
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                 WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
-        windowLayoutParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;
-        AndroidUtilities.logFlagSecure();
+        if (!KronoConfig.viewOnceAllowSaveAndScreenshots && !KronoConfig.isAllowRestrictedContentBypass()) {
+            windowLayoutParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;
+            AndroidUtilities.logFlagSecure();
+        }
         centerImage.setParentView(containerView);
         centerImage.setForceCrossfade(true);
 
@@ -1565,6 +1584,25 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
             FileLog.e(e);
         }
 
+        final boolean allowSecretBypass = KronoConfig.isAllowRestrictedContentBypass() && currentMessageObject != null && DialogObject.isEncryptedDialog(currentMessageObject.getDialogId());
+        if (KronoConfig.viewOnceAllowSaveAndScreenshots || allowSecretBypass) {
+            windowLayoutParams.flags &= ~WindowManager.LayoutParams.FLAG_SECURE;
+        } else {
+            windowLayoutParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;
+            AndroidUtilities.logFlagSecure();
+        }
+        final boolean showSaveButton = KronoConfig.viewOnceAllowSaveAndScreenshots || allowSecretBypass;
+        if (saveMenuItem != null) {
+            saveMenuItem.setVisibility(showSaveButton ? View.VISIBLE : View.GONE);
+        }
+        actionBar.setTitleRightMargin(dp(showSaveButton ? 112 : 70));
+        if (secretDeleteTimer != null && secretDeleteTimer.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            ((FrameLayout.LayoutParams) secretDeleteTimer.getLayoutParams()).rightMargin = dp(showSaveButton ? 48 : 0);
+        }
+        if (secretHint != null && secretHint.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            ((FrameLayout.LayoutParams) secretHint.getLayoutParams()).rightMargin = dp(showSaveButton ? 48 : 0);
+        }
+
         WindowManager wm = (WindowManager) parentActivity.getSystemService(Context.WINDOW_SERVICE);
         wm.addView(windowView, windowLayoutParams);
         secretDeleteTimer.invalidate();
@@ -1639,6 +1677,75 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
 
     public boolean isShowingImage(MessageObject object) {
         return isVisible && !disableShowCheck && object != null && currentMessageObject != null && currentMessageObject.getId() == object.getId();
+    }
+
+    private void saveCurrentMediaToGallery() {
+        if (parentActivity == null || currentMessageObject == null) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 23 && (Build.VERSION.SDK_INT <= 28 || BuildVars.NO_SCOPED_STORAGE)
+                && parentActivity.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            parentActivity.requestPermissions(new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 4);
+            return;
+        }
+        File file = null;
+        if (!TextUtils.isEmpty(currentMessageObject.messageOwner.attachPath)) {
+            File f = new File(currentMessageObject.messageOwner.attachPath);
+            if (f.exists()) {
+                file = f;
+            }
+        }
+        if (file == null) {
+            File f = FileLoader.getInstance(currentAccount).getPathToMessage(currentMessageObject.messageOwner);
+            if (f != null && f.exists()) {
+                file = f;
+            } else if (f != null) {
+                File enc = new File(f.getAbsolutePath() + ".enc");
+                if (enc.exists()) {
+                    file = enc;
+                }
+            }
+        }
+        if (file == null && currentMessageObject.getDocument() != null) {
+            File f = FileLoader.getInstance(currentAccount).getPathToAttach(currentMessageObject.getDocument(), true);
+            if (f != null && f.exists()) {
+                file = f;
+            }
+        }
+        File tempToDelete = null;
+        if (file == null && !isVideo && centerImage.getBitmap() != null) {
+            try {
+                File cacheDir = FileLoader.checkDirectory(FileLoader.MEDIA_DIR_CACHE);
+                File temp = new File(cacheDir, "krono_vo_" + currentMessageObject.getId() + ".jpg");
+                boolean ok;
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(temp)) {
+                    ok = centerImage.getBitmap().compress(Bitmap.CompressFormat.JPEG, 95, out);
+                }
+                if (ok && temp.exists() && temp.length() > 0) {
+                    file = temp;
+                    tempToDelete = temp;
+                } else {
+                    //noinspection ResultOfMethodCallIgnored
+                    temp.delete();
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
+        if (file == null) {
+            return;
+        }
+        final boolean video = isVideo;
+        final File cleanupTemp = tempToDelete;
+        MediaController.saveFile(file.toString(), parentActivity, video ? 1 : 0, null, null, uri -> {
+            if (cleanupTemp != null && cleanupTemp.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                cleanupTemp.delete();
+            }
+            if (containerView != null) {
+                BulletinFactory.createSaveToGalleryBulletin(containerView, video, 0xf9222222, 0xffffffff).show();
+            }
+        });
     }
 
     private final Runnable hideActionBarRunnable = () -> {

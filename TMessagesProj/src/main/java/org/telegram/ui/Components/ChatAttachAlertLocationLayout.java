@@ -217,7 +217,7 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
             searchAdapter.destroy();
         }
 
-        locationDenied = Build.VERSION.SDK_INT >= 23 && getParentActivity() != null && getParentActivity().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED;
+        locationDenied = getParentActivity() != null && !hasLocationPermission(getParentActivity());
 
         ActionBarMenu menu = parentAlert.actionBar.createMenu();
 
@@ -374,7 +374,7 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
             if (Build.VERSION.SDK_INT >= 23) {
                 Activity activity = getParentActivity();
                 if (activity != null) {
-                    if (activity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    if (!hasLocationPermission(activity)) {
                         AlertsCreator.createLocationRequiredDialog(getParentActivity(), true).show();
                         return;
                     }
@@ -521,7 +521,17 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
                     return;
                 }
             } else if (position == 1) {
-                if (delegate != null && userLocation != null) {
+                if (locationDenied && !userLocationMoved) {
+                    AlertsCreator.createLocationRequiredDialog(getParentActivity(), true).show();
+                    return;
+                }
+                if (!userLocationMoved && myLocation == null) {
+                    Location fallback = getLastLocation();
+                    if (fallback != null) {
+                        positionMarker(fallback);
+                    }
+                }
+                if (delegate != null && userLocation != null && (userLocationMoved || myLocation != null)) {
                     TLRPC.TL_messageMediaGeo location = new TLRPC.TL_messageMediaGeo();
                     location.geo = new TLRPC.TL_geoPoint();
                     location.geo.lat = AndroidUtilities.fixLocationCoord(userLocation.getLatitude());
@@ -539,6 +549,12 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
                     });
                 } else if (locationDenied) {
                     AlertsCreator.createLocationRequiredDialog(getParentActivity(), true).show();
+                } else if (map != null) {
+                    try {
+                        map.setMyLocationEnabled(true);
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
                 }
                 return;
             } else if (position == 2 && locationType == LOCATION_TYPE_SEND_WITH_LIVE) {
@@ -1382,18 +1398,41 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
         updateClipView();
     }
 
+    private static boolean hasLocationPermission(Context context) {
+        if (Build.VERSION.SDK_INT < 23 || context == null) {
+            return true;
+        }
+        return context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            || context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
     @SuppressLint("MissingPermission")
     private Location getLastLocation() {
+        if (!hasLocationPermission(ApplicationLoader.applicationContext)) {
+            return null;
+        }
         LocationManager lm = (LocationManager) ApplicationLoader.applicationContext.getSystemService(Context.LOCATION_SERVICE);
-        List<String> providers = lm.getProviders(true);
-        Location l = null;
-        for (int i = providers.size() - 1; i >= 0; i--) {
-            l = lm.getLastKnownLocation(providers.get(i));
-            if (l != null) {
-                break;
+        Location best = null;
+        if (lm != null) {
+            List<String> providers = lm.getProviders(true);
+            if (Build.VERSION.SDK_INT >= 31 && !providers.contains(LocationManager.FUSED_PROVIDER)) {
+                providers = new ArrayList<>(providers);
+                providers.add(LocationManager.FUSED_PROVIDER);
+            }
+            for (int i = providers.size() - 1; i >= 0; i--) {
+                try {
+                    Location l = lm.getLastKnownLocation(providers.get(i));
+                    if (l != null && (best == null || l.getTime() > best.getTime())) {
+                        best = l;
+                    }
+                } catch (Throwable ignored) {
+                }
             }
         }
-        return l;
+        if (best == null) {
+            best = getLocationController().getLastKnownLocation();
+        }
+        return best;
     }
 
     private void positionMarker() {
@@ -1513,6 +1552,27 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
             }
         }
         onResumeCalled = true;
+        Activity activity = getParentActivity();
+        if (activity != null) {
+            boolean nowDenied = !hasLocationPermission(activity);
+            if (nowDenied != locationDenied) {
+                locationDenied = nowDenied;
+                askedForLocation = false;
+                if (adapter != null) {
+                    adapter.setMyLocationDenied(locationDenied, false);
+                }
+                if (!locationDenied) {
+                    positionMarker();
+                    if (map != null) {
+                        try {
+                            map.setMyLocationEnabled(true);
+                        } catch (Exception e) {
+                            FileLog.e(e);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Override
@@ -1546,7 +1606,7 @@ public class ChatAttachAlertLocationLayout extends ChatAttachAlert.AttachAlertLa
                 Activity activity = getParentActivity();
                 if (activity != null) {
                     checkPermission = false;
-                    if (activity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    if (!hasLocationPermission(activity)) {
                         String[] permissions = parentAlert.isStoryLocationPicker && parentAlert.storyLocationPickerPhotoFile != null && Build.VERSION.SDK_INT >= 29 ?
                             new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_MEDIA_LOCATION} :
                             new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION};

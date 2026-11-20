@@ -234,7 +234,7 @@ public class MessagesSearchAdapter extends RecyclerListView.SelectionAdapter imp
     public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
         if (holder.getItemViewType() == 0) {
             DialogCell cell = (DialogCell) holder.itemView;
-            cell.useSeparator = true;
+            cell.useSeparator = position < getItemCount() - 1;
             MessageObject messageObject = (MessageObject) getItem(position);
             int date;
             long did;

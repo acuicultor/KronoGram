@@ -14,6 +14,9 @@ import android.content.Intent;
 
 public class RefererReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
+        if (KronoConfig.isBlockTelegramTelemetry()) {
+            return;
+        }
         try {
             MessagesController.getInstance(UserConfig.selectedAccount).setReferer(intent.getExtras().getString("referrer"));
         } catch (Exception ignore) {

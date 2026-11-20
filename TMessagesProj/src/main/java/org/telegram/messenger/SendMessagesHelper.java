@@ -98,6 +98,7 @@ import org.telegram.ui.Stars.StarsIntroActivity;
 import org.telegram.ui.TON.TONIntroActivity;
 import org.telegram.ui.bots.BotWebViewSheet;
 import org.telegram.ui.Components.Bulletin;
+import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Premium.LimitReachedBottomSheet;
 import org.telegram.ui.Components.Reactions.ReactionsLayoutInBubble;
@@ -2313,6 +2314,46 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 canSendMusic = ChatObject.canSendMusic(chat);
             }
 
+            ArrayList<MessageObject> restrictedToCopy = null;
+            ArrayList<MessageObject> normalToForward = messages;
+            if (KronoConfig.isAllowRestrictedContentBypass()) {
+                for (int a = 0; a < messages.size(); a++) {
+                    MessageObject m = messages.get(a);
+                    if (m != null && m.messageOwner != null && (m.messageOwner.noforwards || getMessagesController().isPeerNoForwards(m.getDialogId()) || DialogObject.isEncryptedDialog(m.getDialogId()))) {
+                        if (restrictedToCopy == null) {
+                            restrictedToCopy = new ArrayList<>();
+                        }
+                        restrictedToCopy.add(m);
+                    }
+                }
+                if (restrictedToCopy != null) {
+                    if (restrictedToCopy.size() == messages.size()) {
+                        normalToForward = null;
+                    } else {
+                        normalToForward = new ArrayList<>();
+                        for (int a = 0; a < messages.size(); a++) {
+                            MessageObject m = messages.get(a);
+                            if (!restrictedToCopy.contains(m)) {
+                                normalToForward.add(m);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (restrictedToCopy != null) {
+                sendResult = copyForwardRestrictedMessages(
+                        restrictedToCopy, peer, hideCaption, notify, scheduleDate, scheduleRepeatPeriod,
+                        replyToTopMsg, payStars, monoForumPeerId, suggestionParams,
+                        chat, canSendStickers, canSendPhoto, canSendMusic, canSendVideo,
+                        canSendPolls, canSendVoiceMessages, canSendVoiceRound, canSendDocument, canSendPreview
+                );
+            }
+
+            if (normalToForward == null || normalToForward.isEmpty()) {
+                return sendResult;
+            }
+
             LongSparseArray<Long> groupsMap = new LongSparseArray<>();
             ArrayList<MessageObject> objArr = new ArrayList<>();
             ArrayList<TLRPC.Message> arr = new ArrayList<>();
@@ -2324,8 +2365,8 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             long lastDialogId = 0;
             final boolean toMyself = peer == myId;
             long lastGroupedId;
-            for (int a = 0; a < messages.size(); a++) {
-                MessageObject msgObj = messages.get(a);
+            for (int a = 0; a < normalToForward.size(); a++) {
+                MessageObject msgObj = normalToForward.get(a);
                 if (msgObj.getId() <= 0 || msgObj.needDrawBluredPreview()) {
                     if (msgObj.type == MessageObject.TYPE_TEXT && !TextUtils.isEmpty(msgObj.messageText)) {
                         TLRPC.WebPage webPage = msgObj.messageOwner.media != null ? msgObj.messageOwner.media.webpage : null;
@@ -2712,7 +2753,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     }
                 }
 
-                if (arr.size() == 100 || a == messages.size() - 1 || a != messages.size() - 1 && messages.get(a + 1).getDialogId() != msgObj.getDialogId()) {
+                if (arr.size() == 100 || a == normalToForward.size() - 1 || a != normalToForward.size() - 1 && normalToForward.get(a + 1).getDialogId() != msgObj.getDialogId()) {
                     getMessagesStorage().putMessages(new ArrayList<>(arr), false, true, false, 0, scheduleDate != 0 ? 1 : 0, 0);
                     getMessagesController().updateInterfaceWithMessages(peer, objArr, scheduleDate != 0 ? 1 : 0);
                     getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
@@ -2747,7 +2788,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     req.id = ids;
                     req.drop_author = forwardFromMyName;
                     req.drop_media_captions = hideCaption;
-                    req.with_my_score = messages.size() == 1 && messages.get(0).messageOwner.with_my_score;
+                    req.with_my_score = normalToForward.size() == 1 && normalToForward.get(0).messageOwner.with_my_score;
                     req.from_ephemeral = fwdEphemeral;
                     if (video_timestamp >= 0) {
                         req.flags |= 1048576;
@@ -2957,7 +2998,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         send2.run();
                     }
 
-                    if (a != messages.size() - 1) {
+                    if (a != normalToForward.size() - 1) {
                         objArr = new ArrayList<>();
                         arr = new ArrayList<>();
                         randomIds = new ArrayList<>();
@@ -2996,6 +3037,287 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 for (int a = 0; a < messages.size(); a++) {
                     processForwardFromMyName(messages.get(a), peer, payStars, monoForumPeerId, suggestionParams);
                 }
+            }
+        }
+        return sendResult;
+    }
+
+    private File resolveLocalMediaFileForCopyForward(MessageObject msgObj) {
+        if (msgObj == null || msgObj.messageOwner == null) {
+            return null;
+        }
+        if (!TextUtils.isEmpty(msgObj.messageOwner.attachPath)) {
+            File f = new File(msgObj.messageOwner.attachPath);
+            if (f.exists() && f.length() > 0) {
+                return f;
+            }
+        }
+        File f = FileLoader.getInstance(currentAccount).getPathToMessage(msgObj.messageOwner);
+        if (f != null && f.exists() && f.length() > 0) {
+            return f;
+        }
+        return null;
+    }
+
+    private boolean isCopyForwardAlbumItem(MessageObject msgObj) {
+        if (msgObj == null || msgObj.messageOwner == null || msgObj.getGroupId() == 0) {
+            return false;
+        }
+        return msgObj.isPhoto() || (msgObj.isVideo() && !msgObj.isGif() && !msgObj.isRoundVideo());
+    }
+
+    private int copyForwardRestrictedMessages(
+        ArrayList<MessageObject> messages,
+        final long peer,
+        boolean hideCaption,
+        boolean notify,
+        int scheduleDate,
+        int scheduleRepeatPeriod,
+        MessageObject replyToTopMsg,
+        long payStars,
+        long monoForumPeerId,
+        MessageSuggestionParams suggestionParams,
+        TLRPC.Chat chat,
+        boolean canSendStickers,
+        boolean canSendPhoto,
+        boolean canSendMusic,
+        boolean canSendVideo,
+        boolean canSendPolls,
+        boolean canSendVoiceMessages,
+        boolean canSendVoiceRound,
+        boolean canSendDocument,
+        boolean canSendPreview
+    ) {
+        int sendResult = 0;
+        boolean showedDownloadHint = false;
+        for (int a = 0; a < messages.size(); a++) {
+            MessageObject msgObj = messages.get(a);
+            if (msgObj == null || msgObj.messageOwner == null) {
+                continue;
+            }
+            if ((msgObj.getId() <= 0 && !DialogObject.isEncryptedDialog(msgObj.getDialogId())) || msgObj.needDrawBluredPreview()) {
+                if (msgObj.type == MessageObject.TYPE_TEXT && !TextUtils.isEmpty(msgObj.messageText)) {
+                    TLRPC.WebPage webPage = canSendPreview && msgObj.messageOwner.media != null ? msgObj.messageOwner.media.webpage : null;
+                    final SendMessageParams params = SendMessageParams.of(msgObj.messageText.toString(), peer, null, replyToTopMsg, webPage, webPage != null, msgObj.messageOwner.entities, null, null, notify, scheduleDate, scheduleRepeatPeriod, null, false);
+                    params.suggestionParams = suggestionParams;
+                    params.monoForumPeer = monoForumPeerId;
+                    params.payStars = payStars;
+                    params.quick_reply_shortcut = msgObj.getQuickReplyName();
+                    params.quick_reply_shortcut_id = msgObj.getQuickReplyId();
+                    sendMessage(params);
+                }
+                continue;
+            }
+            boolean mediaIsSticker = (msgObj.isSticker() || msgObj.isAnimatedSticker() || msgObj.isGif() || msgObj.isGame());
+            if (!canSendStickers && mediaIsSticker) {
+                if (sendResult == 0) {
+                    sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_STICKERS) ? 4 : 1;
+                }
+                continue;
+            } else if (!canSendPhoto && msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaPhoto && !msgObj.isVideo() && !mediaIsSticker) {
+                if (sendResult == 0) {
+                    sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_PHOTO) ? 10 : 12;
+                }
+                continue;
+            } else if (!canSendMusic && msgObj.isMusic()) {
+                if (sendResult == 0) {
+                    sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_MUSIC) ? 19 : 20;
+                }
+                continue;
+            } else if (!canSendVideo && msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaPhoto && msgObj.isVideo() && !mediaIsSticker) {
+                if (sendResult == 0) {
+                    sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_VIDEO) ? 9 : 11;
+                }
+                continue;
+            } else if (!canSendPolls && msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaPoll) {
+                if (sendResult == 0) {
+                    sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_POLLS) ? 6 : 3;
+                }
+                continue;
+            } else if (!canSendPolls && msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaToDo) {
+                if (sendResult == 0) {
+                    sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_POLLS) ? 21 : 22;
+                }
+                continue;
+            } else if (!canSendVoiceMessages && MessageObject.isVoiceMessage(msgObj.messageOwner)) {
+                if (chat != null) {
+                    if (sendResult == 0) {
+                        sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_VOICE) ? 13 : 14;
+                    }
+                } else if (sendResult == 0) {
+                    sendResult = 7;
+                }
+                continue;
+            } else if (!canSendVoiceRound && MessageObject.isRoundVideoMessage(msgObj.messageOwner)) {
+                if (chat != null) {
+                    if (sendResult == 0) {
+                        sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_ROUND) ? 15 : 16;
+                    }
+                } else if (sendResult == 0) {
+                    sendResult = 8;
+                }
+                continue;
+            } else if (!canSendDocument && msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaDocument && !mediaIsSticker) {
+                if (sendResult == 0) {
+                    sendResult = ChatObject.isActionBannedByDefault(chat, ChatObject.ACTION_SEND_DOCUMENTS) ? 17 : 18;
+                }
+                continue;
+            }
+
+            if ((msgObj.isSticker() || msgObj.isAnimatedSticker()) && msgObj.messageOwner.media != null && msgObj.messageOwner.media.document instanceof TLRPC.TL_document) {
+                TLRPC.TL_document doc = (TLRPC.TL_document) msgObj.messageOwner.media.document;
+                if (doc.access_hash != 0) {
+                    SendMessageParams fparams = SendMessageParams.of(doc, null, msgObj.messageOwner.attachPath, peer, null, replyToTopMsg, null, null, null, null, notify, scheduleDate, scheduleRepeatPeriod, 0, msgObj, null, false);
+                    fparams.payStars = payStars;
+                    fparams.monoForumPeer = monoForumPeerId;
+                    fparams.suggestionParams = suggestionParams;
+                    sendMessage(fparams);
+                    continue;
+                }
+            }
+
+            if (msgObj.messageOwner.media == null || msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaEmpty || msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaWebPage) {
+                if (!TextUtils.isEmpty(msgObj.messageOwner.message)) {
+                    TLRPC.WebPage webPage = (canSendPreview && msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaWebPage) ? msgObj.messageOwner.media.webpage : null;
+                    SendMessageParams params = SendMessageParams.of(msgObj.messageOwner.message, peer, null, replyToTopMsg, webPage, webPage != null, msgObj.messageOwner.entities, null, null, notify, scheduleDate, scheduleRepeatPeriod, null, false);
+                    params.payStars = payStars;
+                    params.monoForumPeer = monoForumPeerId;
+                    params.suggestionParams = suggestionParams;
+                    sendMessage(params);
+                }
+                continue;
+            }
+
+            if (msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaGeo || msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaVenue) {
+                SendMessageParams fparams = SendMessageParams.of(msgObj.messageOwner.media, peer, null, replyToTopMsg, null, null, notify, scheduleDate, scheduleRepeatPeriod);
+                fparams.payStars = payStars;
+                fparams.monoForumPeer = monoForumPeerId;
+                fparams.suggestionParams = suggestionParams;
+                sendMessage(fparams);
+                continue;
+            }
+
+            if (msgObj.messageOwner.media.phone_number != null) {
+                TLRPC.User user = new TLRPC.TL_userContact_old2();
+                user.phone = msgObj.messageOwner.media.phone_number;
+                user.first_name = msgObj.messageOwner.media.first_name;
+                user.last_name = msgObj.messageOwner.media.last_name;
+                user.id = msgObj.messageOwner.media.user_id;
+                SendMessageParams fparams = SendMessageParams.of(user, peer, null, replyToTopMsg, null, null, notify, scheduleDate, scheduleRepeatPeriod);
+                fparams.payStars = payStars;
+                fparams.monoForumPeer = monoForumPeerId;
+                fparams.suggestionParams = suggestionParams;
+                sendMessage(fparams);
+                continue;
+            }
+
+            if (msgObj.messageOwner.media instanceof TLRPC.TL_messageMediaPoll) {
+                SendMessageParams fparams = SendMessageParams.of((TLRPC.TL_messageMediaPoll) msgObj.messageOwner.media, peer, null, replyToTopMsg, null, null, notify, scheduleDate, scheduleRepeatPeriod);
+                fparams.payStars = payStars;
+                fparams.monoForumPeer = monoForumPeerId;
+                fparams.suggestionParams = suggestionParams;
+                sendMessage(fparams);
+                continue;
+            }
+
+            if (isCopyForwardAlbumItem(msgObj)) {
+                long groupId = msgObj.getGroupId();
+                ArrayList<SendingMediaInfo> mediaInfos = new ArrayList<>();
+                int endIdx = a;
+                boolean allDownloaded = true;
+                for (int b = a; b < messages.size(); b++) {
+                    MessageObject item = messages.get(b);
+                    if (!isCopyForwardAlbumItem(item) || item.getGroupId() != groupId) {
+                        break;
+                    }
+                    File file = resolveLocalMediaFileForCopyForward(item);
+                    if (file == null) {
+                        allDownloaded = false;
+                        if (item.isPhoto() && item.photoThumbs != null && !item.photoThumbs.isEmpty()) {
+                            TLRPC.PhotoSize size = FileLoader.getClosestPhotoSizeWithSize(item.photoThumbs, AndroidUtilities.getPhotoSize());
+                            if (size != null) {
+                                FileLoader.getInstance(currentAccount).loadFile(ImageLocation.getForObject(size, item.photoThumbsObject), item, null, FileLoader.PRIORITY_HIGH, 1);
+                            }
+                        } else if (item.getDocument() != null) {
+                            FileLoader.getInstance(currentAccount).loadFile(item.getDocument(), item, FileLoader.PRIORITY_HIGH, 0);
+                        }
+                    } else {
+                        SendingMediaInfo info = new SendingMediaInfo();
+                        info.path = file.getAbsolutePath();
+                        info.isVideo = item.isVideo();
+                        if (!hideCaption && !TextUtils.isEmpty(item.messageOwner.message)) {
+                            info.caption = item.messageOwner.message;
+                            info.entities = item.messageOwner.entities;
+                        }
+                        mediaInfos.add(info);
+                    }
+                    endIdx = b;
+                }
+                if (endIdx > a) {
+                    if (!allDownloaded && !showedDownloadHint) {
+                        showedDownloadHint = true;
+                        AndroidUtilities.runOnUIThread(() -> BulletinFactory.global().createSimpleBulletin(R.raw.ic_download, "Descargando multimedia, inténtalo de nuevo en un momento").show());
+                    }
+                    if (!mediaInfos.isEmpty()) {
+                        prepareSendingMedia(getAccountInstance(), mediaInfos, peer, null, replyToTopMsg, null, null, false, mediaInfos.size() > 1, null, notify, scheduleDate, scheduleRepeatPeriod, 0, false, null, null, 0, false, payStars, monoForumPeerId, suggestionParams);
+                    }
+                    a = endIdx;
+                    continue;
+                }
+            }
+
+            File file = resolveLocalMediaFileForCopyForward(msgObj);
+            if (file == null) {
+                if (msgObj.isPhoto() && msgObj.photoThumbs != null && !msgObj.photoThumbs.isEmpty()) {
+                    TLRPC.PhotoSize size = FileLoader.getClosestPhotoSizeWithSize(msgObj.photoThumbs, AndroidUtilities.getPhotoSize());
+                    if (size != null) {
+                        FileLoader.getInstance(currentAccount).loadFile(ImageLocation.getForObject(size, msgObj.photoThumbsObject), msgObj, null, FileLoader.PRIORITY_HIGH, 1);
+                    }
+                } else if (msgObj.getDocument() != null) {
+                    FileLoader.getInstance(currentAccount).loadFile(msgObj.getDocument(), msgObj, FileLoader.PRIORITY_HIGH, 0);
+                }
+                if (!showedDownloadHint) {
+                    showedDownloadHint = true;
+                    AndroidUtilities.runOnUIThread(() -> BulletinFactory.global().createSimpleBulletin(R.raw.ic_download, "Descargando multimedia, inténtalo de nuevo en un momento").show());
+                }
+                continue;
+            }
+
+            CharSequence caption = !hideCaption && !TextUtils.isEmpty(msgObj.messageOwner.message) ? msgObj.messageOwner.message : null;
+            ArrayList<TLRPC.MessageEntity> entities = !hideCaption ? msgObj.messageOwner.entities : null;
+            if (msgObj.isPhoto()) {
+                prepareSendingPhoto(getAccountInstance(), file.getAbsolutePath(), null, null, peer, null, replyToTopMsg, null, null, entities, null, null, 0, null, null, notify, scheduleDate, scheduleRepeatPeriod, 0, false, caption, null, 0, payStars, monoForumPeerId, suggestionParams);
+            } else if (msgObj.isRoundVideo()) {
+                VideoEditedInfo vei = createCompressionSettings(file.getAbsolutePath(), 0);
+                if (vei == null) {
+                    vei = new VideoEditedInfo();
+                }
+                vei.roundVideo = true;
+                prepareSendingVideo(getAccountInstance(), file.getAbsolutePath(), vei, null, null, peer, null, replyToTopMsg, null, null, entities, 0, null, notify, scheduleDate, scheduleRepeatPeriod, false, false, caption, null, 0, payStars, monoForumPeerId, suggestionParams);
+            } else if (msgObj.isVideo() && !msgObj.isGif()) {
+                prepareSendingVideo(getAccountInstance(), file.getAbsolutePath(), null, null, null, peer, null, replyToTopMsg, null, null, entities, 0, null, notify, scheduleDate, scheduleRepeatPeriod, false, false, caption, null, 0, payStars, monoForumPeerId, suggestionParams);
+            } else if (msgObj.isGif()) {
+                if (file.getName().toLowerCase().endsWith(".mp4")) {
+                    VideoEditedInfo vei = createCompressionSettings(file.getAbsolutePath(), 0);
+                    if (vei != null) {
+                        vei.muted = true;
+                    }
+                    prepareSendingVideo(getAccountInstance(), file.getAbsolutePath(), vei, null, null, peer, null, replyToTopMsg, null, null, entities, 0, null, notify, scheduleDate, scheduleRepeatPeriod, false, false, caption, null, 0, payStars, monoForumPeerId, suggestionParams);
+                } else {
+                    SendingMediaInfo info = new SendingMediaInfo();
+                    info.path = file.getAbsolutePath();
+                    if (caption != null) {
+                        info.caption = caption.toString();
+                    }
+                    info.entities = entities;
+                    ArrayList<SendingMediaInfo> infos = new ArrayList<>();
+                    infos.add(info);
+                    prepareSendingMedia(getAccountInstance(), infos, peer, null, replyToTopMsg, null, null, false, false, null, notify, scheduleDate, scheduleRepeatPeriod, 0, false, null, null, 0, false, payStars, monoForumPeerId, suggestionParams);
+                }
+            } else {
+                ArrayList<String> paths = new ArrayList<>();
+                paths.add(file.getAbsolutePath());
+                prepareSendingDocuments(getAccountInstance(), paths, paths, null, caption != null ? caption.toString() : null, entities, msgObj.getMimeType(), peer, null, replyToTopMsg, null, null, null, notify, scheduleDate, scheduleRepeatPeriod, null, null, 0, false, payStars, monoForumPeerId, suggestionParams);
             }
         }
         return sendResult;

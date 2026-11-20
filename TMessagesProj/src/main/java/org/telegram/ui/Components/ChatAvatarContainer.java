@@ -45,6 +45,7 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageReceiver;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -82,6 +83,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     private int avatarSizeInDp = 42;
     public BackupImageView avatarImageView;
     private boolean avatarImageIsHidden;
+    private boolean detachedRightAvatar;
+    private RightAvatarHolder rightAvatarContainer;
     private SimpleTextView titleTextView;
     private AtomicReference<SimpleTextView> titleTextLargerCopyView = new AtomicReference<>();
     private SimpleTextView subtitleTextView;
@@ -102,6 +105,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
 
     private int lastWidth = -1;
     private int largerWidth = -1;
+    private int detachedContentWidth = -1;
 
 
     private AnimatorSet titleAnimation;
@@ -544,7 +548,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         autoDeletePopupWrapper.windowLayout.measure(View.MeasureSpec.makeMeasureSpec(dp(1000), View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(dp(1000), View.MeasureSpec.AT_MOST));
         scrimPopupWindow[0].setInputMethodMode(ActionBarPopupWindow.INPUT_METHOD_NOT_NEEDED);
         scrimPopupWindow[0].getContentView().setFocusableInTouchMode(true);
-        scrimPopupWindow[0].showAtLocation(avatarImageView, 0, (int) (avatarImageView.getX() + getX()), (int) avatarImageView.getY());
+        int[] loc = new int[2];
+        avatarImageView.getLocationInWindow(loc);
+        scrimPopupWindow[0].showAtLocation(avatarImageView, 0, loc[0], loc[1]);
         parentFragment.dimBehindView(true);
         return true;
     }
@@ -595,6 +601,9 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             Bundle args = new Bundle();
             if (UserObject.isUserSelf(user)) {
                 if (!sharedMediaPreloader.hasSharedMedia()) {
+                    if (canSearch()) {
+                        openSearch();
+                    }
                     return;
                 }
                 args.putLong("dialog_id", parentFragment.getDialogId());
@@ -668,25 +677,64 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         final int width = MeasureSpec.getSize(widthMeasureSpec);
-        final int availableWidth = width - dp((avatarImageView.getVisibility() == VISIBLE ? 54 : 0) + 16);
-        avatarImageView.measure(MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY));
-        titleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24 + 8), MeasureSpec.AT_MOST));
-        if (subtitleTextView != null) {
-            subtitleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
-        } else if (animatedSubtitleTextView != null) {
-            animatedSubtitleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
-        }
-        if (communityItem != null) {
-            communityItem.measure(MeasureSpec.makeMeasureSpec(dp(14), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(14), MeasureSpec.EXACTLY));
-        }
-        if (timeItem != null) {
-            timeItem.measure(MeasureSpec.makeMeasureSpec(dp(34), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(34), MeasureSpec.EXACTLY));
-        }
-        if (starBgItem != null) {
-            starBgItem.measure(MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
-        }
-        if (starFgItem != null) {
-            starFgItem.measure(MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
+        final int availableWidth;
+        if (detachedRightAvatar) {
+            int maxPillContentWidth = Math.max(0, width - dp(28));
+            if (actionBar != null && actionBar.isGlassMode()) {
+                int barMax = actionBar.getMaxDetachedContentWidth();
+                if (barMax > 0) {
+                    maxPillContentWidth = Math.min(maxPillContentWidth, barMax);
+                }
+            }
+            availableWidth = maxPillContentWidth;
+            titleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24 + 8), MeasureSpec.AT_MOST));
+            int titleExact = titleTextView.getDesiredContentWidth();
+            int subtitleExact = 0;
+            if (subtitleTextView != null && subtitleTextView.getVisibility() != GONE) {
+                subtitleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+                subtitleExact = subtitleTextView.getDesiredContentWidth();
+            } else if (animatedSubtitleTextView != null && animatedSubtitleTextView.getVisibility() != GONE) {
+                animatedSubtitleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+                subtitleExact = animatedSubtitleTextView.width();
+            }
+            int contentWidth = Math.min(availableWidth, Math.max(titleExact, subtitleExact));
+            if (contentWidth < dp(36) && availableWidth >= dp(36)) {
+                contentWidth = dp(36);
+            }
+            if (contentWidth < availableWidth) {
+                titleTextView.measure(MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(24 + 8), MeasureSpec.AT_MOST));
+                if (subtitleTextView != null && subtitleTextView.getVisibility() != GONE) {
+                    subtitleTextView.measure(MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+                } else if (animatedSubtitleTextView != null && animatedSubtitleTextView.getVisibility() != GONE) {
+                    animatedSubtitleTextView.measure(MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+                }
+            }
+            final boolean contentWidthChanged = detachedContentWidth != contentWidth;
+            detachedContentWidth = contentWidth;
+            if (contentWidthChanged) {
+                checkActionBar(false);
+            }
+        } else {
+            availableWidth = width - dp((avatarImageView.getVisibility() == VISIBLE ? 54 : 0) + 16);
+            avatarImageView.measure(MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY));
+            titleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24 + 8), MeasureSpec.AT_MOST));
+            if (subtitleTextView != null) {
+                subtitleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+            } else if (animatedSubtitleTextView != null) {
+                animatedSubtitleTextView.measure(MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.AT_MOST));
+            }
+            if (communityItem != null) {
+                communityItem.measure(MeasureSpec.makeMeasureSpec(dp(14), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(14), MeasureSpec.EXACTLY));
+            }
+            if (timeItem != null) {
+                timeItem.measure(MeasureSpec.makeMeasureSpec(dp(34), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(34), MeasureSpec.EXACTLY));
+            }
+            if (starBgItem != null) {
+                starBgItem.measure(MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
+            }
+            if (starFgItem != null) {
+                starFgItem.measure(MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
+            }
         }
         setMeasuredDimension(width, MeasureSpec.getSize(heightMeasureSpec));
         if (lastWidth != -1 && lastWidth != width && lastWidth > width) {
@@ -694,7 +742,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         }
         SimpleTextView titleTextLargerCopyView = this.titleTextLargerCopyView.get();
         if (titleTextLargerCopyView != null) {
-            int largerAvailableWidth = largerWidth - dp((avatarImageView.getVisibility() == VISIBLE ? 54 : 0) + 16);
+            int largerAvailableWidth = detachedRightAvatar ? Math.max(0, largerWidth - dp(28)) : (largerWidth - dp((avatarImageView.getVisibility() == VISIBLE ? 54 : 0) + 16));
             titleTextLargerCopyView.measure(MeasureSpec.makeMeasureSpec(largerAvailableWidth, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(24), MeasureSpec.AT_MOST));
         }
         lastWidth = width;
@@ -710,7 +758,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         this.titleTextLargerCopyView.set(titleTextLargerCopyView);
         ThemeBind.textColor(titleTextLargerCopyView, Theme.key_actionBarDefaultTitle, resourcesProvider);
         titleTextLargerCopyView.setTextSizePx(dp(glassMode ? 17.5f : 18));
-        titleTextLargerCopyView.setGravity(Gravity.LEFT);
+        titleTextLargerCopyView.setGravity(detachedRightAvatar ? Gravity.CENTER : Gravity.LEFT);
         titleTextLargerCopyView.setTypeface(AndroidUtilities.bold());
         titleTextLargerCopyView.setLeftDrawableTopPadding(-dp(1.3f));
         titleTextLargerCopyView.setRightDrawable(titleTextView.getRightDrawable());
@@ -736,7 +784,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         ThemeBind.textColor(subtitleTextLargerCopyView, Theme.key_actionBarDefaultSubtitle, resourcesProvider);
         subtitleTextLargerCopyView.setTag(Theme.key_actionBarDefaultSubtitle);
         subtitleTextLargerCopyView.setTextSizePx(dp(glassMode ? 13.5f : 14));
-        subtitleTextLargerCopyView.setGravity(Gravity.LEFT);
+        subtitleTextLargerCopyView.setGravity(detachedRightAvatar ? Gravity.CENTER : Gravity.LEFT);
         if (subtitleTextView != null) {
             subtitleTextLargerCopyView.setText(subtitleTextView.getText());
         } else if (animatedSubtitleTextView != null) {
@@ -768,14 +816,184 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         glassMode = true;
     }
 
+    public void setDetachedRightAvatar(boolean detached) {
+        if (detachedRightAvatar == detached) {
+            return;
+        }
+        detachedRightAvatar = detached;
+        if (detached) {
+            if (rightAvatarContainer == null) {
+                rightAvatarContainer = new RightAvatarHolder(getContext());
+            }
+            moveToRightHolder(avatarImageView);
+            moveToRightHolder(communityItem);
+            moveToRightHolder(timeItem);
+            moveToRightHolder(starBgItem);
+            moveToRightHolder(starFgItem);
+            rightAvatarContainer.setVisibility(!avatarImageIsHidden ? VISIBLE : GONE);
+            if (titleTextView != null) {
+                titleTextView.setEllipsizeByGradient(false);
+                titleTextView.setScrollNonFitText(!KronoConfig.disableTitleMarquee);
+                titleTextView.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.CENTER_VERTICAL);
+            }
+            if (subtitleTextView != null) {
+                subtitleTextView.setGravity(Gravity.CENTER_HORIZONTAL);
+                subtitleTextView.setPadding(0, 0, 0, 0);
+            }
+            if (animatedSubtitleTextView != null) {
+                animatedSubtitleTextView.setGravity(Gravity.CENTER_HORIZONTAL);
+                animatedSubtitleTextView.setPadding(0, 0, 0, 0);
+            }
+            requestLayout();
+        }
+    }
+
+    public boolean isDetachedRightAvatar() {
+        return detachedRightAvatar;
+    }
+
+    public void updateTitleMarquee() {
+        if (detachedRightAvatar && titleTextView != null) {
+            titleTextView.setScrollNonFitText(!KronoConfig.disableTitleMarquee);
+            requestDetachedRelayout();
+            checkActionBar(false);
+        }
+    }
+
+    private void requestDetachedRelayout() {
+        if (!detachedRightAvatar) {
+            return;
+        }
+        if (titleTextView != null) {
+            titleTextView.requestLayout();
+        }
+        if (subtitleTextView != null) {
+            subtitleTextView.requestLayout();
+        }
+        if (animatedSubtitleTextView != null) {
+            animatedSubtitleTextView.requestLayout();
+        }
+        requestLayout();
+    }
+
+    private void moveToRightHolder(View view) {
+        if (view != null && rightAvatarContainer != null) {
+            AndroidUtilities.removeFromParent(view);
+            rightAvatarContainer.addView(view);
+        }
+    }
+
+    public View getRightAvatarContainer() {
+        return rightAvatarContainer;
+    }
+
+    public boolean hasRightAvatar() {
+        return detachedRightAvatar && avatarImageView != null && avatarImageView.getVisibility() == VISIBLE && !avatarImageIsHidden;
+    }
+
+    private class RightAvatarHolder extends FrameLayout {
+        public RightAvatarHolder(Context context) {
+            super(context);
+            setClipChildren(false);
+        }
+
+        @Override
+        public boolean dispatchTouchEvent(MotionEvent ev) {
+            if (ignoreTouches) {
+                return false;
+            }
+            return super.dispatchTouchEvent(ev);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            final int size = dp(46);
+            if (avatarImageView != null) {
+                avatarImageView.measure(MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(avatarSizeInDp) - 2, MeasureSpec.EXACTLY));
+            }
+            if (communityItem != null) {
+                communityItem.measure(MeasureSpec.makeMeasureSpec(dp(14), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(14), MeasureSpec.EXACTLY));
+            }
+            if (timeItem != null) {
+                timeItem.measure(MeasureSpec.makeMeasureSpec(dp(34), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(34), MeasureSpec.EXACTLY));
+            }
+            if (starBgItem != null) {
+                starBgItem.measure(MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
+            }
+            if (starFgItem != null) {
+                starFgItem.measure(MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(dp(20), MeasureSpec.EXACTLY));
+            }
+            setMeasuredDimension(size, size);
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            final int w = right - left;
+            final int h = bottom - top;
+            final int avW = avatarImageView != null ? avatarImageView.getMeasuredWidth() : (dp(avatarSizeInDp) - 2);
+            final int avH = avatarImageView != null ? avatarImageView.getMeasuredHeight() : (dp(avatarSizeInDp) - 2);
+            final int avLeft = (w - avW) / 2;
+            final int avTop = (h - avH) / 2;
+            if (avatarImageView != null) {
+                avatarImageView.layout(avLeft, avTop, avLeft + avW, avTop + avH);
+            }
+            if (communityItem != null) {
+                communityItem.layout(avLeft + dp(28f), avTop + dp(26.33f), avLeft + dp(28f) + communityItem.getMeasuredWidth(), avTop + dp(26.33f) + communityItem.getMeasuredHeight());
+            }
+            if (timeItem != null) {
+                timeItem.layout(avLeft + dp(18.333f), avTop - dp(8), avLeft + dp(18.333f) + timeItem.getMeasuredWidth(), avTop - dp(8) + timeItem.getMeasuredHeight());
+            }
+            if (starBgItem != null) {
+                starBgItem.layout(avLeft + dp(27), avTop + dp(23), avLeft + dp(27) + starBgItem.getMeasuredWidth(), avTop + dp(23) + starBgItem.getMeasuredHeight());
+            }
+            if (starFgItem != null) {
+                starFgItem.layout(avLeft + dp(27), avTop + dp(23), avLeft + dp(27) + starFgItem.getMeasuredWidth(), avTop + dp(23) + starFgItem.getMeasuredHeight());
+            }
+        }
+
+        @Override
+        protected boolean drawChild(@NonNull Canvas canvas, View child, long drawingTime) {
+            if (child == avatarImageView) {
+                final boolean hasTimer = timeItem != null && timeItem.getVisibility() == VISIBLE;
+                final boolean hasCommunity = communityItem != null && communityItem.getVisibility() == VISIBLE;
+                if (hasTimer || hasCommunity) {
+                    AndroidUtilities.rectTmp.set(child.getX(), child.getY(), child.getX() + child.getWidth(), child.getY() + child.getHeight());
+                    AndroidUtilities.rectTmp.inset(-dp(3), -dp(3));
+                    canvas.saveLayer(AndroidUtilities.rectTmp, null);
+                    final boolean b = super.drawChild(canvas, child, drawingTime);
+                    if (hasTimer) {
+                        final float cx = timeItem.getX() + timeItem.getWidth() / 2f;
+                        final float cy = timeItem.getY() + timeItem.getHeight() / 2f;
+                        final float r = dpf2(12f) * timeItem.getScaleX();
+                        canvas.drawCircle(cx, cy - dpf2(0.33f), r, Theme.PAINT_CLEAR);
+                    }
+                    if (hasCommunity) {
+                        final float cx = communityItem.getX() + communityItem.getWidth() / 2f;
+                        final float cy = communityItem.getY() + communityItem.getHeight() / 2f;
+                        final float r = dpf2(7.66f) * communityItem.getScaleX();
+                        canvas.drawCircle(cx, cy, r, Theme.PAINT_CLEAR);
+                    }
+                    canvas.restore();
+                    return b;
+                }
+            }
+            return super.drawChild(canvas, child, drawingTime);
+        }
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         final int actionBarHeight = ActionBar.getCurrentActionBarHeight();
-        final int viewTop = (actionBarHeight - avatarImageView.getMeasuredHeight() - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
+        final int avHeight = detachedRightAvatar ? (dp(avatarSizeInDp) - 2) : avatarImageView.getMeasuredHeight();
+        final int viewTop = (actionBarHeight - avHeight - 2) / 2 + (occupyStatusBar ? AndroidUtilities.statusBarHeight : 0);
         final int subtitleTop = viewTop + dp(glassMode ? 23.66f : 24);
 
-        avatarImageView.layout(1 + leftPadding, 1 + viewTop, 1 + leftPadding + avatarImageView.getMeasuredWidth(), 1 + viewTop + avatarImageView.getMeasuredHeight());
-        int l = leftPadding + (avatarImageView.getVisibility() == VISIBLE ? dp(glassMode ? 49.66f : 55) : dp(glassMode ? 13 : 1)) + rightAvatarPadding;
+        if (!detachedRightAvatar) {
+            avatarImageView.layout(1 + leftPadding, 1 + viewTop, 1 + leftPadding + avatarImageView.getMeasuredWidth(), 1 + viewTop + avatarImageView.getMeasuredHeight());
+        }
+        int l = detachedRightAvatar
+            ? (leftPadding + dp(11))
+            : (leftPadding + (avatarImageView.getVisibility() == VISIBLE ? dp(glassMode ? 49.66f : 55) : dp(glassMode ? 13 : 1)) + rightAvatarPadding);
         SimpleTextView titleTextLargerCopyView = this.titleTextLargerCopyView.get();
         if (getSubtitleTextView().getVisibility() != GONE) {
             titleTextView.layout(l, viewTop + dp(1.66f) - titleTextView.getPaddingTop(), l + titleTextView.getMeasuredWidth(), viewTop + titleTextView.getTextHeight() + dp(1.66f) - titleTextView.getPaddingTop() + titleTextView.getPaddingBottom());
@@ -788,26 +1006,28 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 titleTextLargerCopyView.layout(l, viewTop + dp(10), l + titleTextLargerCopyView.getMeasuredWidth(), viewTop + titleTextLargerCopyView.getTextHeight() + dp(10));
             }
         }
-        if (communityItem != null) {
-            communityItem.layout(
-                leftPadding + dp(29f),
-                viewTop + dp(27.33f),
-                leftPadding + dp(29f) + communityItem.getMeasuredWidth(),
-                viewTop + dp(27.33f) + communityItem.getMeasuredHeight());
-        }
-        if (timeItem != null) {
-            timeItem.layout(
-                leftPadding + dp(19.333f),
-                viewTop - dp(8),
-                leftPadding + dp(19.333f) + timeItem.getMeasuredWidth(),
-                viewTop - dp(8) + timeItem.getMeasuredHeight()
-            );
-        }
-        if (starBgItem != null) {
-            starBgItem.layout(leftPadding + dp(28), viewTop + dp(24), leftPadding + dp(28) + starBgItem.getMeasuredWidth(), viewTop + dp(24) + starBgItem.getMeasuredHeight());
-        }
-        if (starFgItem != null) {
-            starFgItem.layout(leftPadding + dp(28), viewTop + dp(24), leftPadding + dp(28) + starFgItem.getMeasuredWidth(), viewTop + dp(24) + starFgItem.getMeasuredHeight());
+        if (!detachedRightAvatar) {
+            if (communityItem != null) {
+                communityItem.layout(
+                    leftPadding + dp(29f),
+                    viewTop + dp(27.33f),
+                    leftPadding + dp(29f) + communityItem.getMeasuredWidth(),
+                    viewTop + dp(27.33f) + communityItem.getMeasuredHeight());
+            }
+            if (timeItem != null) {
+                timeItem.layout(
+                    leftPadding + dp(19.333f),
+                    viewTop - dp(8),
+                    leftPadding + dp(19.333f) + timeItem.getMeasuredWidth(),
+                    viewTop - dp(8) + timeItem.getMeasuredHeight()
+                );
+            }
+            if (starBgItem != null) {
+                starBgItem.layout(leftPadding + dp(28), viewTop + dp(24), leftPadding + dp(28) + starBgItem.getMeasuredWidth(), viewTop + dp(24) + starBgItem.getMeasuredHeight());
+            }
+            if (starFgItem != null) {
+                starFgItem.layout(leftPadding + dp(28), viewTop + dp(24), leftPadding + dp(28) + starFgItem.getMeasuredWidth(), viewTop + dp(24) + starFgItem.getMeasuredHeight());
+            }
         }
         if (subtitleTextView != null) {
             subtitleTextView.layout(l, subtitleTop, l + subtitleTextView.getMeasuredWidth(), subtitleTop + subtitleTextView.getTextHeight());
@@ -923,6 +1143,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             }
             titleTextView.setRightDrawable2(mutedIcon);
         }
+        requestDetachedRelayout();
         checkActionBar(true);
     }
 
@@ -992,6 +1213,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             titleTextView.setRightDrawable(null);
             rightDrawableContentDescription = null;
         }
+        requestDetachedRelayout();
         checkActionBar(animated);
     }
 
@@ -1010,6 +1232,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         } else {
             lastSubtitle = value;
         }
+        requestDetachedRelayout();
         checkActionBar(true);
     }
 
@@ -1065,6 +1288,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                         statusDrawables[a].stop();
                     }
                 }
+                requestDetachedRelayout();
             } catch (Exception e) {
                 FileLog.e(e);
             }
@@ -1077,6 +1301,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                     statusDrawables[a].stop();
                 }
             }
+            requestDetachedRelayout();
         }
     }
 
@@ -1308,6 +1533,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
         } else {
             lastSubtitle = newSubtitle;
         }
+        requestDetachedRelayout();
         checkActionBar(animated);
     }
 
@@ -1536,6 +1762,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             currentConnectionState = ConnectionsManager.getInstance(currentAccount).getConnectionState();
             updateCurrentConnectionState();
         }
+        NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.reloadInterface);
+        updateTitleMarquee();
         if (emojiStatusDrawable != null) {
             emojiStatusDrawable.attach();
         }
@@ -1554,6 +1782,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.savedMessagesDialogsUpdate);
             }
         }
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.reloadInterface);
         if (emojiStatusDrawable != null) {
             emojiStatusDrawable.detach();
         }
@@ -1580,6 +1809,8 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
             invalidate();
         } else if (id == NotificationCenter.savedMessagesDialogsUpdate) {
             updateSubtitle(true);
+        } else if (id == NotificationCenter.reloadInterface) {
+            updateTitleMarquee();
         }
     }
 
@@ -1641,6 +1872,7 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
                 }
             }
         }
+        requestDetachedRelayout();
         checkActionBar(true);
     }
 
@@ -1741,10 +1973,24 @@ public class ChatAvatarContainer extends FrameLayout implements FactorAnimator.T
     }
 
     public boolean hasVisibleAvatar() {
-        return avatarImageView != null && avatarImageView.getVisibility() == VISIBLE;
+        return !detachedRightAvatar && avatarImageView != null && avatarImageView.getVisibility() == VISIBLE;
     }
 
     public int getVisualWidth() {
+        if (detachedRightAvatar) {
+            int titleW = 0;
+            if (titleTextView != null) {
+                titleW = titleTextView.getDesiredContentWidth();
+            }
+            int subtitleW = 0;
+            if (subtitleTextView != null && subtitleTextView.getVisibility() != GONE) {
+                subtitleW = subtitleTextView.getDesiredContentWidth();
+            } else if (animatedSubtitleTextView != null && animatedSubtitleTextView.getVisibility() != GONE) {
+                subtitleW = animatedSubtitleTextView.width();
+            }
+            return Math.max(dp(36), Math.max(titleW, subtitleW)) + dp(28);
+        }
+
         float width = 0;
 
         if (titleTextView != null) {

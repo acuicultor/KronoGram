@@ -73,6 +73,7 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
@@ -1042,7 +1043,8 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             );
         }
         if (isTopic) {
-            setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), dp((useForceThreeLines || SharedConfig.useThreeLinesLayout ? heightThreeLines : heightDefault) + (hasTags() && (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) || isForumCell()) ? (isForumCell() ? addForumHeightForTags : addHeightForTags) : 0)) + (useSeparator ? 1 : 0));
+            int effectiveDefault = (KronoConfig.isTelegramXStyle() && heightDefault == 70) ? 66 : heightDefault;
+            setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), dp((useForceThreeLines || SharedConfig.useThreeLinesLayout ? heightThreeLines : effectiveDefault) + (hasTags() && (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) || isForumCell()) ? (isForumCell() ? addForumHeightForTags : addHeightForTags) : 0)) + (useSeparator ? 1 : 0));
             checkTwoLinesForName();
         }
 
@@ -1068,7 +1070,8 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     }
 
     private int getCollapsedHeight() {
-        int height = dp(useForceThreeLines || SharedConfig.useThreeLinesLayout ? heightThreeLines : heightDefault);
+        int effectiveDefault = (KronoConfig.isTelegramXStyle() && heightDefault == 70) ? 66 : heightDefault;
+        int height = dp(useForceThreeLines || SharedConfig.useThreeLinesLayout ? heightThreeLines : effectiveDefault);
         if (useSeparator || true) {
             height += 1;
         }
@@ -2303,6 +2306,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 if (nameString != null && nameString.length() == 0) {
                     nameString = getString(R.string.HiddenName);
                 }
+                if (isDialogCell && org.telegram.messenger.KronoConfig.hideChatListNamesAvatars) {
+                    nameString = "Chat oculto";
+                }
             }
         }
 
@@ -2433,6 +2439,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             if (ellipsizeWidth < 0) {
                 ellipsizeWidth = 0;
             }
+            if (org.telegram.messenger.KronoConfig.hideChatListNamesAvatars && isDialogCell) {
+                nameString = "Chat oculto";
+            }
             if (nameString instanceof String) {
                 nameString = ((String) nameString).replace('\n', ' ');
             }
@@ -2497,7 +2506,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 thumbImage[i].setImageCoords(thumbLeft + (thumbSize + 2) * i, avatarTop + dp(31) + (twoLinesForName ? dp(20) : 0) - (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) && tags != null && !tags.isEmpty() ? dp(9) : 0), dp(18), dp(18));
             }
         } else {
-            avatarTop = dp(9);
+            avatarTop = KronoConfig.isTelegramXStyle() ? dp(7) : dp(9);
             messageNameTop = dp(31);
             timeTop = dp(16);
             errorTop = dp(38);
@@ -3359,7 +3368,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                             MessagesController.DialogFilter filter = MessagesController.getInstance(currentAccount).selectedDialogFilter[dialogsType == 8 ? 1 : 0];
                             drawPin = filter != null && filter.pinnedDialogs.indexOfKey(dialog.id) >= 0;
                         } else {
-                            drawPin = currentDialogFolderId == 0 && dialog.pinned;
+                            drawPin = currentDialogFolderId == 0 && (dialog.pinned || org.telegram.messenger.KronoConfig.isLocallyPinned(dialog.id));
                         }
                         if (message != null) {
                             lastSendState = message.messageOwner.send_state;
@@ -3620,7 +3629,10 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
             drawCommunityAvatar = !insideCommunityList && ChatObject.isCommunity(chat) && isDialogCell;
 
-            if (currentDialogFolderId != 0) {
+            if (org.telegram.messenger.KronoConfig.hideChatListNamesAvatars && isDialogCell) {
+                avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_ANONYMOUS);
+                avatarImage.setImage(null, null, avatarDrawable, null, user, 0);
+            } else if (currentDialogFolderId != 0) {
                 Theme.dialogs_archiveAvatarDrawable.setCallback(this);
                 avatarDrawable.setAvatarType(AvatarDrawable.AVATAR_TYPE_ARCHIVED);
                 avatarImage.setImage(null, null, avatarDrawable, null, user, 0);
@@ -4868,7 +4880,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
         if (useSeparator) {
             int left;
-            if (fullSeparator || currentDialogFolderId != 0 && archiveHidden && !fullSeparator2 || fullSeparator2 && !archiveHidden) {
+            if (KronoConfig.isTelegramXStyle() || fullSeparator || currentDialogFolderId != 0 && archiveHidden && !fullSeparator2 || fullSeparator2 && !archiveHidden) {
                 left = 0;
             } else {
                 left = dp(messagePaddingStart);

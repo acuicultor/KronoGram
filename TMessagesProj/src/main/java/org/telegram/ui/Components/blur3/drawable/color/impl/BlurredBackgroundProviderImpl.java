@@ -7,6 +7,7 @@ import android.graphics.Color;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
@@ -238,7 +239,17 @@ public class BlurredBackgroundProviderImpl {
             .setBackgroundColor((r, isDark) -> {
                 final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.80f;
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundGray, r);
-                final int colorTarget = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                int colorTarget = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                final boolean darkTheme = isDark || AndroidUtilities.computePerceivedBrightness(colorTarget) < 0.5f;
+                if (darkTheme) {
+                    final float targetBrightness = AndroidUtilities.computePerceivedBrightness(colorTarget);
+                    if (targetBrightness > 0.45f) {
+                        colorTarget = 0xFF1C1C22;
+                    } else if (targetBrightness < 0.04f) {
+                        colorTarget = ColorUtils.blendARGB(colorTarget, 0xFF24242C, 0.85f);
+                    }
+                    return Theme.multAlpha(colorTarget, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.82f : 0.90f);
+                }
                 return solveSrcColor(colorBg, colorTarget, alpha);
             })
             .setStrokeColorTop(0xFFFFFFFF, 0x20FFFFFF)
@@ -284,15 +295,15 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider topPanelChatActivitySearchListBg(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
-                    final float alpha = 0.7f;
+                    final float alpha = checkBlurEnabled(r) ? (isDark ? 0.94f : 0.90f) : 0.98f;
                     final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                     return Theme.multAlpha(colorBg, alpha);
                 })
-                .setStrokeColorTop(0, 0)
-                .setStrokeColorBottom(0, 0)
+                .setStrokeColorTop(0x18000000, 0x18FFFFFF)
+                .setStrokeColorBottom(0x18000000, 0x18FFFFFF)
                 .setShadowColor(0, 0)
                 .setShadowLayer(0, 0, 0)
-                .setStrokeWidth(0, 0)
+                .setStrokeWidth(dpf2(0.5f), dpf2(0.5f))
                 .build();
     }
 

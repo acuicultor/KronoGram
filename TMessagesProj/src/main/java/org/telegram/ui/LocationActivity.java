@@ -416,7 +416,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
             userLocation.setLatitude(messageObject.messageOwner.media.geo.lat);
             userLocation.setLongitude(messageObject.messageOwner.media.geo._long);
         }
-        locationDenied = Build.VERSION.SDK_INT >= 23 && getParentActivity() != null && getParentActivity().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED;
+        locationDenied = getParentActivity() != null && !hasLocationPermission(getParentActivity());
 
         setHasOwnBackground(true);
         simpleActionBar.setBackButtonImage(R.drawable.ic_ab_back);
@@ -610,7 +610,7 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
             if (Build.VERSION.SDK_INT >= 23) {
                 Activity activity = getParentActivity();
                 if (activity != null) {
-                    if (activity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    if (!hasLocationPermission(activity)) {
                         showPermissionAlert(false);
                         return;
                     }
@@ -984,7 +984,17 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
                     map.animateCamera(ApplicationLoader.getMapsProvider().newCameraUpdateLatLngZoom(new IMapsProvider.LatLng(messageObject.messageOwner.media.geo.lat, messageObject.messageOwner.media.geo._long), map.getMaxZoomLevel() - 4));
                 }
             } else if (position == 1 && locationType != 2) {
-                if (delegate != null && userLocation != null) {
+                if (locationDenied && !userLocationMoved) {
+                    showPermissionAlert(false);
+                    return;
+                }
+                if (!userLocationMoved && myLocation == null) {
+                    Location fallback = getLastLocation();
+                    if (fallback != null) {
+                        positionMarker(fallback);
+                    }
+                }
+                if (delegate != null && userLocation != null && (userLocationMoved || myLocation != null)) {
                     TLRPC.TL_messageMediaGeo location = new TLRPC.TL_messageMediaGeo();
                     location.geo = new TLRPC.TL_geoPoint();
                     location.geo.lat = AndroidUtilities.fixLocationCoord(userLocation.getLatitude());
@@ -997,6 +1007,12 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
                     } else {
                         delegate.didSelectLocation(location, locationType, true, 0, 0);
                         finishFragment();
+                    }
+                } else if (map != null) {
+                    try {
+                        map.setMyLocationEnabled(true);
+                    } catch (Exception e) {
+                        FileLog.e(e);
                     }
                 }
             } else if (locationType == LOCATION_TYPE_LIVE && getLocationController().isSharingLocation(dialogId) && adapter.getItemViewType(position) == LocationActivityAdapter.VIEW_TYPE_DELETE_LIVE_LOCATION) {
@@ -1095,8 +1111,8 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
             return origMethod.call(ev);
         });
         mapView.setOnLayoutListener(()-> AndroidUtilities.runOnUIThread(() -> {
-            if (moveToBounds != null) {
-                map.moveCamera(moveToBounds);
+            if (moveToBounds != null && this.map != null) {
+                this.map.moveCamera(moveToBounds);
                 moveToBounds = null;
             }
         }));
@@ -1367,9 +1383,20 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
                 canvas.translate(captureRect.left, captureRect.top);
                 mapTexture.draw(canvas);
                 canvas.restore();
-            } else if (mapSnapshot != null) {
+            } else if (mapSnapshot != null && mapSnapshot.hasSurface()) {
                 captureRect.set(map.getX(), map.getY(), map.getX() + map.getWidth(), map.getY() + map.getHeight());
                 mapSnapshot.draw(canvas, captureRect, map.getAlpha());
+            } else {
+                final boolean alpha = map.getAlpha() < 1f;
+                if (alpha) {
+                    captureRect.set(map.getX(), map.getY(), map.getX() + map.getWidth(), map.getY() + map.getHeight());
+                    canvas.saveLayerAlpha(captureRect, (int) (255 * map.getAlpha()));
+                } else {
+                    canvas.save();
+                }
+                canvas.translate(map.getX(), map.getY());
+                map.draw(canvas);
+                canvas.restore();
             }
         }
         drawCapturedChild(canvas, markerImageView);
@@ -1423,7 +1450,11 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
             attachMapSurface();
         }
         if (mapTexture == null) {
-            mapSnapshot.poke();
+            if (mapSnapshot.hasSurface()) {
+                mapSnapshot.poke();
+            } else if (glassEngine != null) {
+                glassEngine.invalidate();
+            }
         } else {
             listenMapTexture();
         }
@@ -2386,18 +2417,41 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
         }
     }
 
+    private static boolean hasLocationPermission(Context context) {
+        if (Build.VERSION.SDK_INT < 23 || context == null) {
+            return true;
+        }
+        return context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            || context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
     @SuppressLint("MissingPermission")
     private Location getLastLocation() {
+        if (!hasLocationPermission(ApplicationLoader.applicationContext)) {
+            return null;
+        }
         LocationManager lm = (LocationManager) ApplicationLoader.applicationContext.getSystemService(Context.LOCATION_SERVICE);
-        List<String> providers = lm.getProviders(true);
-        Location l = null;
-        for (int i = providers.size() - 1; i >= 0; i--) {
-            l = lm.getLastKnownLocation(providers.get(i));
-            if (l != null) {
-                break;
+        Location best = null;
+        if (lm != null) {
+            List<String> providers = lm.getProviders(true);
+            if (Build.VERSION.SDK_INT >= 31 && !providers.contains(LocationManager.FUSED_PROVIDER)) {
+                providers = new ArrayList<>(providers);
+                providers.add(LocationManager.FUSED_PROVIDER);
+            }
+            for (int i = providers.size() - 1; i >= 0; i--) {
+                try {
+                    Location l = lm.getLastKnownLocation(providers.get(i));
+                    if (l != null && (best == null || l.getTime() > best.getTime())) {
+                        best = l;
+                    }
+                } catch (Throwable ignored) {
+                }
             }
         }
-        return l;
+        if (best == null) {
+            best = getLocationController().getLastKnownLocation();
+        }
+        return best;
     }
 
     private void positionMarker(Location location) {
@@ -2896,13 +2950,33 @@ public class LocationActivity extends BaseFragment implements NotificationCenter
             }
         }
         fixLayoutInternal(true);
+        Activity resumeActivity = getParentActivity();
+        if (resumeActivity != null) {
+            boolean nowDenied = !hasLocationPermission(resumeActivity);
+            if (nowDenied != locationDenied) {
+                locationDenied = nowDenied;
+                if (adapter != null) {
+                    adapter.setMyLocationDenied(locationDenied, false);
+                }
+                if (!locationDenied) {
+                    if (map != null) {
+                        try {
+                            map.setMyLocationEnabled(true);
+                        } catch (Exception e) {
+                            FileLog.e(e);
+                        }
+                    }
+                    positionMarker(myLocation = getLastLocation());
+                }
+            }
+        }
         if (disablePermissionCheck()) {
             checkPermission = false;
         } else if (checkPermission && Build.VERSION.SDK_INT >= 23) {
             Activity activity = getParentActivity();
             if (activity != null) {
                 checkPermission = false;
-                if (activity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                if (!hasLocationPermission(activity)) {
                     activity.requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION}, 2);
                 }
             }

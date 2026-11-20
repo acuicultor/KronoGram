@@ -81,6 +81,7 @@ public class FilePathDatabase {
                 migrateDatabase(version);
                 //migration
             }
+            cleanupCorruptedStickerPaths();
             if (!fromBackup) {
                 createBackup();
             }
@@ -126,6 +127,66 @@ public class FilePathDatabase {
                 FileLog.e(ignore);
             }
             database.executeFast("PRAGMA user_version = " + 7).stepThis().dispose();
+        }
+    }
+
+    private void cleanupCorruptedStickerPaths() {
+        if (database == null || ApplicationLoader.applicationContext == null) {
+            return;
+        }
+        try {
+            android.content.SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences("kronoconfig", android.content.Context.MODE_PRIVATE);
+            String key = "fixed_sticker_paths_v1_" + currentAccount;
+            if (prefs.getBoolean(key, false)) {
+                return;
+            }
+            String condition = "LOWER(path) LIKE '%/sticker.tgs' OR LOWER(path) LIKE '%/sticker (%.tgs' OR LOWER(path) LIKE '%/animatedsticker%.tgs' OR LOWER(path) LIKE '%/reaction%.tgs' OR LOWER(path) LIKE '%/emoji.tgs' OR LOWER(path) LIKE '%/sticker.webp' OR LOWER(path) LIKE '%/sticker (%.webp' OR LOWER(path) LIKE '%/sticker.webm' OR LOWER(path) LIKE '%/sticker (%.webm'";
+            SQLiteCursor cursor = null;
+            try {
+                cursor = database.queryFinalized("SELECT path FROM paths WHERE " + condition);
+                while (cursor.next()) {
+                    String p = cursor.stringValue(0);
+                    if (p != null) {
+                        try {
+                            File f = new File(p);
+                            if (f.exists()) {
+                                f.delete();
+                            }
+                        } catch (Throwable ignore) {}
+                    }
+                }
+            } catch (Throwable e) {
+                FileLog.e(e);
+            } finally {
+                if (cursor != null) {
+                    cursor.dispose();
+                }
+            }
+            try {
+                database.executeFast("DELETE FROM paths WHERE " + condition).stepThis().dispose();
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+            int[] dirs = new int[]{FileLoader.MEDIA_DIR_FILES, FileLoader.MEDIA_DIR_DOCUMENT, FileLoader.MEDIA_DIR_CACHE};
+            for (int dirType : dirs) {
+                try {
+                    File dir = FileLoader.getDirectory(dirType);
+                    if (dir != null && dir.isDirectory()) {
+                        File[] files = dir.listFiles();
+                        if (files != null) {
+                            for (File f : files) {
+                                if (f != null && f.isFile() && FileLoader.isGenericInternalAssetName(f.getName())) {
+                                    f.delete();
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable ignore) {}
+            }
+            cache.clear();
+            prefs.edit().putBoolean(key, true).apply();
+        } catch (Throwable e) {
+            FileLog.e(e);
         }
     }
 

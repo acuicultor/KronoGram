@@ -1,0 +1,129 @@
+{
+  "project_info": {
+    "project_number": "481682601831",
+    "project_id": "gen-lang-client-0372338935",
+    "storage_bucket": "gen-lang-client-0372338935.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481682601831:android:28f2ec36e28d19bf5861c2",
+        "android_client_info": {
+          "package_name": "com.rcuenca.krono"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "481682601831-946e9rp1iog5ii2orkh6jnk1vt7f8bpr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rcuenca.krono",
+            "certificate_hash": "d9fac57e2718db19314ff0bb8ad7572b1733af78"
+          }
+        },
+        {
+          "client_id": "481682601831-bcsib5foncpq02ln477hdo483olcs7mm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rcuenca.krono",
+            "certificate_hash": "7da991c785ef08b979d151332aa6f1033162c026"
+          }
+        },
+        {
+          "client_id": "481682601831-iec89ga00qc9t8matm0q0phkck3uo2iu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rcuenca.krono",
+            "certificate_hash": "cf762d3bb804831abe8490c0343740c4267b0f5c"
+          }
+        },
+        {
+          "client_id": "481682601831-6so7js548nsb2frtidmo41p1sd58201l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDo1xh6D4QB89AlF_iazsMgeuaDH_1Ofsw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "481682601831-6so7js548nsb2frtidmo41p1sd58201l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481682601831:android:e1088f62bf09c0a55861c2",
+        "android_client_info": {
+          "package_name": "com.rcuenca.kronogram"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "481682601831-ajc64ne6ibgh70urm38t2pr2ocmkhe8c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rcuenca.kronogram",
+            "certificate_hash": "1a0f509a590eb4c5776546ce6ebf5ee2ae5ad548"
+          }
+        },
+        {
+          "client_id": "481682601831-6so7js548nsb2frtidmo41p1sd58201l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDo1xh6D4QB89AlF_iazsMgeuaDH_1Ofsw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "481682601831-6so7js548nsb2frtidmo41p1sd58201l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481682601831:android:8bd07d3285d5fda75861c2",
+        "android_client_info": {
+          "package_name": "com.rcuenca.kronogram.beta"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "481682601831-6so7js548nsb2frtidmo41p1sd58201l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDo1xh6D4QB89AlF_iazsMgeuaDH_1Ofsw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "481682601831-6so7js548nsb2frtidmo41p1sd58201l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

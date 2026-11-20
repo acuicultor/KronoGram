@@ -33,6 +33,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.annotation.Keep;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.BaseCell;
 
@@ -377,16 +378,50 @@ public class Switch extends View implements Theme.Colorable {
     }
 
     @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int desiredWidth = AndroidUtilities.dp(48);
+        int desiredHeight = AndroidUtilities.dp(30);
+        int widthMode = MeasureSpec.getMode(widthMeasureSpec);
+        int widthSize = MeasureSpec.getSize(widthMeasureSpec);
+        int heightMode = MeasureSpec.getMode(heightMeasureSpec);
+        int heightSize = MeasureSpec.getSize(heightMeasureSpec);
+        int measuredW = widthMode == MeasureSpec.EXACTLY ? widthSize : (widthMode == MeasureSpec.AT_MOST ? Math.min(desiredWidth, widthSize) : desiredWidth);
+        int measuredH = heightMode == MeasureSpec.EXACTLY ? heightSize : (heightMode == MeasureSpec.AT_MOST ? Math.min(desiredHeight, heightSize) : desiredHeight);
+        setMeasuredDimension(measuredW, measuredH);
+    }
+
+    @Override
     protected void onDraw(Canvas canvas) {
         if (getVisibility() != VISIBLE) {
             return;
         }
 
-        int width = AndroidUtilities.dp(31);
-        int thumb = AndroidUtilities.dp(20);
+        final boolean isM3 = KronoConfig.isMaterialYouStyle();
+        final boolean isIos = KronoConfig.isIosStyle();
+        final float requiredW = (isM3 || isIos) ? AndroidUtilities.dpf2(46f) : AndroidUtilities.dpf2(37f);
+        final float requiredH = isIos ? AndroidUtilities.dpf2(28.5f) : (isM3 ? AndroidUtilities.dpf2(26f) : AndroidUtilities.dpf2(21f));
+        final int measuredW = getMeasuredWidth();
+        final int measuredH = getMeasuredHeight();
+        boolean scaledCanvas = false;
+        if (measuredW > 0 && measuredH > 0 && (measuredW < requiredW || measuredH < requiredH)) {
+            float fitScale = Math.min(measuredW / requiredW, measuredH / requiredH);
+            canvas.save();
+            canvas.scale(fitScale, fitScale, measuredW / 2f, measuredH / 2f);
+            scaledCanvas = true;
+        }
+
+        int width = isM3 ? AndroidUtilities.dp(44) : isIos ? AndroidUtilities.dp(44) : AndroidUtilities.dp(31);
+        float trackHeight = isM3 ? AndroidUtilities.dpf2(24) : isIos ? AndroidUtilities.dpf2(26) : AndroidUtilities.dpf2(14);
         int x = (getMeasuredWidth() - width) / 2;
-        float y = (getMeasuredHeight() - AndroidUtilities.dpf2(14)) / 2;
-        int tx = x + AndroidUtilities.dp(7) + (int) (AndroidUtilities.dp(17) * progress);
+        float y = (getMeasuredHeight() - trackHeight) / 2;
+        int tx;
+        if (isM3) {
+            tx = x + AndroidUtilities.dp(12) + (int) (AndroidUtilities.dp(20) * progress);
+        } else if (isIos) {
+            tx = x + AndroidUtilities.dp(13) + (int) (AndroidUtilities.dp(18) * progress);
+        } else {
+            tx = x + AndroidUtilities.dp(7) + (int) (AndroidUtilities.dp(17) * progress);
+        }
         int ty = getMeasuredHeight() / 2;
 
 
@@ -447,14 +482,35 @@ public class Switch extends View implements Theme.Colorable {
             blue = (int) (b1 + (b2 - b1) * colorProgress);
             alpha = (int) (a1 + (a2 - a1) * colorProgress);
             color = ((alpha & 0xff) << 24) | ((red & 0xff) << 16) | ((green & 0xff) << 8) | (blue & 0xff);
-            paint.setColor(color);
-            paint2.setColor(color);
 
-            rectF.set(x, y, x + width, y + AndroidUtilities.dpf2(14));
-            canvasToDraw.drawRoundRect(rectF, AndroidUtilities.dpf2(7), AndroidUtilities.dpf2(7), paint);
-            canvasToDraw.drawCircle(tx, ty, AndroidUtilities.dpf2(10), paint);
+            rectF.set(x, y, x + width, y + trackHeight);
+            if (isM3) {
+                // Material 3 track: tinted surface + outline when unchecked, solid accent fill when checked
+                int fillAlpha = (int) (Color.alpha(color) * (0.28f + 0.72f * colorProgress));
+                paint.setColor((color & 0x00ffffff) | ((fillAlpha & 0xff) << 24));
+                canvasToDraw.drawRoundRect(rectF, trackHeight / 2f, trackHeight / 2f, paint);
+                if (colorProgress < 0.99f) {
+                    paint2.setColor(color1);
+                    paint2.setAlpha((int) (255 * (1f - colorProgress) * 0.85f));
+                    paint2.setStrokeWidth(AndroidUtilities.dpf2(1.6f));
+                    float inset = AndroidUtilities.dpf2(0.8f);
+                    rectF.inset(inset, inset);
+                    canvasToDraw.drawRoundRect(rectF, (trackHeight - inset * 2) / 2f, (trackHeight - inset * 2) / 2f, paint2);
+                    rectF.inset(-inset, -inset);
+                    paint2.setStrokeWidth(AndroidUtilities.dp(2));
+                }
+            } else if (isIos) {
+                // Cupertino UISwitch track: full capsule without external circle
+                paint.setColor(color);
+                canvasToDraw.drawRoundRect(rectF, trackHeight / 2f, trackHeight / 2f, paint);
+            } else {
+                paint.setColor(color);
+                paint2.setColor(color);
+                canvasToDraw.drawRoundRect(rectF, AndroidUtilities.dpf2(7), AndroidUtilities.dpf2(7), paint);
+                canvasToDraw.drawCircle(tx, ty, AndroidUtilities.dpf2(10), paint);
+            }
 
-            if (a == 0 && rippleDrawable != null) {
+            if (a == 0 && rippleDrawable != null && !isIos) {
                 rippleDrawable.setBounds(tx - AndroidUtilities.dp(18), ty - AndroidUtilities.dp(18), tx + AndroidUtilities.dp(18), ty + AndroidUtilities.dp(18));
                 rippleDrawable.draw(canvasToDraw);
             } else if (a == 1) {
@@ -499,7 +555,25 @@ public class Switch extends View implements Theme.Colorable {
             alpha = (int) (a1 + (a2 - a1) * colorProgress);
             paint.setColor(((alpha & 0xff) << 24) | ((red & 0xff) << 16) | ((green & 0xff) << 8) | (blue & 0xff));
 
-            canvasToDraw.drawCircle(tx, ty, AndroidUtilities.dp(8), paint);
+            float thumbRadius;
+            if (isM3) {
+                thumbRadius = AndroidUtilities.dpf2(6.5f + 2.8f * colorProgress);
+                if (colorProgress < 0.5f) {
+                    int offColor = processColor(Theme.getColor(trackColorKey, resourcesProvider));
+                    paint.setColor(offColor);
+                }
+            } else if (isIos) {
+                thumbRadius = AndroidUtilities.dpf2(10.5f);
+                paint.setColor(0xFFFFFFFF);
+                // Subtle Cupertino drop shadow ring
+                paint2.setColor(0x22000000);
+                paint2.setStrokeWidth(AndroidUtilities.dpf2(1f));
+                canvasToDraw.drawCircle(tx, ty + AndroidUtilities.dpf2(0.8f), thumbRadius, paint2);
+                paint2.setStrokeWidth(AndroidUtilities.dp(2));
+            } else {
+                thumbRadius = AndroidUtilities.dp(8);
+            }
+            canvasToDraw.drawCircle(tx, ty, thumbRadius, paint);
 
             if (a == 0) {
                 if (iconDrawable != null) {
@@ -555,6 +629,9 @@ public class Switch extends View implements Theme.Colorable {
         }
         if (overrideColorProgress != 0) {
             canvas.drawBitmap(overlayBitmap[1], 0, 0, null);
+        }
+        if (scaledCanvas) {
+            canvas.restore();
         }
     }
 

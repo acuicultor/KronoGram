@@ -169,6 +169,7 @@ import org.telegram.messenger.HashtagSearchController;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LanguageDetector;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
@@ -832,6 +833,8 @@ public class ChatActivity extends BaseFragment implements
     private CharSequence formwardingNameText;
     private MessageObject forwardingMessage;
     private MessageObject.GroupedMessages forwardingMessageGroup;
+    private boolean forwardingWithoutQuote;
+    private Boolean pendingForwardHideSendersName;
     private MessageObject.GroupedMessages replyingQuoteGroup;
     public MessageObject replyingTopMessage;
     private ReplyQuote replyingQuote;
@@ -1297,6 +1300,9 @@ public class ChatActivity extends BaseFragment implements
     public final static int OPTION_WELCOME_REVERT = 116;
     public final static int OPTION_SEND_MONEY = 117;
     public final static int OPTION_STOP_LIVE_LOCATION = 118;
+    public final static int OPTION_FORWARD_NO_QUOTE = 997;
+    public final static int OPTION_DELETE_LOCALLY = 998;
+    public final static int OPTION_DELETE_FROM_CACHE = 999;
 
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
             NotificationCenter.messagesRead,
@@ -1421,8 +1427,26 @@ public class ChatActivity extends BaseFragment implements
         });
     }
 
+    private boolean isUnifiedChatHeader() {
+        return avatarContainer != null
+                && !isReport()
+                && startLoadFromDate == 0
+                && (chatMode == MODE_DEFAULT || chatMode == MODE_SAVED || chatMode == MODE_SUGGESTIONS)
+                && (!isThreadChat() || isTopic);
+    }
+
     public void showHeaderItem(boolean show) {
-        if (show) {
+        if (isUnifiedChatHeader()) {
+            if (attachItem != null) {
+                attachItem.setVisibility(View.GONE);
+            }
+            if (headerItem != null) {
+                headerItem.setVisibility(View.GONE);
+            }
+            if (otherIcon != null) {
+                otherIcon.setIconVisible(false);
+            }
+        } else if (show) {
             if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer()) && !isSidebarAttach()) {
                 if (attachItem != null) {
                     attachItem.setVisibility(View.VISIBLE);
@@ -1727,6 +1751,11 @@ public class ChatActivity extends BaseFragment implements
 
     private final static int chat_menu_topic_create = 73;
     private final static int chat_menu_topics_panel = 75;
+    private final static int forward_no_quote = 76;
+    private final static int action_mode_other = 77;
+    private boolean kronoVaultAuthInFlight = false;
+    private boolean kronoAddedFlagSecure = false;
+    private boolean kronoHadFlagSecureBefore = false;
 
     private final static int id_chat_compose_panel = 1000;
 
@@ -2169,7 +2198,7 @@ public class ChatActivity extends BaseFragment implements
         @Override
         public void onUpdateSlowModeButton(View button, boolean show, CharSequence time) {
             showSlowModeHint(button, show, time);
-            if (headerItem != null && headerItem.getVisibility() != View.VISIBLE) {
+            if (!isUnifiedChatHeader() && headerItem != null && headerItem.getVisibility() != View.VISIBLE) {
                 headerItem.setVisibility(View.VISIBLE);
                 if (attachItem != null) {
                     attachItem.setVisibility(View.GONE);
@@ -2246,7 +2275,7 @@ public class ChatActivity extends BaseFragment implements
 
         @Override
         public void onAttachButtonHidden() {
-            if (actionBar.isSearchFieldVisible() || isSidebarAttach()) {
+            if (isUnifiedChatHeader() || actionBar.isSearchFieldVisible() || isSidebarAttach()) {
                 return;
             }
             if (TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer())) {
@@ -2264,7 +2293,7 @@ public class ChatActivity extends BaseFragment implements
 
         @Override
         public void onAttachButtonShow() {
-            if (actionBar.isSearchFieldVisible()) {
+            if (isUnifiedChatHeader() || actionBar.isSearchFieldVisible()) {
                 return;
             }
             if (headerItem != null) {
@@ -2904,6 +2933,7 @@ public class ChatActivity extends BaseFragment implements
             .add(NotificationCenter.didLoadSendAsPeers)
             .add(NotificationCenter.closeChatActivity)
             .add(NotificationCenter.messagesDeleted)
+            .add(NotificationCenter.kronoMessagesMarkedDeleted)
             .add(NotificationCenter.historyCleared)
             .add(NotificationCenter.messageReceivedByServer)
             .add(NotificationCenter.messageReceivedByAck)
@@ -3338,6 +3368,7 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onFragmentDestroy() {
+        kronoVaultAuthInFlight = false;
         super.onFragmentDestroy();
         if (messageMetricsView != null) {
             messageMetricsView.finish();
@@ -3474,7 +3505,7 @@ public class ChatActivity extends BaseFragment implements
             if (chatActivity != null && chatActivity.getDialogId() == UserObject.VERIFY) {
                 return false;
             }
-            final boolean noforwards = (
+            final boolean noforwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (
                 chatActivity != null && chatActivity.isPeerNoForwards() ||
                 selectedView != null && selectedView.getMessageObject() != null && selectedView.getMessageObject().messageOwner != null && selectedView.getMessageObject().messageOwner.noforwards
             );
@@ -3495,6 +3526,9 @@ public class ChatActivity extends BaseFragment implements
         @Override
         protected boolean canCopy() {
             if (chatActivity != null && chatActivity.getDialogId() == UserObject.VERIFY) {
+                return true;
+            }
+            if (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass()) {
                 return true;
             }
             return chatActivity == null || !(
@@ -3527,7 +3561,7 @@ public class ChatActivity extends BaseFragment implements
                     chatActivity.replyingQuote = quote;
                     chatActivity.replyingMessageObject = messageObject;
                     chatActivity.forbidForwardingWithDismiss = false;
-                    chatActivity.messagePreviewParams = new MessagePreviewParams(chatActivity.currentEncryptedChat != null, chatActivity.isPeerNoForwards(), ChatObject.isMonoForum(chatActivity.currentChat));
+                    chatActivity.messagePreviewParams = new MessagePreviewParams(!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && chatActivity.currentEncryptedChat != null, !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && chatActivity.isPeerNoForwards(), ChatObject.isMonoForum(chatActivity.currentChat));
                     chatActivity.messagePreviewParams.updateReply(chatActivity.replyingMessageObject, chatActivity.getGroup(messageObject.getGroupId()), chatActivity.getDialogId(), chatActivity.replyingQuote);
                     Bundle args = new Bundle();
                     args.putBoolean("onlySelect", true);
@@ -3781,7 +3815,9 @@ public class ChatActivity extends BaseFragment implements
                     }
                     createDeleteMessagesAlert(null, null);
                 } else if (id == forward) {
-                    openForward(true);
+                    openForward(true, false);
+                } else if (id == forward_no_quote) {
+                    openForward(true, true);
                 } else if (id == share) {
                     share();
                 } else if (id == open_direct) {
@@ -4203,7 +4239,19 @@ public class ChatActivity extends BaseFragment implements
             });
             getConnectionsManager().bindRequestToGuid(req, classGuid);
         } else {
-            actionBar.addView(avatarContainer, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, !inPreviewMode ? 52 : 0, 0, 52, 0));
+            final boolean unifiedHeader = isUnifiedChatHeader();
+            if (unifiedHeader) {
+                avatarContainer.setDetachedRightAvatar(true);
+            }
+            actionBar.addView(avatarContainer, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, !inPreviewMode ? 52 : (unifiedHeader ? 6 : 0), 0, 52, 0));
+            if (unifiedHeader) {
+                View rightAvatarView = avatarContainer.getRightAvatarContainer();
+                if (rightAvatarView != null) {
+                    AndroidUtilities.removeFromParent(rightAvatarView);
+                    actionBar.addView(rightAvatarView, 1, LayoutHelper.createFrame(46, 46, Gravity.TOP | Gravity.RIGHT));
+                    actionBar.setRightAvatarContainer(rightAvatarView);
+                }
+            }
             actionBar.createMenu().bringToFront();
         }
         actionBar.setOnActionModeFactorChangeListener(() -> {
@@ -4242,7 +4290,7 @@ public class ChatActivity extends BaseFragment implements
                 audioCallIconItem = menu.lazilyAddItem(call, R.drawable.call, themeDelegate);
                 audioCallIconItem.setContentDescription(LocaleController.getString(R.string.Call));
                 userFull = getMessagesController().getUserFull(currentUser.id);
-                if (userFull != null && userFull.phone_calls_available) {
+                if (userFull != null && userFull.phone_calls_available && !isUnifiedChatHeader()) {
                     showAudioCallAsIcon = !inPreviewMode;
                     audioCallIconItem.setVisibility(View.VISIBLE);
                 } else {
@@ -4496,6 +4544,9 @@ public class ChatActivity extends BaseFragment implements
             closeTopicItem.setVisibility(currentChat != null && ChatObject.canManageTopic(currentAccount, currentChat, forumTopic) && forumTopic != null && !forumTopic.closed ? View.VISIBLE : View.GONE);
         }
         menu.setVisibility(inMenuMode ? View.GONE : View.VISIBLE);
+        if (headerItem != null && isUnifiedChatHeader()) {
+            headerItem.setVisibility(View.GONE);
+        }
 
         updateTitle(false);
         avatarContainer.updateOnlineCount();
@@ -4568,6 +4619,9 @@ public class ChatActivity extends BaseFragment implements
         } else if (isComments) {
             actionBar.setChatAvatarContainer(avatarContainer);
             actionBar.setForcedMenuMinWidth(dp(46));
+            avatarContainer.setActionBar(actionBar);
+        } else if (isUnifiedChatHeader()) {
+            actionBar.setChatAvatarContainer(avatarContainer);
             avatarContainer.setActionBar(actionBar);
         }
 
@@ -4956,11 +5010,37 @@ public class ChatActivity extends BaseFragment implements
                 }
 
                 int alpha = (int) (iconProgress * 0xFF);
-                Drawable replyIconDrawable = getThemedDrawable(Theme.key_drawable_replyIcon);
-                replyIconDrawable.setAlpha(alpha);
-                replyIconDrawable.setBounds((int) (x - replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y - replyIconDrawable.getIntrinsicHeight() / 2 * scale), (int) (x + replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y + replyIconDrawable.getIntrinsicHeight() / 2 * scale));
-                replyIconDrawable.draw(canvas);
-                replyIconDrawable.setAlpha(255);
+                MessageObject slidingMsgForIcon = getSlidingMessageObject();
+                boolean isEditSwipe = slidingMsgForIcon != null && slidingMsgForIcon.isOutOwner() && slidingMsgForIcon.canEditMessage(currentChat)
+                        && (org.telegram.messenger.KronoConfig.swipeToEditOwnMessage || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
+                Drawable replyIconDrawable;
+                boolean mutateSwipeIcon = false;
+                if (isEditSwipe) {
+                    replyIconDrawable = getContext().getResources().getDrawable(R.drawable.msg_edit).mutate();
+                    mutateSwipeIcon = true;
+                } else if (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_SAVE) {
+                    replyIconDrawable = getContext().getResources().getDrawable(R.drawable.msg_saved).mutate();
+                    mutateSwipeIcon = true;
+                } else if (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_TRANSLATE) {
+                    replyIconDrawable = getContext().getResources().getDrawable(R.drawable.msg_translate).mutate();
+                    mutateSwipeIcon = true;
+                } else if (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_FORWARD) {
+                    replyIconDrawable = getThemedDrawable(Theme.key_drawable_shareIcon);
+                } else if (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_COPY) {
+                    replyIconDrawable = getContext().getResources().getDrawable(R.drawable.msg_copy).mutate();
+                    mutateSwipeIcon = true;
+                } else {
+                    replyIconDrawable = getThemedDrawable(Theme.key_drawable_replyIcon);
+                }
+                if (mutateSwipeIcon && replyIconDrawable != null) {
+                    replyIconDrawable.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.MULTIPLY));
+                }
+                if (replyIconDrawable != null) {
+                    replyIconDrawable.setAlpha(alpha);
+                    replyIconDrawable.setBounds((int) (x - replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y - replyIconDrawable.getIntrinsicHeight() / 2 * scale), (int) (x + replyIconDrawable.getIntrinsicWidth() / 2 * scale), (int) (y + replyIconDrawable.getIntrinsicHeight() / 2 * scale));
+                    replyIconDrawable.draw(canvas);
+                    replyIconDrawable.setAlpha(255);
+                }
 
                 outlineActionBackgroundDarkenPaint.setColor(wasDarkenColor);
                 chatActionBackgroundDarkenPaint.setColor(wasDarkenColor);
@@ -5051,15 +5131,27 @@ public class ChatActivity extends BaseFragment implements
                         }
                         slidingView = view;
                         MessageObject message = getSlidingMessageObject();
-                        boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
+                        boolean canEditOwn = message != null && message.isOutOwner() && message.canEditMessage(currentChat)
+                                && (org.telegram.messenger.KronoConfig.swipeToEditOwnMessage || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
+                        if (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_DISABLED && !canEditOwn) {
+                            slidingViewSetOffset(0);
+                            slidingView = null;
+                            return;
+                        }
+                        boolean isReplyAction = !canEditOwn && (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_REPLY
+                                || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
+                        boolean allowReplyOnOpenTopic = !isReplyAction || canSendMessageToTopic(message);
                         if (
-                            chatMode != 0 && chatMode != MODE_QUICK_REPLIES && chatMode != MODE_SUGGESTIONS && (chatMode != MODE_SAVED || threadMessageId != getUserConfig().getClientUserId()) ||
-                            threadMessageObjects != null && threadMessageObjects.contains(message) ||
-                            getMessageType(message) == 1 && (message.getDialogId() == mergeDialogId || message.needDrawBluredPreview()) ||
-                            currentEncryptedChat == null && message.getId() < 0 ||
-                            currentChat != null && ChatObject.isForum(currentChat) && !allowReplyOnOpenTopic ||
-                            hasTextSelection() ||
-                            message.isEphemeral() && message.isOut()
+                            message == null ||
+                            isReplyAction && (
+                                chatMode != 0 && chatMode != MODE_QUICK_REPLIES && chatMode != MODE_SUGGESTIONS && (chatMode != MODE_SAVED || threadMessageId != getUserConfig().getClientUserId()) ||
+                                threadMessageObjects != null && threadMessageObjects.contains(message) ||
+                                getMessageType(message) == 1 && (message.getDialogId() == mergeDialogId || message.needDrawBluredPreview()) ||
+                                currentEncryptedChat == null && message.getId() < 0 ||
+                                currentChat != null && ChatObject.isForum(currentChat) && !allowReplyOnOpenTopic ||
+                                message.isEphemeral() && message.isOut()
+                            ) ||
+                            hasTextSelection()
                         ) {
                             slidingViewSetOffset(0);
                             slidingView = null;
@@ -5109,35 +5201,67 @@ public class ChatActivity extends BaseFragment implements
                 } else if (slidingView != null && (e == null || e.getPointerId(0) == startedTrackingPointerId && (e.getAction() == MotionEvent.ACTION_CANCEL || e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_POINTER_UP))) {
                     if (e != null && e.getAction() != MotionEvent.ACTION_CANCEL && Math.abs(getSlidingNonAnimationTranslationX(false)) >= AndroidUtilities.dp(50)) {
                         MessageObject message = getSlidingMessageObject();
-                        final boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
-                        if (
-                            bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !(bottomOverlayChatWaitsReply && allowReplyOnOpenTopic || message.wasJustSent) ||
-                            currentChat != null && (
-                                ChatObject.isNotInChat(currentChat) && !isThreadChat() ||
-                                ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup ||
-                                !ChatObject.canSendMessages(currentChat)
-                            )
-                        ) {
+                        boolean canEditOwn = message != null && message.isOutOwner() && message.canEditMessage(currentChat)
+                                && (org.telegram.messenger.KronoConfig.swipeToEditOwnMessage || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
+                        if (canEditOwn) {
+                            startEditingMessageObject(message);
+                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_SAVE) {
+                            ArrayList<MessageObject> msgsToSave = new ArrayList<>();
                             if (message.getGroupId() != 0) {
                                 MessageObject.GroupedMessages group = getGroup(message.getGroupId());
-                                if (group != null && group.captionMessage != null) {
-                                    message = group.captionMessage;
+                                if (group != null && group.messages != null && !group.messages.isEmpty()) {
+                                    msgsToSave.addAll(group.messages);
+                                } else {
+                                    msgsToSave.add(message);
                                 }
+                            } else {
+                                msgsToSave.add(message);
                             }
-                            replyingMessageObject = message;
-                            Bundle args = new Bundle();
-                            args.putBoolean("onlySelect", true);
-                            args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
-                            args.putBoolean("quote", true);
-                            args.putBoolean("reply_to", true);
-                            putReplyToArgs(args, message);
-                            args.putInt("messagesCount", 1);
-                            args.putBoolean("canSelectTopics", true);
-                            final DialogsActivity fragment = new DialogsActivity(args);
-                            fragment.setDelegate(ChatActivity.this);
-                            presentFragment(fragment);
-                        } else {
-                            showFieldPanelForReply(getSlidingMessageObject());
+                            getSendMessagesHelper().sendMessage(msgsToSave, getUserConfig().getClientUserId(), true, false, true, 0, 0);
+                            BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.drawable.msg_saved, "Guardado en Mensajes guardados").show();
+                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_TRANSLATE) {
+                            selectedObject = message;
+                            selectedObjectGroup = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
+                            processSelectedOption(OPTION_TRANSLATE);
+                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_FORWARD) {
+                            selectedObject = message;
+                            selectedObjectGroup = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
+                            processSelectedOption(OPTION_FORWARD);
+                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_COPY) {
+                            selectedObject = message;
+                            selectedObjectGroup = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
+                            processSelectedOption(OPTION_COPY);
+                        } else if (message != null) {
+                            final boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
+                            if (
+                                bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !(bottomOverlayChatWaitsReply && allowReplyOnOpenTopic || message.wasJustSent) ||
+                                currentChat != null && (
+                                    ChatObject.isNotInChat(currentChat) && !isThreadChat() ||
+                                    ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup ||
+                                    !ChatObject.canSendMessages(currentChat)
+                                )
+                            ) {
+                                if (message.getGroupId() != 0) {
+                                    MessageObject.GroupedMessages group = getGroup(message.getGroupId());
+                                    if (group != null && group.captionMessage != null) {
+                                        message = group.captionMessage;
+                                    }
+                                }
+                                replyingMessageObject = message;
+                                Bundle args = new Bundle();
+                                args.putBoolean("onlySelect", true);
+                                args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
+                                args.putBoolean("quote", true);
+                                args.putBoolean("reply_to", true);
+                                putReplyToArgs(args, message);
+                                args.putInt("messagesCount", 1);
+                                args.putBoolean("canSelectTopics", true);
+                                final DialogsActivity fragment = new DialogsActivity(args);
+                                fragment.setDelegate(ChatActivity.this);
+                                presentFragment(fragment);
+                            } else {
+                                showFieldPanelForReply(getSlidingMessageObject());
+                            }
                         }
                     }
                     endTrackingX = slidingViewGetOffsetX();
@@ -5161,7 +5285,7 @@ public class ChatActivity extends BaseFragment implements
                 }
                 if (pullingDownOffset != 0 && (e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_CANCEL)) {
                     float progress = Math.min(1f, pullingDownOffset / AndroidUtilities.dp(110));
-                    if (e.getAction() == MotionEvent.ACTION_UP && progress == 1 && pullingDownDrawable != null && !pullingDownDrawable.emptyStub) {
+                    if (!KronoConfig.disablePullToNextChannel && e.getAction() == MotionEvent.ACTION_UP && progress == 1 && pullingDownDrawable != null && !pullingDownDrawable.emptyStub) {
                         if (pullingDownDrawable.animationIsRunning()) {
                             ValueAnimator animator = ValueAnimator.ofFloat(pullingDownOffset, pullingDownOffset + AndroidUtilities.dp(8));
                             pullingDownBackAnimator = animator;
@@ -6726,7 +6850,7 @@ public class ChatActivity extends BaseFragment implements
                 if (!foundTopView) {
                     scrolled = super.scrollVerticallyBy(dy, recycler, state);
                 }
-                final boolean allowPullingDownScroll = !isInPollAddOptionMode() && !hasSelectedMessages();
+                final boolean allowPullingDownScroll = !KronoConfig.disablePullToNextChannel && !isInPollAddOptionMode() && !hasSelectedMessages();
                 if (allowPullingDownScroll && dy > 0 && scrolled == 0 && (ChatObject.isChannel(currentChat) && !currentChat.megagroup || isTopic && !UserObject.isBotForum(currentUser)) && chatMode != MODE_SAVED && chatMode != MODE_WELCOME_MESSAGES && chatMode != MODE_SCHEDULED && chatListView.getScrollState() == RecyclerView.SCROLL_STATE_DRAGGING && !chatListView.isFastScrollAnimationRunning() && !chatListView.isMultiselect() && !isReport()) {
                     if (pullingDownOffset == 0 && pullingDownDrawable != null) {
                         if (nextChannels != null && !nextChannels.isEmpty()) {
@@ -7677,6 +7801,77 @@ public class ChatActivity extends BaseFragment implements
                 showMessagesSearchListView(false);
             }
         });
+        messagesSearchListView.setOnItemLongClickListener((view, position) -> {
+            if (!KronoConfig.longClickMediaShowsMenu) {
+                return false;
+            }
+            final MessageObject targetMessage;
+            if (chatMode == MODE_SEARCH) {
+                if (position == 0 && messagesSearchAdapter.containsStories) {
+                    return false;
+                }
+                Object obj = messagesSearchAdapter.getItem(position);
+                if (!(obj instanceof MessageObject)) {
+                    return false;
+                }
+                targetMessage = (MessageObject) obj;
+            } else if (searchingReaction != null) {
+                if (position < 0 || position >= getMediaDataController().searchResultMessages.size()) {
+                    return false;
+                }
+                targetMessage = getMediaDataController().searchResultMessages.get(position);
+            } else {
+                Object obj = messagesSearchAdapter.getItem(position);
+                if (obj instanceof MessageObject) {
+                    targetMessage = (MessageObject) obj;
+                } else if (position >= 0 && position < getMediaDataController().searchResultMessages.size()) {
+                    targetMessage = getMediaDataController().searchResultMessages.get(position);
+                } else {
+                    return false;
+                }
+            }
+            if (targetMessage == null) {
+                return false;
+            }
+            ItemOptions options = ItemOptions.makeOptions(ChatActivity.this, view, false);
+            options.add(R.drawable.msg_message, getString(R.string.AccDescrGoToMessage), () -> {
+                if (chatMode == MODE_SEARCH) {
+                    openMessageInOriginalDialog(targetMessage);
+                } else if (searchingReaction != null) {
+                    setFilterMessages(searchingFiltered = false, true, false);
+                    getMediaDataController().setSearchedPosition(position);
+                    updateSearchButtons(getMediaDataController().getMask(), getMediaDataController().getSearchPosition(), getMediaDataController().getSearchCount());
+                    AndroidUtilities.runOnUIThread(() -> {
+                        scrollToMessageId(targetMessage.getId(), 0, true, 0, true, 0, null, () -> {
+                            progressDialog = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER, themeDelegate);
+                            progressDialog.setOnShowListener(dialogInterface -> showPinnedProgress(false));
+                            progressDialog.setOnCancelListener(postponedScrollCancelListener);
+                            progressDialog.showDelayed(500);
+                        });
+                        if (waitingForLoad.isEmpty()) {
+                            showMessagesSearchListView(false);
+                        }
+                    });
+                } else {
+                    getMediaDataController().jumpToSearchedMessage(classGuid, position);
+                    showMessagesSearchListView(false);
+                }
+            });
+            boolean noForwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || getMessagesController().isPeerNoForwards(targetMessage.getDialogId()) || (targetMessage.messageOwner != null && targetMessage.messageOwner.noforwards));
+            if (!noForwards && targetMessage.messageOwner != null && !TextUtils.isEmpty(targetMessage.messageOwner.message)) {
+                options.add(R.drawable.msg_copy, getString(R.string.Copy), () -> {
+                    AndroidUtilities.addToClipboard(targetMessage.messageOwner.message);
+                    BulletinFactory.of(ChatActivity.this).createCopyBulletin(getString(R.string.MessageCopied)).show();
+                });
+            }
+            if (!noForwards && (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() || (currentEncryptedChat == null && !DialogObject.isEncryptedDialog(targetMessage.getDialogId())))) {
+                options.add(R.drawable.msg_forward, getString(R.string.Forward), () -> forwardSearchPreviewMessage(targetMessage, false));
+                options.add(R.drawable.msg_forward, "Reenviar sin citar", () -> forwardSearchPreviewMessage(targetMessage, true));
+            }
+            options.setScrimViewBackground(Theme.createRoundRectDrawable(dp(8), getThemedColor(Theme.key_windowBackgroundWhite)));
+            options.show();
+            return true;
+        });
         messagesSearchListView.setOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
@@ -8132,7 +8327,22 @@ public class ChatActivity extends BaseFragment implements
         }
 
         actionsButtonsLayout = new ChatActivityActionsButtonsLayout(context, resourceProvider, blurredBackgroundButtonsColorProvider, glassBackgroundDrawableFactory);
-        actionsButtonsLayout.setForwardButtonOnClickListener(v -> openForward(false));
+        actionsButtonsLayout.setForwardButtonOnClickListener(v -> openForward(false, false));
+        actionsButtonsLayout.getForwardButton().setOnLongClickListener(v -> {
+            if (cantForwardMessagesCount > 0) {
+                return false;
+            }
+            boolean noforwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || hasSelectedNoforwardsMessage());
+            if (noforwards) {
+                openForward(false, false);
+                return true;
+            }
+            ItemOptions.makeOptions(ChatActivity.this, v)
+                    .add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward), () -> openForward(false, false))
+                    .add(R.drawable.msg_forward, "Reenviar sin citar", () -> openForward(false, true))
+                    .show();
+            return true;
+        });
         actionsButtonsLayout.setReplyButtonOnClickListener(v -> {
             MessageObject messageObject = null;
             for (int a = 1; a >= 0; a--) {
@@ -8726,8 +8936,10 @@ public class ChatActivity extends BaseFragment implements
         chatScrollHelper.setAnimationCallback(chatScrollHelperCallback);
 
         flagSecure = new FlagSecureReason(getParentActivity().getWindow(), () ->
-            currentEncryptedChat != null ||
-            isPeerNoForwards()
+            !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (
+                currentEncryptedChat != null ||
+                isPeerNoForwards()
+            )
         );
 
         if (oldMessage != null) {
@@ -9905,7 +10117,7 @@ public class ChatActivity extends BaseFragment implements
         translateButton = new TranslateButton(getContext(), this, themeDelegate) {
             @Override
             protected void onButtonClick() {
-                if (getUserConfig().isPremium() || currentChat != null && currentChat.autotranslation) {
+                if (getUserConfig().isPremium() || org.telegram.messenger.KronoConfig.isFreeChatTranslation() || currentChat != null && currentChat.autotranslation) {
                     getMessagesController().getTranslateController().toggleTranslatingDialog(getDialogId());
                 } else {
                     MessagesController.getNotificationsSettings(currentAccount).edit().putInt("dialog_show_translate_count" + getDialogId(), 14).commit();
@@ -10818,6 +11030,9 @@ public class ChatActivity extends BaseFragment implements
             actionModeViews.add(actionMode.addItemWithWidth(copy, R.drawable.msg_copy, dp(48), LocaleController.getString(R.string.Copy)));
             if (!isSavedMessages && getDialogId() != UserObject.VERIFY) {
                 actionModeViews.add(actionMode.addItemWithWidth(forward, R.drawable.msg_forward, dp(48), LocaleController.getString(R.string.Forward)));
+                ActionBarMenuItem moreFwdItem = actionMode.addItemWithWidth(action_mode_other, R.drawable.ic_ab_other, dp(48), LocaleController.getString(R.string.AccDescrMoreOptions));
+                moreFwdItem.addSubItem(forward_no_quote, R.drawable.msg_forward, "Reenviar sin citar");
+                actionModeViews.add(moreFwdItem);
             }
             actionModeViews.add(actionMode.addItemWithWidth(share, R.drawable.msg_shareout, dp(48), LocaleController.getString(R.string.ShareFile)));
             actionModeViews.add(actionMode.addItemWithWidth(delete, R.drawable.msg_delete, dp(48), LocaleController.getString(R.string.Delete)));
@@ -10828,7 +11043,7 @@ public class ChatActivity extends BaseFragment implements
             actionModeViews.add(actionMode.addItemWithWidth(delete, R.drawable.msg_delete, dp(48), LocaleController.getString(R.string.Delete)));
         }
         actionMode.setItemVisibility(edit, canEditMessagesCount == 1 && selectedMessagesIds[0].size() + selectedMessagesIds[1].size() == 1 ? View.VISIBLE : View.GONE);
-        actionMode.setItemVisibility(copy, !isPeerNoForwards() && selectedMessagesCanCopyIds[0].size() + selectedMessagesCanCopyIds[1].size() != 0 ? View.VISIBLE : View.GONE);
+        actionMode.setItemVisibility(copy, (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() || !isPeerNoForwards()) && selectedMessagesCanCopyIds[0].size() + selectedMessagesCanCopyIds[1].size() != 0 ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(star, selectedMessagesCanStarIds[0].size() + selectedMessagesCanStarIds[1].size() != 0 ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(delete, cantDeleteMessagesCount == 0 ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(tag_message, getUserConfig().isPremium() ? View.VISIBLE : View.GONE);
@@ -11653,7 +11868,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void animateToNextChat() {
-        if (pullingDownDrawable == null) {
+        if (KronoConfig.disablePullToNextChannel || pullingDownDrawable == null) {
             return;
         }
         if (isTopic) {
@@ -12687,10 +12902,13 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private boolean canSaveSelectedMessage(MessageObject messageObject) {
-        return !isPeerNoForwards() && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards) && !messageObject.isRoundOnce() && !messageObject.isVoiceOnce();
+        return (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() || (!isPeerNoForwards() && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards))) && !messageObject.isRoundOnce() && !messageObject.isVoiceOnce();
     }
 
     private boolean hasSelectedNoforwardsMessage() {
+        if (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass()) {
+            return false;
+        }
         try {
             for (int i = 0; i < selectedMessagesIds.length; ++i) {
                 for (int j = 0; j < selectedMessagesIds[i].size(); ++j) {
@@ -12750,8 +12968,63 @@ public class ChatActivity extends BaseFragment implements
         updateSelectedMessageReactions();
     }
 
+    private void forwardSearchPreviewMessage(MessageObject targetMessage, boolean noQuote) {
+        if (targetMessage == null) {
+            return;
+        }
+        ArrayList<MessageObject> msgs = new ArrayList<>(1);
+        msgs.add(targetMessage);
+        Bundle args = new Bundle();
+        args.putBoolean("onlySelect", true);
+        args.putBoolean("canSelectTopics", true);
+        args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
+        args.putInt("messagesCount", 1);
+        DialogsActivity fragment = new DialogsActivity(args);
+        fragment.setDelegate((fragment1, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
+            if (dids.size() > 1 || dids.get(0).dialogId == getUserConfig().getClientUserId() || message != null) {
+                for (int a = 0; a < dids.size(); a++) {
+                    long did = dids.get(a).dialogId;
+                    if (message != null) {
+                        getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of(message.toString(), did, null, null, null, true, null, null, null, notify, scheduleDate, 0, null, false));
+                    }
+                    getSendMessagesHelper().sendMessage(msgs, did, noQuote, false, notify, scheduleDate, 0);
+                }
+                fragment1.finishFragment();
+                BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.forward, LocaleController.formatPluralString("FwdMessageCount", 1)).show();
+            } else {
+                long did = dids.get(0).dialogId;
+                Bundle args1 = new Bundle();
+                args1.putBoolean("scrollToTopOnResume", true);
+                if (DialogObject.isEncryptedDialog(did)) {
+                    args1.putInt("enc_id", DialogObject.getEncryptedChatId(did));
+                } else {
+                    if (DialogObject.isUserDialog(did)) {
+                        args1.putLong("user_id", did);
+                    } else {
+                        args1.putLong("chat_id", -did);
+                    }
+                    if (!getMessagesController().checkCanOpenChat(args1, fragment1)) {
+                        return true;
+                    }
+                }
+                getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
+                ChatActivity chatActivity = new ChatActivity(args1);
+                ForumUtilities.applyTopic(chatActivity, dids.get(0));
+                if (presentFragment(chatActivity, true)) {
+                    chatActivity.showFieldPanelForForward(true, msgs, noQuote);
+                }
+            }
+            return true;
+        });
+        presentFragment(fragment);
+    }
+
     private void openForward(boolean fromActionBar) {
-        if (isPeerNoForwards() || hasSelectedNoforwardsMessage()) {
+        openForward(fromActionBar, false);
+    }
+
+    private void openForward(boolean fromActionBar, boolean noQuote) {
+        if (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || hasSelectedNoforwardsMessage())) {
             // We should update text if user changed locale without re-opening chat activity
             String str;
             if (isPeerNoForwards()) {
@@ -12815,6 +13088,7 @@ public class ChatActivity extends BaseFragment implements
         if (selectionReactionsOverlay != null && selectionReactionsOverlay.isVisible()) {
             selectionReactionsOverlay.setHiddenByScroll(true);
         }
+        forwardingWithoutQuote = noQuote;
         Bundle args = new Bundle();
         args.putBoolean("onlySelect", true);
         args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
@@ -13971,7 +14245,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void showTextSelectionHint(MessageObject messageObject) {
-        if (getParentActivity() == null || getMessagesController().isPeerNoForwards(messageObject.getDialogId()) || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+        if (getParentActivity() == null || (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (getMessagesController().isPeerNoForwards(messageObject.getDialogId()) || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards)))) {
             return;
         }
         CharSequence text;
@@ -15387,6 +15661,11 @@ public class ChatActivity extends BaseFragment implements
         showFieldPanel(show, null, null, messageObjectsToForward, null, true, 0, null, false, 0, true);
     }
 
+    public void showFieldPanelForForward(boolean show, ArrayList<MessageObject> messageObjectsToForward, boolean hideSendersName) {
+        pendingForwardHideSendersName = hideSendersName;
+        showFieldPanel(show, null, null, messageObjectsToForward, null, true, 0, null, false, 0, true);
+    }
+
     public void showFieldPanelForReply(MessageObject messageObjectToReply) {
         showFieldPanel(true, messageObjectToReply, null, null, null, true, 0, null, false, 0, true);
     }
@@ -15623,7 +15902,7 @@ public class ChatActivity extends BaseFragment implements
                 chatActivityEnterView.setEditingMessageObject(null, null, false);
                 forbidForwardingWithDismiss = false;
                 if (messagePreviewParams == null) {
-                    messagePreviewParams = new MessagePreviewParams(currentEncryptedChat != null, isPeerNoForwards(), ChatObject.isMonoForum(currentChat));
+                    messagePreviewParams = new MessagePreviewParams(!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && currentEncryptedChat != null, !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && isPeerNoForwards(), ChatObject.isMonoForum(currentChat));
                     messagePreviewParams.attach(forwardingPreviewView);
                 }
                 messagePreviewParams.updateReply(replyingMessageObject, replyingQuoteGroup != null ? replyingQuoteGroup : getGroup(replyingMessageObject.getGroupId()), dialog_id, replyingQuote);
@@ -15816,8 +16095,12 @@ public class ChatActivity extends BaseFragment implements
                 final SimpleTextView replyObjectHintTextView = replyLayout.current().objHint;
 
                 if (messagePreviewParams == null) {
-                    messagePreviewParams = new MessagePreviewParams(currentEncryptedChat != null, isPeerNoForwards(), ChatObject.isMonoForum(currentChat));
+                    messagePreviewParams = new MessagePreviewParams(!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && currentEncryptedChat != null, !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && isPeerNoForwards(), ChatObject.isMonoForum(currentChat));
                     messagePreviewParams.attach(forwardingPreviewView);
+                }
+                if (pendingForwardHideSendersName != null) {
+                    messagePreviewParams.hideForwardSendersName = pendingForwardHideSendersName;
+                    pendingForwardHideSendersName = null;
                 }
                 messagePreviewParams.updateForward(messageObjectsToForward, dialog_id);
                 if (messagePreviewParams.isEmpty() && editingMessageObject == null) {
@@ -16001,7 +16284,7 @@ public class ChatActivity extends BaseFragment implements
 
                 replyIconImageView.setImageResource(R.drawable.filled_link);
                 if (messagePreviewParams == null) {
-                    messagePreviewParams = new MessagePreviewParams(currentEncryptedChat != null, isPeerNoForwards(), ChatObject.isMonoForum(currentChat));
+                    messagePreviewParams = new MessagePreviewParams(!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && currentEncryptedChat != null, !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && isPeerNoForwards(), ChatObject.isMonoForum(currentChat));
                     messagePreviewParams.attach(forwardingPreviewView);
                 }
                 messagePreviewParams.updateLink(currentAccount, foundWebPage, chatActivityEnterView.getFieldText(), replyingMessageObject == threadMessageObject ? null : replyingMessageObject, replyingQuote, editingMessageObject);
@@ -16251,24 +16534,32 @@ public class ChatActivity extends BaseFragment implements
         if (messageObject == null || messageObject.isOut() || !messageObject.isSecretMedia() || messageObject.messageOwner.destroyTime != 0 || messageObject.messageOwner.ttl <= 0) {
             return null;
         }
+        if (org.telegram.messenger.KronoConfig.unlimitedViewOnce && org.telegram.messenger.KronoConfig.isGhostDontReadMessages()) {
+            return null;
+        }
+        final boolean unlimited = org.telegram.messenger.KronoConfig.unlimitedViewOnce;
         if (readNow) {
-            final boolean delete = messageObject.messageOwner.ttl != 0x7FFFFFFF;
-            final int ttl = messageObject.messageOwner.ttl == 0x7FFFFFFF ? 0 : messageObject.messageOwner.ttl;
-            messageObject.messageOwner.destroyTime = ttl + getConnectionsManager().getCurrentTime();
+            final boolean delete = !unlimited && messageObject.messageOwner.ttl != 0x7FFFFFFF;
+            final int ttl = (unlimited || messageObject.messageOwner.ttl == 0x7FFFFFFF) ? 0 : messageObject.messageOwner.ttl;
+            if (!unlimited) {
+                messageObject.messageOwner.destroyTime = ttl + getConnectionsManager().getCurrentTime();
+            }
             if (currentEncryptedChat != null) {
-                getMessagesController().markMessageAsRead(dialog_id, messageObject.messageOwner.random_id, ttl);
+                getMessagesController().markMessageAsRead(dialog_id, messageObject.messageOwner.random_id, unlimited ? messageObject.messageOwner.ttl : ttl);
             } else {
                 getMessagesController().markMessageAsRead2(dialog_id, messageObject.getId(), null, ttl, 0, delete);
             }
             return null;
         } else {
             return () -> {
-                final boolean delete = messageObject.messageOwner.ttl != 0x7FFFFFFF;
-                final int ttl = messageObject.messageOwner.ttl == 0x7FFFFFFF ? 0 : messageObject.messageOwner.ttl;
-                messageObject.messageOwner.destroyTime = ttl + getConnectionsManager().getCurrentTime();
-                messageObject.messageOwner.destroyTimeMillis = ttl * 1000L + getConnectionsManager().getCurrentTimeMillis();
+                final boolean delete = !unlimited && messageObject.messageOwner.ttl != 0x7FFFFFFF;
+                final int ttl = (unlimited || messageObject.messageOwner.ttl == 0x7FFFFFFF) ? 0 : messageObject.messageOwner.ttl;
+                if (!unlimited) {
+                    messageObject.messageOwner.destroyTime = ttl + getConnectionsManager().getCurrentTime();
+                    messageObject.messageOwner.destroyTimeMillis = ttl * 1000L + getConnectionsManager().getCurrentTimeMillis();
+                }
                 if (currentEncryptedChat != null) {
-                    getMessagesController().markMessageAsRead(dialog_id, messageObject.messageOwner.random_id, ttl);
+                    getMessagesController().markMessageAsRead(dialog_id, messageObject.messageOwner.random_id, unlimited ? messageObject.messageOwner.ttl : ttl);
                 } else {
                     getMessagesController().markMessageAsRead2(dialog_id, messageObject.getId(), null, ttl, 0, delete);
                 }
@@ -16278,6 +16569,9 @@ public class ChatActivity extends BaseFragment implements
 
     private Runnable sendSecretMediaDelete(MessageObject messageObject) {
         if (messageObject == null || messageObject.isOut() || !messageObject.isSecretMedia() || messageObject.messageOwner.ttl != 0x7FFFFFFF) {
+            return null;
+        }
+        if (org.telegram.messenger.KronoConfig.unlimitedViewOnce) {
             return null;
         }
         final long taskId = getMessagesController().createDeleteShowOnceTask(dialog_id, messageObject.getId());
@@ -19020,7 +19314,7 @@ public class ChatActivity extends BaseFragment implements
             if (lastWidth != widthSize) {
                 globalIgnoreLayout = false;
                 lastWidth = widthMeasureSpec;
-                if (!inPreviewMode && currentUser != null && currentUser.self) {
+                if (!isUnifiedChatHeader() && !inPreviewMode && currentUser != null && currentUser.self) {
                     SimpleTextView textView = avatarContainer.getTitleTextView();
                     int textWidth = (int) textView.getPaint().measureText(textView.getText(), 0, textView.getText().length());
                     if (widthSize - AndroidUtilities.dp(96 + 56) > textWidth + AndroidUtilities.dp(10)) {
@@ -19033,7 +19327,13 @@ public class ChatActivity extends BaseFragment implements
                 }*/ else {
                     showSearchAsIcon = false;
                 }
-                if (showSearchAsIcon || showAudioCallAsIcon || UserObject.isBotForumWithEditableTopics(currentUser)) {
+                if (isUnifiedChatHeader()) {
+                    if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
+                        final boolean extraRightButton = (topicsPanelItem != null && topicsPanelItem.getVisibility() == View.VISIBLE)
+                                || (topicCreateItem != null && topicCreateItem.getVisibility() == View.VISIBLE);
+                        ((ViewGroup.MarginLayoutParams) avatarContainer.getLayoutParams()).rightMargin = AndroidUtilities.dp(extraRightButton ? 92 : 52);
+                    }
+                } else if (showSearchAsIcon || showAudioCallAsIcon || UserObject.isBotForumWithEditableTopics(currentUser)) {
                     if (avatarContainer != null && avatarContainer.getLayoutParams() != null) {
                         // a saved chat has no menu button, but may have the sidebar's button next to the search
                         final boolean oneIcon = chatMode == MODE_SAVED && (topicsPanelItem == null || topicsPanelItem.getVisibility() != View.VISIBLE);
@@ -19060,7 +19360,7 @@ public class ChatActivity extends BaseFragment implements
                     }
                 }
                 if (!actionBar.isSearchFieldVisible() && audioCallIconItem != null) {
-                    audioCallIconItem.setVisibility((showAudioCallAsIcon && !showSearchAsIcon) ? View.VISIBLE : View.GONE);
+                    audioCallIconItem.setVisibility((!isUnifiedChatHeader() && showAudioCallAsIcon && !showSearchAsIcon) ? View.VISIBLE : View.GONE);
                 }
                 if (headerItem != null) {
                     TLRPC.UserFull userInfo = getCurrentUserInfo();
@@ -19881,7 +20181,7 @@ public class ChatActivity extends BaseFragment implements
             if (selectedMessagesIds[index].indexOfKey(messageObject.getId()) >= 0) {
                 selectedMessagesIds[index].remove(messageObject.getId());
                 if (!isReport()) {
-                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() || !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards))) {
                         selectedMessagesCanCopyIds[index].remove(messageObject.getId());
                     }
                     if (!messageObject.isAnimatedEmoji() && (messageObject.isSticker() || messageObject.isAnimatedSticker()) && MessageObject.isStickerHasSet(messageObject.getDocument())) {
@@ -19893,7 +20193,7 @@ public class ChatActivity extends BaseFragment implements
                     if (!messageObject.canDeleteMessage(chatMode == MODE_SCHEDULED, currentChat)) {
                         cantDeleteMessagesCount--;
                     }
-                    boolean noforwards = isPeerNoForwards();
+                    boolean noforwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && isPeerNoForwards();
                     if (chatMode == MODE_SCHEDULED || !messageObject.canForwardMessage() || noforwards) {
                         cantForwardMessagesCount--;
                     } else {
@@ -19918,7 +20218,7 @@ public class ChatActivity extends BaseFragment implements
                 }
                 selectedMessagesIds[index].put(messageObject.getId(), messageObject);
                 if (!isReport()) {
-                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() || !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards))) {
                         selectedMessagesCanCopyIds[index].put(messageObject.getId(), messageObject);
                     }
                     if (!messageObject.isAnimatedEmoji() && (messageObject.isSticker() || messageObject.isAnimatedSticker()) && MessageObject.isStickerHasSet(messageObject.getDocument())) {
@@ -19930,7 +20230,7 @@ public class ChatActivity extends BaseFragment implements
                     if (!messageObject.canDeleteMessage(chatMode == MODE_SCHEDULED, currentChat)) {
                         cantDeleteMessagesCount++;
                     }
-                    boolean noforwards = isPeerNoForwards();
+                    boolean noforwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && isPeerNoForwards();
                     if (chatMode == MODE_SCHEDULED || !messageObject.canForwardMessage() || noforwards) {
                         cantForwardMessagesCount++;
                     } else {
@@ -19961,11 +20261,12 @@ public class ChatActivity extends BaseFragment implements
                 ActionBarMenuItem starItem = actionBar.createActionMode().getItem(star);
                 ActionBarMenuItem editItem = actionBar.createActionMode().getItem(edit);
                 ActionBarMenuItem forwardItem = actionBar.createActionMode().getItem(forward);
+                ActionBarMenuItem moreFwdItem = actionBar.createActionMode().getItem(action_mode_other);
                 ActionBarMenuItem deleteItem = actionBar.createActionMode().getItem(delete);
                 ActionBarMenuItem tagItem = actionBar.createActionMode().getItem(tag_message);
                 ActionBarMenuItem shareItem = actionBar.createActionMode().getItem(share);
 
-                boolean noforwards = isPeerNoForwards() || hasSelectedNoforwardsMessage();
+                boolean noforwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || hasSelectedNoforwardsMessage());
                 if (prevCantForwardCount == 0 && cantForwardMessagesCount != 0 || prevCantForwardCount != 0 && cantForwardMessagesCount == 0) {
                     forwardButtonAnimation = new AnimatorSet();
                     ArrayList<Animator> animators = new ArrayList<>();
@@ -19978,6 +20279,10 @@ public class ChatActivity extends BaseFragment implements
                         } else if (forwardItem.getBackground() == null) {
                             ThemeBind.selectorBackground(forwardItem, Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarActionModeDefaultSelector), 5), null, ThemeBind.of(Theme.key_actionBarActionModeDefaultSelector), getResourceProvider());
                         }
+                    }
+                    if (moreFwdItem != null) {
+                        moreFwdItem.setEnabled(cantForwardMessagesCount == 0 && !noforwards);
+                        animators.add(ObjectAnimator.ofFloat(moreFwdItem, View.ALPHA, (cantForwardMessagesCount == 0 && !noforwards) ? 1.0f : 0.5f));
                     }
                     if (actionsButtonsLayout != null) {
                         actionsButtonsLayout.setForwardButtonEnabled(cantForwardMessagesCount == 0 || noforwards, true);
@@ -19999,6 +20304,10 @@ public class ChatActivity extends BaseFragment implements
                         } else if (forwardItem.getBackground() == null) {
                             ThemeBind.selectorBackground(forwardItem, Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarActionModeDefaultSelector), 3), null, ThemeBind.of(Theme.key_actionBarActionModeDefaultSelector), getResourceProvider());
                         }
+                    }
+                    if (moreFwdItem != null) {
+                        moreFwdItem.setEnabled(cantForwardMessagesCount == 0 && !noforwards);
+                        moreFwdItem.setAlpha((cantForwardMessagesCount == 0 && !noforwards) ? 1.0f : 0.5f);
                     }
                     if (actionsButtonsLayout != null) {
                         actionsButtonsLayout.setForwardButtonEnabled(cantForwardMessagesCount == 0 || noforwards, false);
@@ -20103,7 +20412,7 @@ public class ChatActivity extends BaseFragment implements
                                 MessageObject msg = selectedMessagesIds[a].valueAt(i);
                                 if (msg == null) continue;
                                 if (msg.isVoiceOnce() || msg.isRoundOnce()) continue;
-                                if (msg.messageOwner.noforwards) continue;
+                                if (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && msg.messageOwner.noforwards) continue;
                                 if (msg.isVoice() || msg.isRoundVideo())
                                     show = true;
                             }
@@ -23176,6 +23485,34 @@ public class ChatActivity extends BaseFragment implements
                     removeSelfFromStack();
                 }
             }
+        } else if (id == NotificationCenter.kronoMessagesMarkedDeleted) {
+            ArrayList<Integer> markAsDeletedMessages = (ArrayList<Integer>) args[0];
+            long channelId = (Long) args[1];
+            if (channelId != 0 && -channelId != dialog_id && -channelId != mergeDialogId) {
+                return;
+            }
+            if (markAsDeletedMessages != null) {
+                boolean updatedAny = false;
+                for (int msg_id : markAsDeletedMessages) {
+                    for (int a = 0; a < 2; a++) {
+                        if (channelId != 0 && (a == 0 ? dialog_id != -channelId : mergeDialogId != -channelId)) {
+                            continue;
+                        }
+                        MessageObject msg = messagesDict[a].get(msg_id);
+                        if (msg != null && msg.messageOwner != null && !DialogObject.isEncryptedDialog(msg.getDialogId())) {
+                            msg.messageOwner.kronoDeleted = true;
+                            msg.forceUpdate = true;
+                            if (chatAdapter != null) {
+                                chatAdapter.updateRowWithMessageObject(msg, false, false);
+                            }
+                            updatedAny = true;
+                        }
+                    }
+                }
+                if (updatedAny) {
+                    updateVisibleRows();
+                }
+            }
         } else if (id == NotificationCenter.quickRepliesDeleted) {
             if (chatMode != MODE_QUICK_REPLIES) return;
             if ((Long) args[1] != getQuickReplyId()) return;
@@ -24783,7 +25120,7 @@ public class ChatActivity extends BaseFragment implements
                     }
                 }
                 if (headerItem != null) {
-                    showAudioCallAsIcon = userInfo.phone_calls_available && !inPreviewMode;
+                    showAudioCallAsIcon = userInfo.phone_calls_available && !inPreviewMode && !isUnifiedChatHeader();
                     if (userInfo.phone_calls_available) {
                         if (showAudioCallAsIcon) {
                             if (audioCallIconItem != null) {
@@ -28893,7 +29230,7 @@ public class ChatActivity extends BaseFragment implements
                     otherIcon.setIconVisible(false);
                 }
                 if (headerItem != null) {
-                    headerItem.setVisibility(View.VISIBLE);
+                    headerItem.setVisibility(isUnifiedChatHeader() ? View.GONE : View.VISIBLE);
                 }
             } else {
                 if (botUser != null && currentUser != null && currentUser.bot || currentUser != null && currentUser.id == UserObject.VERIFY || chatMode == MODE_SAVED && getSavedDialogId() != getUserConfig().getClientUserId()) {
@@ -30013,7 +30350,7 @@ public class ChatActivity extends BaseFragment implements
 
         boolean showRestartTopic = !isInPreviewMode() && forumTopic != null && forumTopic.closed && !forumTopic.hidden && ChatObject.canManageTopic(currentAccount, currentChat, forumTopic);
         boolean showTranslate = (
-            getUserConfig().isPremium() || currentChat != null && currentChat.autotranslation ?
+            getUserConfig().isPremium() || org.telegram.messenger.KronoConfig.isFreeChatTranslation() || currentChat != null && currentChat.autotranslation ?
                 getMessagesController().getTranslateController().isDialogTranslatable(getDialogId()) && !getMessagesController().getTranslateController().isTranslateDialogHidden(getDialogId()) :
                 !getMessagesController().premiumFeaturesBlocked() && preferences.getInt("dialog_show_translate_count" + did, 5) <= 0
         ) || DEBUG_TOP_PANELS;
@@ -30575,7 +30912,7 @@ public class ChatActivity extends BaseFragment implements
         super.setInPreviewMode(value);
         if (currentUser != null && audioCallIconItem != null) {
             TLRPC.UserFull userFull = getMessagesController().getUserFull(currentUser.id);
-            if (userFull != null && userFull.phone_calls_available) {
+            if (userFull != null && userFull.phone_calls_available && !isUnifiedChatHeader()) {
                 showAudioCallAsIcon = !inPreviewMode;
                 audioCallIconItem.setVisibility(View.VISIBLE);
             } else {
@@ -30585,7 +30922,7 @@ public class ChatActivity extends BaseFragment implements
         }
         if (avatarContainer != null) {
             avatarContainer.setOccupyStatusBar(!value);
-            avatarContainer.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, !inPreviewMode ? 52 : 0, 0, 52, 0));
+            avatarContainer.setLayoutParams(LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, !inPreviewMode ? 52 : (isUnifiedChatHeader() ? 6 : 0), 0, 52, 0));
         }
         if (chatActivityEnterView != null) {
             chatActivityEnterView.setVisibility(!value ? View.VISIBLE : View.INVISIBLE);
@@ -30659,6 +30996,41 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onResume() {
         super.onResume();
+        if (org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, dialog_id)) {
+            Activity activity = getParentActivity();
+            if (activity != null) {
+                android.view.Window window = activity.getWindow();
+                if (window != null) {
+                    int flags = window.getAttributes().flags;
+                    kronoHadFlagSecureBefore = (flags & android.view.WindowManager.LayoutParams.FLAG_SECURE) != 0;
+                    if (!kronoHadFlagSecureBefore) {
+                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+                        kronoAddedFlagSecure = true;
+                    }
+                }
+            }
+            if (!org.telegram.messenger.KronoConfig.isHiddenVaultUnlocked() && activity != null && KronoHiddenLockHelper.isProtectionConfigured(activity)) {
+                if (contentView != null) {
+                    contentView.setAlpha(0f);
+                }
+                if (!kronoVaultAuthInFlight) {
+                    kronoVaultAuthInFlight = true;
+                    KronoHiddenLockHelper.authenticate(this, "Chat oculto", "Verifica tu identidad para continuar", () -> {
+                        kronoVaultAuthInFlight = false;
+                        if (contentView != null) {
+                            contentView.setAlpha(1f);
+                        }
+                    }, () -> {
+                        kronoVaultAuthInFlight = false;
+                        if (!org.telegram.messenger.KronoConfig.isHiddenVaultUnlocked() && !isFinishing()) {
+                            finishFragment(false);
+                        }
+                    });
+                }
+            } else if (contentView != null && contentView.getAlpha() == 0f) {
+                contentView.setAlpha(1f);
+            }
+        }
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();
         if (openImport && getSendMessagesHelper().getImportingHistory(dialog_id) != null) {
@@ -30875,6 +31247,16 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onPause() {
         super.onPause();
+        if (kronoAddedFlagSecure) {
+            kronoAddedFlagSecure = false;
+            Activity activity = getParentActivity();
+            if (activity != null && !kronoHadFlagSecureBefore) {
+                android.view.Window window = activity.getWindow();
+                if (window != null) {
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+                }
+            }
+        }
         scrolling = false;
         if (scrimPopupWindow != null) {
             scrimPopupWindow.setPauseNotifications(false);
@@ -31815,7 +32197,7 @@ public class ChatActivity extends BaseFragment implements
             allowPin = false;
         }
         allowPin = allowPin && message.getId() > 0 && (message.messageOwner.action == null || message.messageOwner.action instanceof TLRPC.TL_messageActionEmpty) && !message.isExpiredStory() && message.type != MessageObject.TYPE_STORY_MENTION;
-        boolean noforwards = isPeerNoForwards() || message.messageOwner.noforwards || getDialogId() == UserObject.VERIFY;
+        boolean noforwards = (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || message.messageOwner.noforwards)) || getDialogId() == UserObject.VERIFY;
         boolean noforwardsOrPaidMedia = noforwards || message.type == MessageObject.TYPE_PAID_MEDIA;
         boolean allowUnpin = message.getDialogId() != mergeDialogId && allowPin && (pinnedMessageObjects.containsKey(message.getId()) || groupedMessages != null && !groupedMessages.messages.isEmpty() && pinnedMessageObjects.containsKey(groupedMessages.messages.get(0).getId())) && !message.isExpiredStory();
         boolean allowEdit = message.canEditMessage(currentChat) && !chatActivityEnterView.hasAudioToSend() && message.getDialogId() != mergeDialogId && message.type != MessageObject.TYPE_STORY && message.type != MessageObject.TYPE_POLL;
@@ -31927,6 +32309,7 @@ public class ChatActivity extends BaseFragment implements
                         case OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC:
                         case OPTION_SHARE:
                         case OPTION_FORWARD:
+                        case OPTION_FORWARD_NO_QUOTE:
                         case OPTION_REPLY:
                             options.remove(i);
                             items.remove(i);
@@ -33177,7 +33560,7 @@ public class ChatActivity extends BaseFragment implements
                     }
                 }
 
-                boolean showNoForwards = (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
+                boolean showNoForwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
                 scrimPopupContainerLayout.addView(popupLayout, LayoutHelper.createLinearRelatively(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, 0, isReactionsAvailable ? 36 : 0, 0));
                 scrimPopupContainerLayout.setPopupWindowLayout(popupLayout);
                 if (showNoForwards) {
@@ -34329,7 +34712,8 @@ public class ChatActivity extends BaseFragment implements
                 createDeleteMessagesAlert(selectedObject, selectedObjectGroup, true);
                 break;
             }
-            case OPTION_FORWARD: {
+            case OPTION_FORWARD:
+            case OPTION_FORWARD_NO_QUOTE: {
                 if (getMessagesController().isFrozen()) {
                     AccountFrozenAlert.show(currentAccount);
                     selectedObject = null;
@@ -34337,6 +34721,7 @@ public class ChatActivity extends BaseFragment implements
                     selectedObjectGroup = null;
                     return;
                 }
+                forwardingWithoutQuote = option == OPTION_FORWARD_NO_QUOTE;
                 forwardingMessage = selectedObject;
                 forwardingMessageGroup = selectedObjectGroup;
                 Bundle args = new Bundle();
@@ -34592,7 +34977,7 @@ public class ChatActivity extends BaseFragment implements
             }
             case OPTION_REPLY: {
                 if (selectedObject != null && currentChat != null && (ChatObject.isNotInChat(currentChat) && !ChatObject.isMonoForum(currentChat) && !isThreadChat() || ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup || !ChatObject.canSendMessages(currentChat))) {
-                    if (selectedObject.messageOwner != null && selectedObject.messageOwner.noforwards) {
+                    if (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && selectedObject.messageOwner != null && selectedObject.messageOwner.noforwards) {
                         return;
                     }
                     MessageObject messageObject = selectedObject;
@@ -34749,6 +35134,45 @@ public class ChatActivity extends BaseFragment implements
                         BulletinFactory.of(this).createDownloadBulletin(fileType, themeDelegate).show();
                     });
                 }
+                break;
+            }
+            case OPTION_DELETE_FROM_CACHE: {
+                long freedBytes = org.telegram.messenger.KronoConfig.deleteMessageMediaFromCache(currentAccount, selectedObject, selectedObjectGroup);
+                updateVisibleRows();
+                selectedObject = null;
+                selectedObjectGroup = null;
+                selectedObjectToEditCaption = null;
+                String msgText = freedBytes > 0
+                        ? "Eliminado del caché (" + AndroidUtilities.formatFileSize(freedBytes) + ")"
+                        : "Eliminado del caché";
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_clear, msgText).show();
+                break;
+            }
+            case OPTION_DELETE_LOCALLY: {
+                ArrayList<Integer> ids = new ArrayList<>();
+                ArrayList<Long> randoms = currentEncryptedChat != null ? new ArrayList<>() : null;
+                if (selectedObjectGroup != null && selectedObjectGroup.messages != null && !selectedObjectGroup.messages.isEmpty()) {
+                    for (int i = 0; i < selectedObjectGroup.messages.size(); i++) {
+                        MessageObject m = selectedObjectGroup.messages.get(i);
+                        if (m != null) {
+                            ids.add(m.getId());
+                            if (randoms != null && m.messageOwner != null && m.messageOwner.random_id != 0) {
+                                randoms.add(m.messageOwner.random_id);
+                            }
+                        }
+                    }
+                } else if (selectedObject != null) {
+                    ids.add(selectedObject.getId());
+                    if (randoms != null && selectedObject.messageOwner != null && selectedObject.messageOwner.random_id != 0) {
+                        randoms.add(selectedObject.messageOwner.random_id);
+                    }
+                }
+                if (!ids.isEmpty()) {
+                    getMessagesController().deleteMessages(ids, randoms, currentEncryptedChat, dialog_id, (int) getTopicId(), false, chatMode, true);
+                }
+                selectedObject = null;
+                selectedObjectGroup = null;
+                selectedObjectToEditCaption = null;
                 break;
             }
             case OPTION_ADD_TO_GIFS: {
@@ -35424,12 +35848,14 @@ public class ChatActivity extends BaseFragment implements
             }
         }
 
+        final boolean noQuote = forwardingWithoutQuote;
         if (!fragment.isQuote && (dids.size() > 1 || dids.get(0).dialogId == getUserConfig().getClientUserId() || message != null || scheduleDate != 0 || !notify)) {
             return !AlertsCreator.ensurePaidMessagesMultiConfirmationTopicKeys(currentAccount, dids, fmessages.size() + (TextUtils.isEmpty(message) ? 0 : 1), prices -> {
                 if (fragment.resetDelegate) {
                     fragment.setDelegate(null);
                 }
 
+                forwardingWithoutQuote = false;
                 if (forwardingMessage != null) {
                     forwardingMessage = null;
                     forwardingMessageGroup = null;
@@ -35457,7 +35883,7 @@ public class ChatActivity extends BaseFragment implements
                         params.suggestionParams = messageSuggestionParams;
                         getSendMessagesHelper().sendMessage(params);
                     }
-                    getSendMessagesHelper().sendMessage(fmessages, did, false, false, notify, scheduleDate, scheduleRepeatPeriod, null, -1, price == null ? 0 : price, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
+                    getSendMessagesHelper().sendMessage(fmessages, did, noQuote, false, notify, scheduleDate, scheduleRepeatPeriod, null, -1, price == null ? 0 : price, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
                 }
                 fragment.finishFragment();
                 createUndoView();
@@ -35472,6 +35898,7 @@ public class ChatActivity extends BaseFragment implements
                 }
             });
         } else {
+            forwardingWithoutQuote = false;
             if (forwardingMessage != null) {
                 forwardingMessage = null;
                 forwardingMessageGroup = null;
@@ -35544,7 +35971,7 @@ public class ChatActivity extends BaseFragment implements
                         };
                         chatActivity.showFieldPanelForReplyQuote(replyingMessageObject, replyingQuote);
                     } else {
-                        chatActivity.showFieldPanelForForward(true, fmessages);
+                        chatActivity.showFieldPanelForForward(true, fmessages, noQuote);
                     }
                     if (chatActivity.getDialogId() == getDialogId() && !AndroidUtilities.isTablet()) {
                         removeSelfFromStack();
@@ -35572,7 +35999,7 @@ public class ChatActivity extends BaseFragment implements
                 if (fragment.isQuote && replyingMessageObject != null) {
                     showFieldPanelForReplyQuote(replyingMessageObject, replyingQuote);
                 } else {
-                    showFieldPanelForForward(true, fmessages);
+                    showFieldPanelForForward(true, fmessages, noQuote);
                 }
                 if (AndroidUtilities.isTablet()) {
                     hideActionMode();
@@ -37195,7 +37622,7 @@ public class ChatActivity extends BaseFragment implements
                     builder.setTitleMultipleLines(true);
                 }
                 final int finalTimestamp = timestamp;
-                boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards);
+                boolean noforwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards));
                 builder.setItems(noforwards ? new CharSequence[] {LocaleController.getString(R.string.Open)} : new CharSequence[]{LocaleController.getString(R.string.Open), LocaleController.getString(R.string.Copy)}, (dialog, which) -> {
                     if (which == 0) {
                         if (str.startsWith("video?")) {
@@ -37554,7 +37981,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     public void logSponsoredClicked(MessageObject messageObject, boolean media, boolean fullscreen) {
-        if (messageObject == null || !messageObject.isSponsored()) {
+        if (messageObject == null || !messageObject.isSponsored() || org.telegram.messenger.KronoConfig.isBlockSponsoredMessages()) {
             return;
         }
         TLRPC.TL_messages_clickSponsoredMessage req = new TLRPC.TL_messages_clickSponsoredMessage();
@@ -37568,7 +37995,7 @@ public class ChatActivity extends BaseFragment implements
         if (url == null || getParentActivity() == null) {
             return;
         }
-        boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards);
+        boolean noforwards = !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards));
         if (url instanceof URLSpanMono) {
             if (!noforwards || getDialogId() == UserObject.VERIFY) {
                 ((URLSpanMono) url).copyToClipboard();
@@ -37792,7 +38219,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void markSponsoredAsRead(MessageObject object) {
-        if (object == null) {
+        if (object == null || org.telegram.messenger.KronoConfig.isBlockSponsoredMessages()) {
             return;
         }
         if (!object.isSponsored() || object.viewsReloaded) {
@@ -39594,7 +40021,26 @@ public class ChatActivity extends BaseFragment implements
             searchItem.setSearchFieldCaption(null);
             animatorSearchFieldVisibility.setValue(false, true);
             animatorSearchHashtagHistoryVisibility.setValue(false, true);
-            if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer()) && (currentChat == null || ChatObject.canSendPlain(currentChat)) && !isSidebarAttach()) {
+            if (isUnifiedChatHeader()) {
+                if (headerItem != null) {
+                    headerItem.setVisibility(View.GONE);
+                }
+                if (audioCallIconItem != null) {
+                    audioCallIconItem.setVisibility(View.GONE);
+                }
+                if (topicCreateItem != null) {
+                    topicCreateItem.setVisibility(View.VISIBLE);
+                }
+                if (searchIconItem != null) {
+                    searchIconItem.setVisibility(View.GONE);
+                }
+                if (attachItem != null) {
+                    attachItem.setVisibility(View.GONE);
+                }
+                if (otherIcon != null) {
+                    otherIcon.setIconVisible(false);
+                }
+            } else if (chatActivityEnterView.hasText() && TextUtils.isEmpty(chatActivityEnterView.getSlowModeTimer()) && (currentChat == null || ChatObject.canSendPlain(currentChat)) && !isSidebarAttach()) {
                 if (headerItem != null) {
                     headerItem.setVisibility(View.GONE);
                 }
@@ -39955,6 +40401,7 @@ public class ChatActivity extends BaseFragment implements
         msg.translatedText = omsg.translatedText;
         msg.replyStory = omsg.replyStory;
         msg.quick_reply_shortcut = omsg.quick_reply_shortcut;
+        msg.kronoDeleted = omsg.kronoDeleted;
         return msg;
     }
 
@@ -40552,8 +40999,7 @@ public class ChatActivity extends BaseFragment implements
             return messageObject != null
                 && messageObject.messageOwner != null
                 && chatMode != MODE_SCHEDULED
-                && !isPeerNoForwards()
-                && !messageObject.messageOwner.noforwards
+                && (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() || (!isPeerNoForwards() && !messageObject.messageOwner.noforwards))
                 && messageObject.type != MessageObject.TYPE_PAID_MEDIA;
         }
 
@@ -46485,7 +46931,7 @@ public class ChatActivity extends BaseFragment implements
             allowPin = false;
         }
         allowPin = allowPin && message.getId() > 0 && (message.messageOwner.action == null || message.messageOwner.action instanceof TLRPC.TL_messageActionEmpty) && !message.isExpiredStory() && message.type != MessageObject.TYPE_STORY_MENTION;
-        boolean noforwards = isPeerNoForwards() || message.messageOwner.noforwards || getDialogId() == UserObject.VERIFY;
+        boolean noforwards = (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || message.messageOwner.noforwards)) || getDialogId() == UserObject.VERIFY;
         boolean noforwardsOrPaidMedia = noforwards || message.type == MessageObject.TYPE_PAID_MEDIA;
         boolean allowUnpin = !isEphemeral && message.getDialogId() != mergeDialogId && allowPin && (pinnedMessageObjects.containsKey(message.getId()) || groupedMessages != null && !groupedMessages.messages.isEmpty() && pinnedMessageObjects.containsKey(groupedMessages.messages.get(0).getId())) && !message.isExpiredStory();
         boolean allowEdit = !isEphemeral && message.canEditMessage(currentChat) && !chatActivityEnterView.hasAudioToSend() && message.getDialogId() != mergeDialogId && message.type != MessageObject.TYPE_STORY && message.type != MessageObject.TYPE_POLL;
@@ -46783,14 +47229,17 @@ public class ChatActivity extends BaseFragment implements
                     }
                 } else if (type == 4) {
                     if (!noforwardsOrPaidMedia && !selectedObject.hasRevealedExtendedMedia()) {
+                        final boolean allowBlurredSave = org.telegram.messenger.KronoConfig.viewOnceAllowSaveAndScreenshots;
                         if (selectedObject.isVideo()) {
-                            if (!selectedObject.needDrawBluredPreview()) {
+                            if (!selectedObject.needDrawBluredPreview() || allowBlurredSave) {
                                 items.add(LocaleController.getString(R.string.SaveToGallery));
                                 options.add(OPTION_SAVE_TO_GALLERY);
                                 icons.add(R.drawable.msg_gallery);
-                                items.add(LocaleController.getString(R.string.ShareFile));
-                                options.add(OPTION_SHARE);
-                                icons.add(R.drawable.msg_shareout);
+                                if (!selectedObject.needDrawBluredPreview()) {
+                                    items.add(LocaleController.getString(R.string.ShareFile));
+                                    options.add(OPTION_SHARE);
+                                    icons.add(R.drawable.msg_shareout);
+                                }
                             }
                         } else if (selectedObject.isMusic() && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
                             items.add(LocaleController.getString(R.string.SaveToMusic));
@@ -46812,7 +47261,7 @@ public class ChatActivity extends BaseFragment implements
                             options.add(OPTION_SHARE);
                             icons.add(R.drawable.msg_shareout);
                         } else {
-                            if (!selectedObject.needDrawBluredPreview()) {
+                            if (!selectedObject.needDrawBluredPreview() || allowBlurredSave) {
                                 items.add(LocaleController.getString(R.string.SaveToGallery));
                                 options.add(OPTION_SAVE_TO_GALLERY);
                                 icons.add(R.drawable.msg_gallery);
@@ -46844,16 +47293,18 @@ public class ChatActivity extends BaseFragment implements
                         icons.add(R.drawable.msg_shareout);
                     }
                 } else if (type == 6 && !noforwardsOrPaidMedia && !selectedObject.hasRevealedExtendedMedia()) {
-                    if (!selectedObject.needDrawBluredPreview() && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                    if ((!selectedObject.needDrawBluredPreview() || org.telegram.messenger.KronoConfig.viewOnceAllowSaveAndScreenshots) && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
                         items.add(LocaleController.getString(R.string.SaveToGallery));
                         options.add(OPTION_SAVE_TO_GALLERY2);
                         icons.add(R.drawable.msg_gallery);
-                        items.add(LocaleController.getString(R.string.SaveToDownloads));
-                        options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
-                        icons.add(R.drawable.msg_download);
-                        items.add(LocaleController.getString(R.string.ShareFile));
-                        options.add(OPTION_SHARE);
-                        icons.add(R.drawable.msg_shareout);
+                        if (!selectedObject.needDrawBluredPreview()) {
+                            items.add(LocaleController.getString(R.string.SaveToDownloads));
+                            options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
+                            icons.add(R.drawable.msg_download);
+                            items.add(LocaleController.getString(R.string.ShareFile));
+                            options.add(OPTION_SHARE);
+                            icons.add(R.drawable.msg_shareout);
+                        }
                     }
                 } else if (type == 7) {
                     if (selectedObject.isMask()) {
@@ -46933,6 +47384,10 @@ public class ChatActivity extends BaseFragment implements
                 if (canForward) {
                     items.add(LocaleController.getString(R.string.Forward));
                     options.add(OPTION_FORWARD);
+                    icons.add(R.drawable.msg_forward);
+
+                    items.add("Reenviar sin citar");
+                    options.add(OPTION_FORWARD_NO_QUOTE);
                     icons.add(R.drawable.msg_forward);
                 }
                 if (allowUnpin) {
@@ -47019,14 +47474,16 @@ public class ChatActivity extends BaseFragment implements
                     options.add(OPTION_VIEW_IN_TOPIC);
                     icons.add(R.drawable.msg_viewintopic);
                 }
-                if (type == 4 && !noforwardsOrPaidMedia && !selectedObject.hasRevealedExtendedMedia() && !selectedObject.needDrawBluredPreview()) {
+                if (type == 4 && !noforwardsOrPaidMedia && !selectedObject.hasRevealedExtendedMedia() && (!selectedObject.needDrawBluredPreview() || org.telegram.messenger.KronoConfig.viewOnceAllowSaveAndScreenshots)) {
                     if (selectedObject.isVideo()) {
                         items.add(LocaleController.getString(R.string.SaveToGallery));
                         options.add(OPTION_SAVE_TO_GALLERY);
                         icons.add(R.drawable.msg_gallery);
-                        items.add(LocaleController.getString(R.string.ShareFile));
-                        options.add(OPTION_SHARE);
-                        icons.add(R.drawable.msg_shareout);
+                        if (!selectedObject.needDrawBluredPreview()) {
+                            items.add(LocaleController.getString(R.string.ShareFile));
+                            options.add(OPTION_SHARE);
+                            icons.add(R.drawable.msg_shareout);
+                        }
                     } else if (selectedObject.isMusic() && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
                         items.add(LocaleController.getString(R.string.SaveToMusic));
                         options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
@@ -47108,6 +47565,43 @@ public class ChatActivity extends BaseFragment implements
             items.add(getString(R.string.WelcomeMessageRevert));
             options.add(OPTION_WELCOME_REVERT);
             icons.add(R.drawable.outline_revert_24);
+        }
+
+        boolean canDeleteFromCache = org.telegram.messenger.KronoConfig.canDeleteMessageFromCache(currentAccount, selectedObject);
+        if (!canDeleteFromCache && selectedObjectGroup != null && selectedObjectGroup.messages != null) {
+            for (int i = 0; i < selectedObjectGroup.messages.size(); i++) {
+                if (org.telegram.messenger.KronoConfig.canDeleteMessageFromCache(currentAccount, selectedObjectGroup.messages.get(i))) {
+                    canDeleteFromCache = true;
+                    break;
+                }
+            }
+        }
+        if (canDeleteFromCache) {
+            int deleteIdx = options.indexOf(OPTION_DELETE);
+            if (deleteIdx >= 0) {
+                items.add(deleteIdx, "Borrar del caché");
+                options.add(deleteIdx, OPTION_DELETE_FROM_CACHE);
+                icons.add(deleteIdx, R.drawable.msg_clear);
+            } else {
+                items.add("Borrar del caché");
+                options.add(OPTION_DELETE_FROM_CACHE);
+                icons.add(R.drawable.msg_clear);
+            }
+        }
+        boolean isKronoDeletedMsg = selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.kronoDeleted;
+        if (!isKronoDeletedMsg && selectedObjectGroup != null && selectedObjectGroup.messages != null) {
+            for (int i = 0; i < selectedObjectGroup.messages.size(); i++) {
+                MessageObject gm = selectedObjectGroup.messages.get(i);
+                if (gm != null && gm.messageOwner != null && gm.messageOwner.kronoDeleted) {
+                    isKronoDeletedMsg = true;
+                    break;
+                }
+            }
+        }
+        if (isKronoDeletedMsg) {
+            items.add("Eliminar mensaje guardado");
+            options.add(OPTION_DELETE_LOCALLY);
+            icons.add(R.drawable.msg_delete);
         }
     }
 
@@ -47376,6 +47870,13 @@ public class ChatActivity extends BaseFragment implements
             avatarContainer.setScaleY(scale);
             avatarContainer.setAlpha(factor);
             avatarContainer.setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
+            final View rightAvatar = avatarContainer.getRightAvatarContainer();
+            if (rightAvatar != null && avatarContainer.hasRightAvatar()) {
+                rightAvatar.setScaleX(scale);
+                rightAvatar.setScaleY(scale);
+                rightAvatar.setAlpha(factor);
+                rightAvatar.setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
+            }
         }
     }
 
@@ -48393,5 +48894,35 @@ public class ChatActivity extends BaseFragment implements
         keys.add(Theme.key_actionBarDefaultSubtitle);
         keys.add(Theme.key_actionBarDefaultTitle);
         keys.add(Theme.key_actionBarDefaultIcon);
+    }
+
+    public boolean canOpenSearchFromProfile() {
+        return searchItem != null;
+    }
+
+    public void openSearchFromProfile() {
+        openSearchWithText(isSupportedTags() ? "" : null);
+    }
+
+    public boolean isThemeChangeAvailableForProfile() {
+        return themeDelegate != null && themeDelegate.isThemeChangeAvailable(true);
+    }
+
+    public void openWallpapersFromProfile() {
+        showChatThemeBottomSheet();
+    }
+
+    public TL_stories.TL_premium_boostsStatus getBoostsStatusForProfile() {
+        return boostsStatus;
+    }
+
+    public void updateTopicStateFromProfile() {
+        updateTopicButtons();
+        updateBottomOverlay();
+        updateTopPanel(true);
+    }
+
+    public void triggerClearHistoryFromProfile(boolean revoke, boolean canDeleteHistory) {
+        performHistoryClear(revoke, canDeleteHistory);
     }
 }

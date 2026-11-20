@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -21,15 +22,18 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.ConnectionsManager;
@@ -40,6 +44,9 @@ import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.Cells.GraySectionCell;
 import org.telegram.ui.Cells.SharedAudioCell;
 import org.telegram.ui.Cells.SharedDocumentCell;
+import org.telegram.ui.ChatActivity;
+import org.telegram.ui.Components.Forum.ForumUtilities;
+import org.telegram.ui.DialogsActivity;
 import org.telegram.ui.FilteredSearchView;
 import org.telegram.ui.PhotoViewer;
 import org.telegram.ui.PremiumPreviewFragment;
@@ -71,6 +78,7 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
 
     Activity parentActivity;
     BaseFragment parentFragment;
+    private final Theme.ResourcesProvider resourcesProvider;
     private boolean hasCurrentDownload;
 
     FilteredSearchView.UiCallback uiCallback;
@@ -86,8 +94,10 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
         super(fragment.getParentActivity());
         this.parentFragment = fragment;
         this.parentActivity = fragment.getParentActivity();
+        this.resourcesProvider = fragment != null ? fragment.getResourceProvider() : null;
         this.currentAccount = currentAccount;
-        recyclerListView = new RecyclerListView(getContext()) {
+        ThemeBind.backgroundColor(this, Theme.key_windowBackgroundWhite, resourcesProvider);
+        recyclerListView = new RecyclerListView(getContext(), resourcesProvider) {
             @Override
             protected void onLayout(boolean changed, int l, int t, int r, int b) {
                 super.onLayout(changed, l, t, r, b);
@@ -153,7 +163,7 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
                         if (chatTo != null) {
                             noforwards = chatTo.noforwards;
                         }
-                        openInPhotoViewer = openInPhotoViewer || noforwards;
+                        openInPhotoViewer = openInPhotoViewer || (noforwards && !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass());
                     }
                     if (openInPhotoViewer) {
                         PhotoViewer.getInstance().setParentActivity(parentFragment);
@@ -184,6 +194,31 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
         recyclerListView.setOnItemLongClickListener((view, position) -> {
             MessageObject messageObject = adapter.getMessage(position);
             if (messageObject != null) {
+                if (!uiCallback.actionModeShowing() && KronoConfig.longClickMediaShowsMenu && parentFragment != null) {
+                    ItemOptions options = ItemOptions.makeOptions(parentFragment, view);
+                    if (!DialogObject.isEncryptedDialog(messageObject.getDialogId())) {
+                        options.add(R.drawable.msg_message, LocaleController.getString(R.string.AccDescrGoToMessage), () -> uiCallback.goToMessage(messageObject));
+                    }
+                    options.add(R.drawable.msg_select, LocaleController.getString(R.string.StoriesAlbumMenuSelect), () -> {
+                        if (!uiCallback.actionModeShowing()) {
+                            uiCallback.showActionMode();
+                            adapter.notifyItemRangeChanged(0, adapter.getItemCount());
+                        }
+                        if (uiCallback.actionModeShowing()) {
+                            uiCallback.toggleItemSelection(messageObject, view, 0);
+                            if (!uiCallback.actionModeShowing()) {
+                                adapter.notifyItemRangeChanged(0, adapter.getItemCount());
+                            }
+                            messageHashIdTmp.set(messageObject.getId(), messageObject.getDialogId());
+                        }
+                    });
+                    if (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() || (!DialogObject.isEncryptedDialog(messageObject.getDialogId()) && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards))) {
+                        options.add(R.drawable.msg_forward, LocaleController.getString(R.string.Forward), () -> forwardSingleMessage(messageObject));
+                    }
+                    options.setScrimViewBackground(Theme.createRoundRectDrawable(AndroidUtilities.dp(8), Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider)));
+                    options.show();
+                    return true;
+                }
                 if (!uiCallback.actionModeShowing()) {
                     uiCallback.showActionMode();
                     adapter.notifyItemRangeChanged(0, adapter.getItemCount());
@@ -202,11 +237,11 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
         itemsEnterAnimator = new RecyclerItemsEnterAnimator(recyclerListView, true);
 
 
-        addView(loadingView = new FlickerLoadingView(getContext()));
+        addView(loadingView = new FlickerLoadingView(getContext(), resourcesProvider));
         loadingView.setUseHeaderOffset(true);
         loadingView.setViewType(FlickerLoadingView.FILES_TYPE);
         loadingView.setVisibility(View.GONE);
-        emptyView = new StickerEmptyView(getContext(), loadingView, StickerEmptyView.STICKER_TYPE_SEARCH);
+        emptyView = new StickerEmptyView(getContext(), loadingView, StickerEmptyView.STICKER_TYPE_SEARCH, resourcesProvider);
         addView(emptyView);
         recyclerListView.setEmptyView(emptyView);
 
@@ -520,12 +555,12 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view;
             if (viewType == 0) {
-                view = new GraySectionCell(parent.getContext());
+                view = new GraySectionCell(parent.getContext(), resourcesProvider);
             } else if (viewType == 1){
                 Cell sharedDocumentCell = new Cell(parent.getContext());
                 view = sharedDocumentCell;
             } else {
-                SharedAudioCell sharedAudioCell = new SharedAudioCell(parent.getContext()) {
+                SharedAudioCell sharedAudioCell = new SharedAudioCell(parent.getContext(), resourcesProvider) {
                     @Override
                     public boolean needPlayMessage(MessageObject messageObject) {
                         return MediaController.getInstance().playMessage(messageObject);
@@ -575,9 +610,14 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
                     boolean showReorder = uiCallback.actionModeShowing() && position >= downloadingFilesStartRow && position < downloadingFilesEndRow;
                     if (type == 1) {
                         Cell view = (Cell) holder.itemView;
-                        ThemeBind.backgroundColor(view, Theme.key_windowBackgroundWhite);
+                        ThemeBind.backgroundColor(view, Theme.key_windowBackgroundWhite, resourcesProvider);
                         int oldId = view.sharedDocumentCell.getMessage() == null ? 0 : view.sharedDocumentCell.getMessage().getId();
                         view.sharedDocumentCell.setDocument(messageObject, true);
+                        if (KronoConfig.quickGoToMessageInSearch && !uiCallback.actionModeShowing() && !DialogObject.isEncryptedDialog(messageObject.getDialogId())) {
+                            view.sharedDocumentCell.setGoToMessageClickListener(v -> uiCallback.goToMessage(messageObject));
+                        } else {
+                            view.sharedDocumentCell.setGoToMessageClickListener(null);
+                        }
                         messageHashIdTmp.set(view.sharedDocumentCell.getMessage().getId(), view.sharedDocumentCell.getMessage().getDialogId());
                         view.sharedDocumentCell.setChecked(uiCallback.isSelected(messageHashIdTmp), oldId == messageObject.getId());
                         view.sharedDocumentCell.showReorderIcon(showReorder, oldId == messageObject.getId());
@@ -585,6 +625,11 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
                         SharedAudioCell sharedAudioCell = (SharedAudioCell) holder.itemView;
                         int oldId = sharedAudioCell.getMessage() == null ? 0 : sharedAudioCell.getMessage().getId();
                         sharedAudioCell.setMessageObject(messageObject, true);
+                        if (KronoConfig.quickGoToMessageInSearch && !uiCallback.actionModeShowing() && !DialogObject.isEncryptedDialog(messageObject.getDialogId())) {
+                            sharedAudioCell.setGoToMessageClickListener(v -> uiCallback.goToMessage(messageObject));
+                        } else {
+                            sharedAudioCell.setGoToMessageClickListener(null);
+                        }
                         messageHashIdTmp.set(sharedAudioCell.getMessage().getId(), sharedAudioCell.getMessage().getDialogId());
                         sharedAudioCell.setChecked(uiCallback.isSelected(messageHashIdTmp), oldId == messageObject.getId());
                         sharedAudioCell.showReorderIcon(showReorder, oldId == messageObject.getId());
@@ -660,13 +705,62 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
         }
     }
 
+    private void forwardSingleMessage(MessageObject item) {
+        if (parentFragment == null || item == null) {
+            return;
+        }
+        Bundle args = new Bundle();
+        args.putBoolean("onlySelect", true);
+        args.putBoolean("canSelectTopics", true);
+        args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
+        DialogsActivity fragment = new DialogsActivity(args);
+        fragment.setDelegate((fragment1, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
+            ArrayList<MessageObject> fmessages = new ArrayList<>(1);
+            fmessages.add(item);
+            if (dids.size() > 1 || dids.get(0).dialogId == parentFragment.getUserConfig().getClientUserId() || message != null) {
+                for (int i = 0; i < dids.size(); i++) {
+                    long did = dids.get(i).dialogId;
+                    if (message != null) {
+                        parentFragment.getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of(message.toString(), did, null, null, null, true, null, null, null, true, 0, 0, null, false));
+                    }
+                    parentFragment.getSendMessagesHelper().sendMessage(fmessages, did, false, false, true, 0, 0);
+                }
+                fragment1.finishFragment();
+                BulletinFactory.of(parentFragment).createSimpleBulletin(R.raw.forward, LocaleController.formatPluralString("FwdMessageCount", 1)).show();
+            } else {
+                long did = dids.get(0).dialogId;
+                Bundle args1 = new Bundle();
+                args1.putBoolean("scrollToTopOnResume", true);
+                if (DialogObject.isEncryptedDialog(did)) {
+                    args1.putInt("enc_id", DialogObject.getEncryptedChatId(did));
+                } else {
+                    if (DialogObject.isUserDialog(did)) {
+                        args1.putLong("user_id", did);
+                    } else {
+                        args1.putLong("chat_id", -did);
+                    }
+                    if (!parentFragment.getMessagesController().checkCanOpenChat(args1, fragment1)) {
+                        return true;
+                    }
+                }
+                parentFragment.getNotificationCenter().postNotificationName(NotificationCenter.closeChats);
+                ChatActivity chatActivity = new ChatActivity(args1);
+                ForumUtilities.applyTopic(chatActivity, dids.get(0));
+                fragment1.presentFragment(chatActivity, true);
+                chatActivity.showFieldPanelForForward(true, fmessages);
+            }
+            return true;
+        });
+        parentFragment.presentFragment(fragment);
+    }
+
     private class Cell extends FrameLayout {
 
         SharedDocumentCell sharedDocumentCell;
 
         public Cell(@NonNull Context context) {
             super(context);
-            sharedDocumentCell = new SharedDocumentCell(context, SharedDocumentCell.VIEW_TYPE_GLOBAL_SEARCH);
+            sharedDocumentCell = new SharedDocumentCell(context, SharedDocumentCell.VIEW_TYPE_GLOBAL_SEARCH, resourcesProvider);
             sharedDocumentCell.rightDateTextView.setVisibility(View.GONE);
             addView(sharedDocumentCell);
         }

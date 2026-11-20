@@ -353,7 +353,7 @@ public class ProfileActivity2 extends BaseFragment implements
         title.setTypeface(AndroidUtilities.bold());
         title.setPivotX(0);
         title.setEllipsizeByGradient(true);
-        title.setScrollNonFitText(true);
+        title.setScrollNonFitText(!org.telegram.messenger.KronoConfig.disableTitleMarquee);
         container.addView(title, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.FILL_HORIZONTAL, 18.66f, 0, 18.66f, 0));
 
         subtitle = new SimpleTextView(context);

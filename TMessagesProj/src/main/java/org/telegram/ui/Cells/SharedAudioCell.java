@@ -7,6 +7,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.StaticLayout;
@@ -19,6 +21,7 @@ import android.view.SoundEffectConstants;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DownloadController;
@@ -64,6 +67,10 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
             if (radialProgress != null && hasMiniProgress != 0 && currentMessageObject != null) {
                 radialProgress.setMiniProgressBackgroundColor(getThemedColor(currentMessageObject.isOutOwner() ? Theme.key_chat_outLoader : Theme.key_chat_inLoader));
             }
+            if (goToMessageButton != null) {
+                goToMessageButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN));
+                goToMessageButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1));
+            }
             invalidate();
         } catch (Exception e) {
             FileLog.e(e);
@@ -72,6 +79,7 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
 
     private SpannableStringBuilder dotSpan;
     private CheckBox2 checkBox;
+    private ImageView goToMessageButton;
 
     private boolean needDivider;
 
@@ -169,6 +177,28 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
             titlePaint.setTextSize(dp(15));
             titlePaint.setColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
         }
+
+        goToMessageButton = new ImageView(context);
+        goToMessageButton.setScaleType(ImageView.ScaleType.CENTER);
+        goToMessageButton.setImageResource(R.drawable.msg_message);
+        goToMessageButton.setColorFilter(new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN));
+        goToMessageButton.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1));
+        goToMessageButton.setContentDescription(LocaleController.getString(R.string.AccDescrGoToMessage));
+        goToMessageButton.setVisibility(GONE);
+        addView(goToMessageButton, LayoutHelper.createFrame(48, 48, Gravity.CENTER_VERTICAL | (LocaleController.isRTL ? Gravity.LEFT : Gravity.RIGHT), LocaleController.isRTL ? 4 : 0, 0, LocaleController.isRTL ? 0 : 4, 0));
+    }
+
+    public void setGoToMessageClickListener(OnClickListener listener) {
+        if (goToMessageButton == null) {
+            return;
+        }
+        goToMessageButton.setOnClickListener(listener);
+        int newVis = listener != null ? VISIBLE : GONE;
+        if (goToMessageButton.getVisibility() != newVis) {
+            goToMessageButton.setVisibility(newVis);
+            requestLayout();
+            invalidate();
+        }
     }
 
     @SuppressLint("DrawAllocation")
@@ -179,7 +209,8 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
         captionLayout = null;
 
         int viewWidth = MeasureSpec.getSize(widthMeasureSpec);
-        int maxWidth = viewWidth - dp(AndroidUtilities.leftBaseline) - dp(8 + 20);
+        int extraEnd = goToMessageButton != null && goToMessageButton.getVisibility() == VISIBLE ? dp(48) : 0;
+        int maxWidth = Math.max(dp(40), viewWidth - dp(AndroidUtilities.leftBaseline) - dp(8 + 20) - extraEnd);
 
 
         int dateWidth = 0;
@@ -261,6 +292,9 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
         radialProgress.setProgressRect(buttonX = x + dp(4), buttonY = dp(6), x + dp(48), dp(50));
 
         measureChildWithMargins(checkBox, widthMeasureSpec, 0, heightMeasureSpec, 0);
+        if (goToMessageButton != null && goToMessageButton.getVisibility() != GONE) {
+            measureChildWithMargins(goToMessageButton, widthMeasureSpec, 0, heightMeasureSpec, 0);
+        }
 
         if (captionLayout != null) {
             captionY = dp(29);
@@ -346,6 +380,11 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
+        if (goToMessageButton != null && goToMessageButton.getVisibility() == VISIBLE
+                && ev.getX() >= goToMessageButton.getLeft() && ev.getX() <= goToMessageButton.getRight()
+                && ev.getY() >= goToMessageButton.getTop() && ev.getY() <= goToMessageButton.getBottom()) {
+            return false;
+        }
         return onTouchEvent(ev);
     }
 
@@ -730,9 +769,10 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
         if (viewType == VIEW_TYPE_GLOBAL_SEARCH) {
             description2TextPaint.setColor(getThemedColor(Theme.key_windowBackgroundWhiteGrayText3));
         }
+        final int rtlShiftDp = LocaleController.isRTL && goToMessageButton != null && goToMessageButton.getVisibility() == VISIBLE ? 72 : 24;
         if (dateLayout != null) {
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 24 : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? 0 : dateLayoutX), titleY);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? 0 : dateLayoutX), titleY);
             dateLayout.draw(canvas);
             canvas.restore();
         }
@@ -743,7 +783,7 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
                 Theme.chat_contextResult_titleTextPaint.setAlpha((int) (oldAlpha * showNameProgress));
             }
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 24 : AndroidUtilities.leftBaseline) + (LocaleController.isRTL && dateLayout != null ? dateLayout.getWidth() + dp(LocaleController.isRTL ? 12 : 4) : 0) + (LocaleController.isRTL ? titleLayout.getWidth() - titleLayoutWidth : 0) - titleLayoutLeft, titleY);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline) + (LocaleController.isRTL && dateLayout != null ? dateLayout.getWidth() + dp(LocaleController.isRTL ? 12 : 4) : 0) + (LocaleController.isRTL ? titleLayout.getWidth() - titleLayoutWidth : 0) - titleLayoutLeft, titleY);
             titleLayout.draw(canvas);
             AnimatedEmojiSpan.drawAnimatedEmojis(canvas, titleLayout, titleLayoutEmojis, 0, null, 0, 0, 0, 1f);
             canvas.restore();
@@ -755,7 +795,7 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
         if (captionLayout != null) {
             captionTextPaint.setColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 24 : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? captionLayout.getWidth() - captionLayoutWidth : 0) - captionLayoutLeft, captionY);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? captionLayout.getWidth() - captionLayoutWidth : 0) - captionLayoutLeft, captionY);
             captionLayout.draw(canvas);
             canvas.restore();
         }
@@ -767,7 +807,7 @@ public class SharedAudioCell extends FrameLayout implements DownloadController.F
                 Theme.chat_contextResult_descriptionTextPaint.setAlpha((int) (oldAlpha * showNameProgress));
             }
             canvas.save();
-            canvas.translate(dp(LocaleController.isRTL ? 24 : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? descriptionLayout.getWidth() - descriptionLayoutWidth : 0) - descriptionLayoutLeft, descriptionY);
+            canvas.translate(dp(LocaleController.isRTL ? rtlShiftDp : AndroidUtilities.leftBaseline) + (LocaleController.isRTL ? descriptionLayout.getWidth() - descriptionLayoutWidth : 0) - descriptionLayoutLeft, descriptionY);
             descriptionLayout.draw(canvas);
             AnimatedEmojiSpan.drawAnimatedEmojis(canvas, descriptionLayout, descriptionLayoutEmojis, 0, null, 0, 0, 0, 1f);
             canvas.restore();

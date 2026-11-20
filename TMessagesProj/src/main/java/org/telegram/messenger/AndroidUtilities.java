@@ -1862,6 +1862,9 @@ public class AndroidUtilities {
     }
 
     public static boolean isMapsInstalled(BaseFragment fragment) {
+        if (ApplicationLoader.getMapsProvider() instanceof OsmMapsProvider) {
+            return true;
+        }
         String pkg = ApplicationLoader.getMapsProvider().getMapsAppPackageName();
         try {
             ApplicationLoader.applicationContext.getPackageManager().getApplicationInfo(pkg, 0);

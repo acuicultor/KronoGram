@@ -96,7 +96,16 @@ public class BasePermissionsActivity extends FragmentActivity {
                 showPermissionErrorAlert(R.raw.permission_request_camera, LocaleController.getString(R.string.PermissionNoCameraWithHint));
             }
         } else if (requestCode == REQUEST_CODE_GEOLOCATION) {
-            NotificationCenter.getGlobalInstance().postNotificationName(granted ? NotificationCenter.locationPermissionGranted : NotificationCenter.locationPermissionDenied);
+            boolean geoGranted = granted;
+            if (!geoGranted) {
+                for (int result : grantResults) {
+                    if (result == PackageManager.PERMISSION_GRANTED) {
+                        geoGranted = true;
+                        break;
+                    }
+                }
+            }
+            NotificationCenter.getGlobalInstance().postNotificationName(geoGranted ? NotificationCenter.locationPermissionGranted : NotificationCenter.locationPermissionDenied);
         } else if (requestCode == REQUEST_CODE_MEDIA_GEO) {
             NotificationCenter.getGlobalInstance().postNotificationName(granted ? NotificationCenter.locationPermissionGranted : NotificationCenter.locationPermissionDenied, 1);
         }

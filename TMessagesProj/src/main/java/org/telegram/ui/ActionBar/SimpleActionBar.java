@@ -31,6 +31,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
@@ -508,9 +509,9 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
 
         final float menuWidth = menu != null && menu.getVisibility() != GONE ? menu.getTargetPillWidth() : 0;
         final float doneSpace = getDoneButtonSpace(true);
-        int titleSide = Math.max(hasBack ? dp(64) : dp(18), menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : 0);
-        titleSide = Math.max(titleSide, titleMinSideInset);
-        titleLayout.setSideInset(titleSide);
+        final int leftInset = Math.max(hasBack ? dp(68) : dp(20), titleMinSideInset);
+        final int rightInset = Math.max(menuWidth > 0 || doneSpace > 0 ? (int) (menuWidth + doneSpace) + dp(6 + 12) : dp(20), titleMinSideInset);
+        titleLayout.setSideInsets(leftInset, rightInset);
         setMargins(titleLayout, 0, rowTop, 0);
         titleLayout.getLayoutParams().height = rowHeight;
 
@@ -641,6 +642,9 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         }
         if (glassMenu != null) {
             glassMenu.updateColors();
+        }
+        if (glassDone != null) {
+            glassDone.updateColors();
         }
         invalidate();
     }
@@ -1530,16 +1534,18 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         /** The previous subtitle while it slides out, see {@link #setSubtitleAnimated}. */
         SimpleTextView subtitleOutView;
         CharSequence subtitle;
-        private int sideInset;
+        private int leftInset;
+        private int rightInset;
 
         TitleLayout(Context context) {
             super(context);
             setClipChildren(false);
         }
 
-        void setSideInset(int value) {
-            if (sideInset != value) {
-                sideInset = value;
+        void setSideInsets(int left, int right) {
+            if (leftInset != left || rightInset != right) {
+                leftInset = left;
+                rightInset = right;
                 requestLayout();
             }
         }
@@ -1557,6 +1563,8 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             view.setDrawablePadding(dp(4));
             view.setPadding(0, dp(8), 0, dp(8));
             view.setRightDrawableTopPadding(-dp(1));
+            view.setEllipsizeByGradient(true);
+            view.setScrollNonFitText(!KronoConfig.disableTitleMarquee);
             titleViews[i] = view;
             addView(view, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP));
         }
@@ -1570,6 +1578,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             titleViews[0].animate().cancel();
             titleViews[0].setAlpha(1f);
             titleViews[0].setTranslationY(0);
+            titleViews[0].setScrollNonFitText(!KronoConfig.disableTitleMarquee);
             titleViews[0].setText(value);
             titleViews[0].setVisibility(TextUtils.isEmpty(value) ? INVISIBLE : VISIBLE);
         }
@@ -1583,6 +1592,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
 
             final SimpleTextView now = titleViews[0];
             now.animate().cancel();
+            now.setScrollNonFitText(!KronoConfig.disableTitleMarquee);
             now.setText(value);
             now.setVisibility(VISIBLE);
             now.setAlpha(0f);
@@ -1679,7 +1689,10 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             final int width = MeasureSpec.getSize(widthMeasureSpec);
             final int height = MeasureSpec.getSize(heightMeasureSpec);
-            final int available = Math.max(0, width - sideInset * 2);
+            final boolean centerTitles = KronoConfig.isIosStyle();
+            final int available = centerTitles
+                ? Math.max(0, width - Math.max(leftInset, rightInset) * 2)
+                : Math.max(0, width - leftInset - rightInset);
             for (SimpleTextView view : titleViews) {
                 if (view != null && view.getVisibility() != GONE) {
                     view.measure(MeasureSpec.makeMeasureSpec(available, MeasureSpec.AT_MOST),
@@ -1706,14 +1719,17 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             final int width = right - left;
             final int rowHeight = bottom - top;
             final boolean hasSubtitle = hasSubtitle();
+            final boolean centerTitles = KronoConfig.isIosStyle();
+            final int leftAlignX = hasBackButton() ? dp(68) : dp(20);
             for (SimpleTextView view : titleViews) {
                 if (view == null || view.getVisibility() == GONE) {
                     continue;
                 }
+                view.setGravity(centerTitles ? Gravity.CENTER : (Gravity.LEFT | Gravity.CENTER_VERTICAL));
                 final int textTop = hasSubtitle
                     ? (rowHeight / 2 - view.getTextHeight()) / 2 + dp(5)
                     : (rowHeight - view.getTextHeight()) / 2;
-                final int l = (width - view.getMeasuredWidth()) / 2;
+                final int l = centerTitles ? (width - view.getMeasuredWidth()) / 2 : leftAlignX;
                 final int t = textTop - view.getPaddingTop();
                 view.layout(l, t, l + view.getMeasuredWidth(), t + view.getMeasuredHeight());
             }
@@ -1722,8 +1738,9 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
                     if (view == null || view.getVisibility() == GONE) {
                         continue;
                     }
+                    view.setGravity(centerTitles ? Gravity.CENTER : (Gravity.LEFT | Gravity.CENTER_VERTICAL));
                     final int textTop = rowHeight / 2 + (rowHeight / 2 - view.getTextHeight()) / 2 - dp(2);
-                    final int l = (width - view.getMeasuredWidth()) / 2;
+                    final int l = centerTitles ? (width - view.getMeasuredWidth()) / 2 : leftAlignX;
                     view.layout(l, textTop, l + view.getMeasuredWidth(), textTop + view.getTextHeight());
                 }
             }

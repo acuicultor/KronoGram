@@ -63,6 +63,7 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.RichMessageLayout;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.TranslateController;
+import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.XiaomiUtilities;
 import org.telegram.tgnet.ConnectionsManager;
@@ -404,6 +405,11 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
             return;
         }
 
+        if (org.telegram.messenger.KronoConfig.translationProvider != org.telegram.messenger.KronoConfig.TRANSLATE_PROVIDER_TELEGRAM
+                || (org.telegram.messenger.KronoConfig.isFreeChatTranslation() && !UserConfig.getInstance(currentAccount).isPremium())) {
+            translateAlt();
+            return;
+        }
         TLRPC.TL_messages_translateText req = new TLRPC.TL_messages_translateText();
         if (reqPeer != null) {
             req.flags |= 1;
@@ -421,7 +427,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
         reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (res, err) -> {
             AndroidUtilities.runOnUIThread(() -> {
                 reqId = null;
-                if (err != null && "TRANSLATIONS_DISABLED_ALT".equalsIgnoreCase(err.text)) {
+                if (err != null && ("TRANSLATIONS_DISABLED_ALT".equalsIgnoreCase(err.text) || "PREMIUM_ACCOUNT_REQUIRED".equalsIgnoreCase(err.text))) {
                     translateAlt();
                 } else if (res instanceof TLRPC.TL_messages_translateResult &&
                     !((TLRPC.TL_messages_translateResult) res).result.isEmpty() &&
@@ -527,17 +533,23 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
 
     public static void alternativeTranslate(String text, String fromLng, String toLng, Utilities.Callback2<String, Boolean> done) {
         if (done == null) return;
+        if (TextUtils.isEmpty(text)) {
+            AndroidUtilities.runOnUIThread(() -> done.run("", false));
+            return;
+        }
         if (fromLng == null) {
             LanguageDetector.detectLanguage(text, lng -> {
-                alternativeTranslate(text, lng, toLng, done);
+                alternativeTranslate(text, (TextUtils.isEmpty(lng) || "und".equalsIgnoreCase(lng)) ? "auto" : lng, toLng, done);
             }, e -> {
-                alternativeTranslate(text, "en", toLng, done);
+                alternativeTranslate(text, "auto", toLng, done);
             });
             return;
         }
-        final String etext = Uri.encode(text);
-        if (etext.length() > 5000) {
-            ArrayList<String> parts = cut(etext, 5000);
+        if ("und".equalsIgnoreCase(fromLng) || fromLng.isEmpty()) {
+            fromLng = "auto";
+        }
+        if (text.length() > 1500) {
+            ArrayList<String> parts = cut(text, 1500);
             ArrayList<String> results = new ArrayList<>();
             for (int i = 0; i < parts.size(); ++i) {
                 results.add(null);
@@ -546,7 +558,7 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
             final boolean[] fullyDone = new boolean[1];
             for (int i = 0; i < parts.size(); ++i) {
                 final int index = i;
-                alternativeTranslateInternal(parts.get(i), fromLng, toLng, (res, rateLimit) -> {
+                alternativeTranslateInternal(Uri.encode(parts.get(i)), fromLng, toLng, (res, rateLimit) -> {
                     if (fullyDone[0]) return;
                     if (res != null) {
                         results.set(index, res);
@@ -568,11 +580,16 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
                 });
             }
         } else {
-            alternativeTranslateInternal(etext, fromLng, toLng, done);
+            alternativeTranslateInternal(Uri.encode(text), fromLng, toLng, done);
         }
     }
     private static void alternativeTranslateInternal(String text, String fromLng, String toLng, Utilities.Callback2<String, Boolean> done) {
         if (done == null) return;
+        if (org.telegram.messenger.KronoConfig.translationProvider != org.telegram.messenger.KronoConfig.TRANSLATE_PROVIDER_TELEGRAM
+                && org.telegram.messenger.KronoConfig.translationProvider != org.telegram.messenger.KronoConfig.TRANSLATE_PROVIDER_GOOGLE) {
+            org.telegram.messenger.KronoConfig.translateWithSelectedEngine(text, true, fromLng, toLng, done);
+            return;
+        }
         new Thread() {
             @Override
             public void run() {
@@ -1038,6 +1055,9 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
     }
 
     public void setNoforwards(boolean noforwards) {
+        if (org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass()) {
+            noforwards = false;
+        }
         if (textView != null) {
             textView.setTextIsSelectable(!noforwards);
         }

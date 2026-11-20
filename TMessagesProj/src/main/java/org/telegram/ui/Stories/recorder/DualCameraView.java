@@ -136,7 +136,7 @@ public class DualCameraView extends CameraView {
 
     private void log(boolean success) {
         final boolean vendor = DualCameraView.dualAvailableDefault(ApplicationLoader.applicationContext, false);
-        if (MessagesController.getInstance(UserConfig.selectedAccount).collectDeviceStats) {
+        if (MessagesController.getInstance(UserConfig.selectedAccount).collectDeviceStats && !org.telegram.messenger.KronoConfig.isBlockTelegramTelemetry()) {
             try {
                 TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
                 TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();

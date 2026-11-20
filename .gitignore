@@ -1,16 +1,68 @@
-.idea/
-.gradle/
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+*.zip
+assets/*.apk
+!apk/*.apk
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated and build files (recursive)
 build/
-obj/
-*.iml
+**/build/
+**/intermediates/
+**/tmp/
+**/generated/
+.build-outputs/
+temp_neko/
+
+# Gradle files
+.gradle/
+**/.gradle/
+buildOutput.txt
+
+# Local configuration file (sdk path, etc)
 local.properties
-TMessagesProj/.cxx/
-TMessagesProj/jniLibs/
-TMessagesProj/jniRes/
-**/.DS_Store
-TMessagesProj/afat/
-TMessagesProj_App/afat/
-TMessagesProj_AppHockeyApp/afat/
-TMessagesProj_AppStandalone/afat/
-TMessagesProj_AppHuawei/afat/
-TMessagesProj/jni/ffmpeg/build_android
+
+# Log Files
+*.log
+
+# IntelliJ IDEA & Android Studio
+*.iml
+.idea/
+**/.idea/
+captures/
+.navigation/
+
+# External native build folder
+.externalNativeBuild
+**/.externalNativeBuild
+.cxx/
+**/.cxx/
+
+# Google Services
+google-services.json
+!app/google-services.json
+!TMessagesProj/google-services.json
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+-e 
+.env
+.env.*
+.aistudio/
+public/
+metadata.json
+debug.keystore

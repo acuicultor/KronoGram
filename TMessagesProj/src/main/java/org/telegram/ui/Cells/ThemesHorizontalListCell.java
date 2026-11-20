@@ -292,9 +292,11 @@ public class ThemesHorizontalListCell extends RecyclerListView implements Notifi
                                 if ((idx = line.indexOf('=')) != -1) {
                                     int key = ThemeColors.stringKeyToInt(line.substring(0, idx));
                                     if (key == Theme.key_chat_inBubble || key == Theme.key_chat_outBubble || key == Theme.key_chat_wallpaper || key == Theme.key_chat_wallpaper_gradient_to1 || key == Theme.key_chat_wallpaper_gradient_to2 || key == Theme.key_chat_wallpaper_gradient_to3) {
-                                        String param = line.substring(idx + 1);
+                                        String param = line.substring(idx + 1).trim();
                                         int value;
-                                        if (param.length() > 0 && param.charAt(0) == '#') {
+                                        if (org.telegram.messenger.MonetHelper.isMonetColor(param)) {
+                                            value = org.telegram.messenger.MonetHelper.getColor(param, themeInfo.assetName != null && themeInfo.assetName.contains("amoled"));
+                                        } else if (param.length() > 0 && param.charAt(0) == '#') {
                                             try {
                                                 value = Color.parseColor(param);
                                             } catch (Exception ignore) {
@@ -731,6 +733,9 @@ public class ThemesHorizontalListCell extends RecyclerListView implements Notifi
 
     /** @param from the tapped item the theme switch reveal starts from (null: top middle of the screen) */
     public void selectTheme(Theme.ThemeInfo themeInfo, View from) {
+        if (themeInfo == null) {
+            return;
+        }
         if (themeInfo.info != null) {
             if (!themeInfo.themeLoaded) {
                 return;

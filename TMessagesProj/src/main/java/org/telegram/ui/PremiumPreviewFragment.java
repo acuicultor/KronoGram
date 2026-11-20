@@ -2301,6 +2301,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
     }
 
     public static void sentShowScreenStat(String source) {
+        if (org.telegram.messenger.KronoConfig.isBlockTelegramTelemetry()) {
+            return;
+        }
         ConnectionsManager connectionsManager = ConnectionsManager.getInstance(UserConfig.selectedAccount);
         TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
         TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();
@@ -2331,6 +2334,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
     }
 
     public static void sentPremiumButtonClick() {
+        if (org.telegram.messenger.KronoConfig.isBlockTelegramTelemetry()) {
+            return;
+        }
         TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
         TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();
         event.time = ConnectionsManager.getInstance(UserConfig.selectedAccount).getCurrentTime();
@@ -2344,6 +2350,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
     }
 
     public static void sentPremiumBuyCanceled() {
+        if (org.telegram.messenger.KronoConfig.isBlockTelegramTelemetry()) {
+            return;
+        }
         TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
         TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();
         event.time = ConnectionsManager.getInstance(UserConfig.selectedAccount).getCurrentTime();
@@ -2357,6 +2366,9 @@ public class PremiumPreviewFragment extends BaseFragment implements Notification
     }
 
     public static void sentShowFeaturePreview(int currentAccount, int type) {
+        if (org.telegram.messenger.KronoConfig.isBlockTelegramTelemetry()) {
+            return;
+        }
         TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
         TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();
         event.time = ConnectionsManager.getInstance(currentAccount).getCurrentTime();

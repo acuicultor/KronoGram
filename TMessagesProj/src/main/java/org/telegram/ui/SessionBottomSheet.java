@@ -426,7 +426,7 @@ public class SessionBottomSheet extends BottomSheet {
             if (needSwitch) {
                 switchView = new Switch(context);
                 switchView.setDrawIconType(1);
-                addView(switchView, LayoutHelper.createFrame(37, 40, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 21, 0, 21, 0));
+                addView(switchView, LayoutHelper.createFrame(48, 40, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 16, 0, 16, 0));
             }
         }
 

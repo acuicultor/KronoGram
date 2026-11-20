@@ -196,7 +196,7 @@ public static VideoAds make(
     private void load() {
         if (loading || loaded) return;
 
-        if (UserConfig.getInstance(currentAccount).isPremium() && MessagesController.getInstance(currentAccount).isSponsoredDisabled()) {
+        if (org.telegram.messenger.KronoConfig.isBlockSponsoredMessages() || (UserConfig.getInstance(currentAccount).isPremium() && MessagesController.getInstance(currentAccount).isSponsoredDisabled())) {
             return;
         }
 
@@ -871,7 +871,7 @@ public static VideoAds make(
     }
 
     public void logSponsoredShown(TLRPC.TL_sponsoredMessage ad) {
-        if (ad == null) return;
+        if (ad == null || org.telegram.messenger.KronoConfig.isBlockSponsoredMessages()) return;
         final TLRPC.TL_messages_viewSponsoredMessage req = new TLRPC.TL_messages_viewSponsoredMessage();
         req.random_id = ad.random_id;
         if (!BuildVars.DEBUG_PRIVATE_VERSION) {
@@ -880,7 +880,7 @@ public static VideoAds make(
     }
 
     public void logSponsoredClicked(TLRPC.TL_sponsoredMessage ad) {
-        if (ad == null) return;
+        if (ad == null || org.telegram.messenger.KronoConfig.isBlockSponsoredMessages()) return;
         final TLRPC.TL_messages_clickSponsoredMessage req = new TLRPC.TL_messages_clickSponsoredMessage();
         req.random_id = ad.random_id;
         req.media = false;

@@ -211,7 +211,7 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
         return this;
     }
     public TranslateAlert3 setNoforwards(boolean noforwards) {
-        this.noforwards = noforwards;
+        this.noforwards = noforwards && !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass();
         return this;
     }
     public TranslateAlert3 setOnLinkPress(Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress) {
