@@ -5011,8 +5011,7 @@ public class ChatActivity extends BaseFragment implements
 
                 int alpha = (int) (iconProgress * 0xFF);
                 MessageObject slidingMsgForIcon = getSlidingMessageObject();
-                boolean isEditSwipe = slidingMsgForIcon != null && slidingMsgForIcon.isOutOwner() && slidingMsgForIcon.canEditMessage(currentChat)
-                        && (org.telegram.messenger.KronoConfig.swipeToEditOwnMessage || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
+                boolean isEditSwipe = canEditOwnOnSwipe(slidingMsgForIcon);
                 Drawable replyIconDrawable;
                 boolean mutateSwipeIcon = false;
                 if (isEditSwipe) {
@@ -5115,6 +5114,94 @@ public class ChatActivity extends BaseFragment implements
                 }
             }
 
+            private boolean canEditOwnOnSwipe(MessageObject message) {
+                if (message == null || !message.isOutOwner() || !message.canEditMessage(currentChat) || message.isEphemeral()) {
+                    return false;
+                }
+                int action = org.telegram.messenger.KronoConfig.messageSwipeAction;
+                return action == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY
+                        || (action == org.telegram.messenger.KronoConfig.SWIPE_ACTION_REPLY && org.telegram.messenger.KronoConfig.swipeToEditOwnMessage);
+            }
+
+            private boolean canSwipeMessageAction(MessageObject message) {
+                if (message == null || hasTextSelection()) {
+                    return false;
+                }
+                int action = org.telegram.messenger.KronoConfig.messageSwipeAction;
+                if (action == org.telegram.messenger.KronoConfig.SWIPE_ACTION_DISABLED) {
+                    return false;
+                }
+                if (canEditOwnOnSwipe(message)) {
+                    return true;
+                }
+                boolean noforwards = (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || (message.messageOwner != null && message.messageOwner.noforwards))) || getDialogId() == UserObject.VERIFY;
+                if (action == org.telegram.messenger.KronoConfig.SWIPE_ACTION_SAVE) {
+                    return currentEncryptedChat == null
+                            && message.getId() >= 0
+                            && !noforwards
+                            && !message.isSponsored()
+                            && !message.isExpiredStory()
+                            && !message.isEphemeral()
+                            && (!message.needDrawBluredPreview() || message.hasExtendedMediaPreview());
+                }
+                if (action == org.telegram.messenger.KronoConfig.SWIPE_ACTION_TRANSLATE) {
+                    MessageObject.GroupedMessages group = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
+                    return !message.isEphemeral() && message.contentType == 0 && (
+                            (!TextUtils.isEmpty(message.getMessageTextToTranslate(group, null)) && !message.isAnimatedEmoji() && !message.isDice()) ||
+                            (message.type == MessageObject.TYPE_ARTICLE && message.messageOwner != null && message.messageOwner.rich_message != null && !message.translated)
+                    );
+                }
+                if (action == org.telegram.messenger.KronoConfig.SWIPE_ACTION_FORWARD) {
+                    return currentEncryptedChat == null
+                            && message.getId() >= 0
+                            && !noforwards
+                            && !message.isSponsored()
+                            && !isQuickRepliesOrWelcomeMessagesMode()
+                            && chatMode != MODE_SCHEDULED
+                            && (!message.needDrawBluredPreview() || message.hasExtendedMediaPreview())
+                            && !message.isLiveLocation()
+                            && message.type != MessageObject.TYPE_PHONE_CALL
+                            && !message.isExpiredStory()
+                            && message.type != MessageObject.TYPE_SHARING_OFFER
+                            && message.type != MessageObject.TYPE_GIFT_PREMIUM
+                            && message.type != MessageObject.TYPE_GIFT_OFFER
+                            && message.type != MessageObject.TYPE_COMMUNITY_CHANGED
+                            && message.type != MessageObject.TYPE_GIFT_OFFER_REJECTED
+                            && message.type != MessageObject.TYPE_GIFT_PREMIUM_CHANNEL
+                            && message.type != MessageObject.TYPE_SUGGEST_PHOTO
+                            && !message.isWallpaperAction()
+                            && message.type != MessageObject.TYPE_STORY_MENTION
+                            && message.type != MessageObject.TYPE_GIFT_STARS;
+                }
+                if (action == org.telegram.messenger.KronoConfig.SWIPE_ACTION_COPY) {
+                    boolean noforwardsOrPaidMedia = noforwards || message.type == MessageObject.TYPE_PAID_MEDIA;
+                    MessageObject.GroupedMessages group = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
+                    return !message.needDrawBluredPreview()
+                            && !message.isExpiredStory()
+                            && !message.sponsoredCanReport
+                            && (!noforwardsOrPaidMedia || message.isEphemeral())
+                            && (
+                                    message.type == MessageObject.TYPE_TEXT
+                                    || message.type == MessageObject.TYPE_ARTICLE
+                                    || message.isDice()
+                                    || message.isAnimatedEmoji()
+                                    || message.isAnimatedEmojiStickers()
+                                    || getMessageCaption(message, group) != null
+                                    || (message.richLayout != null && !TextUtils.isEmpty(message.richLayout.joinedText))
+                                    || (message.messageOwner != null && message.messageOwner.action instanceof TLRPC.TL_messageActionStarGiftUnique && ((TLRPC.TL_messageActionStarGiftUnique) message.messageOwner.action).message != null)
+                            );
+                }
+                boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
+                return !(
+                        chatMode != 0 && chatMode != MODE_QUICK_REPLIES && chatMode != MODE_SUGGESTIONS && (chatMode != MODE_SAVED || threadMessageId != getUserConfig().getClientUserId()) ||
+                        threadMessageObjects != null && threadMessageObjects.contains(message) ||
+                        getMessageType(message) == 1 && (message.getDialogId() == mergeDialogId || message.needDrawBluredPreview()) ||
+                        currentEncryptedChat == null && message.getId() < 0 ||
+                        currentChat != null && ChatObject.isForum(currentChat) && !allowReplyOnOpenTopic ||
+                        message.isEphemeral() && message.isOut()
+                );
+            }
+
             private void processTouchEvent(MotionEvent e) {
                 if (e != null) {
                     wasManualScroll = true;
@@ -5131,28 +5218,7 @@ public class ChatActivity extends BaseFragment implements
                         }
                         slidingView = view;
                         MessageObject message = getSlidingMessageObject();
-                        boolean canEditOwn = message != null && message.isOutOwner() && message.canEditMessage(currentChat)
-                                && (org.telegram.messenger.KronoConfig.swipeToEditOwnMessage || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
-                        if (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_DISABLED && !canEditOwn) {
-                            slidingViewSetOffset(0);
-                            slidingView = null;
-                            return;
-                        }
-                        boolean isReplyAction = !canEditOwn && (org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_REPLY
-                                || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
-                        boolean allowReplyOnOpenTopic = !isReplyAction || canSendMessageToTopic(message);
-                        if (
-                            message == null ||
-                            isReplyAction && (
-                                chatMode != 0 && chatMode != MODE_QUICK_REPLIES && chatMode != MODE_SUGGESTIONS && (chatMode != MODE_SAVED || threadMessageId != getUserConfig().getClientUserId()) ||
-                                threadMessageObjects != null && threadMessageObjects.contains(message) ||
-                                getMessageType(message) == 1 && (message.getDialogId() == mergeDialogId || message.needDrawBluredPreview()) ||
-                                currentEncryptedChat == null && message.getId() < 0 ||
-                                currentChat != null && ChatObject.isForum(currentChat) && !allowReplyOnOpenTopic ||
-                                message.isEphemeral() && message.isOut()
-                            ) ||
-                            hasTextSelection()
-                        ) {
+                        if (!canSwipeMessageAction(message)) {
                             slidingViewSetOffset(0);
                             slidingView = null;
                             return;
@@ -5201,11 +5267,10 @@ public class ChatActivity extends BaseFragment implements
                 } else if (slidingView != null && (e == null || e.getPointerId(0) == startedTrackingPointerId && (e.getAction() == MotionEvent.ACTION_CANCEL || e.getAction() == MotionEvent.ACTION_UP || e.getAction() == MotionEvent.ACTION_POINTER_UP))) {
                     if (e != null && e.getAction() != MotionEvent.ACTION_CANCEL && Math.abs(getSlidingNonAnimationTranslationX(false)) >= AndroidUtilities.dp(50)) {
                         MessageObject message = getSlidingMessageObject();
-                        boolean canEditOwn = message != null && message.isOutOwner() && message.canEditMessage(currentChat)
-                                && (org.telegram.messenger.KronoConfig.swipeToEditOwnMessage || org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_EDIT_OR_REPLY);
-                        if (canEditOwn) {
+                        int swipeAction = org.telegram.messenger.KronoConfig.messageSwipeAction;
+                        if (canEditOwnOnSwipe(message)) {
                             startEditingMessageObject(message);
-                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_SAVE) {
+                        } else if (message != null && swipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_SAVE) {
                             ArrayList<MessageObject> msgsToSave = new ArrayList<>();
                             if (message.getGroupId() != 0) {
                                 MessageObject.GroupedMessages group = getGroup(message.getGroupId());
@@ -5219,19 +5284,19 @@ public class ChatActivity extends BaseFragment implements
                             }
                             getSendMessagesHelper().sendMessage(msgsToSave, getUserConfig().getClientUserId(), true, false, true, 0, 0);
                             BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.drawable.msg_saved, "Guardado en Mensajes guardados").show();
-                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_TRANSLATE) {
+                        } else if (message != null && swipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_TRANSLATE) {
                             selectedObject = message;
                             selectedObjectGroup = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
                             processSelectedOption(OPTION_TRANSLATE);
-                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_FORWARD) {
+                        } else if (message != null && swipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_FORWARD) {
                             selectedObject = message;
                             selectedObjectGroup = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
                             processSelectedOption(OPTION_FORWARD);
-                        } else if (message != null && org.telegram.messenger.KronoConfig.messageSwipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_COPY) {
+                        } else if (message != null && swipeAction == org.telegram.messenger.KronoConfig.SWIPE_ACTION_COPY) {
                             selectedObject = message;
                             selectedObjectGroup = message.getGroupId() != 0 ? getGroup(message.getGroupId()) : null;
                             processSelectedOption(OPTION_COPY);
-                        } else if (message != null) {
+                        } else if (message != null && swipeAction != org.telegram.messenger.KronoConfig.SWIPE_ACTION_DISABLED) {
                             final boolean allowReplyOnOpenTopic = canSendMessageToTopic(message);
                             if (
                                 bottomChannelButtonsLayout != null && bottomChannelButtonsLayout.getVisibility() == View.VISIBLE && !(bottomOverlayChatWaitsReply && allowReplyOnOpenTopic || message.wasJustSent) ||
@@ -35740,6 +35805,39 @@ public class ChatActivity extends BaseFragment implements
                         }
                     }
                 }, getResourceProvider(), AlertsCreator.SUGGEST_DATE_PICKER_MODE_EDIT).show(), AmountUtils.Amount.of(suggestedPost != null ? suggestedPost.price : null), !ChatObject.canManageMonoForum(currentAccount, getDialogId()));
+                break;
+            }
+            case OPTION_TRANSLATE: {
+                final MessageObject msg = selectedObject;
+                final MessageObject.GroupedMessages group = selectedObjectGroup;
+                boolean noforwards = (!org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (isPeerNoForwards() || (msg.messageOwner != null && msg.messageOwner.noforwards))) || getDialogId() == UserObject.VERIFY;
+                boolean noforwardsOrPaidMedia = noforwards || msg.type == MessageObject.TYPE_PAID_MEDIA;
+                String toLangDefault = LocaleController.getInstance().getCurrentLocale().getLanguage();
+                String toLang = TranslateAlert2.getToLanguage();
+                int[] messageIdToTranslate = new int[] { msg.getId() };
+                final CharSequence finalMessageText = msg.getMessageTextToTranslate(group, messageIdToTranslate);
+                Utilities.CallbackReturn<URLSpan, Boolean> onLinkPress = (link) -> {
+                    didPressMessageUrl(link, false, msg, null);
+                    return true;
+                };
+                TLRPC.InputPeer inputPeer = (msg.isPoll() || msg.isVoiceTranscriptionOpen() || msg.isSponsored() || msg.scheduled || chatMode == MODE_QUICK_REPLIES) ? null : getMessagesController().getInputPeer(dialog_id);
+                final TL_iv.RichMessage richMessageToTranslate = msg.type == MessageObject.TYPE_ARTICLE && msg.messageOwner != null ? msg.messageOwner.rich_message : null;
+                if (richMessageToTranslate != null) {
+                    final String fromLang = msg.messageOwner.originalLanguage;
+                    String toLangValue = fromLang != null && fromLang.equals(toLang) ? toLangDefault : toLang;
+                    TranslateAlert2 alert = TranslateAlert2.showAlert(getParentActivity(), this, currentAccount, inputPeer, messageIdToTranslate[0], fromLang, toLangValue, richMessageToTranslate, noforwardsOrPaidMedia, onLinkPress, () -> dimBehindView(false));
+                    if (scrimPopupWindow != null) {
+                        alert.setDimBehind(false);
+                    }
+                } else if (!TextUtils.isEmpty(finalMessageText)) {
+                    final String fromLang = msg.messageOwner != null && msg.messageOwner.originalLanguage != null ? msg.messageOwner.originalLanguage : "und";
+                    String toLangValue = fromLang.equals(toLang) ? toLangDefault : toLang;
+                    ArrayList<TLRPC.MessageEntity> entities = msg.messageOwner != null ? msg.messageOwner.entities : null;
+                    TranslateAlert2 alert = TranslateAlert2.showAlert(getParentActivity(), this, currentAccount, inputPeer, messageIdToTranslate[0], msg.summarized, fromLang, toLangValue, finalMessageText, entities, noforwardsOrPaidMedia, onLinkPress, () -> dimBehindView(false));
+                    if (scrimPopupWindow != null) {
+                        alert.setDimBehind(false);
+                    }
+                }
                 break;
             }
         }

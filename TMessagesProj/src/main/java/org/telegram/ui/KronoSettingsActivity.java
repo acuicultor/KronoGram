@@ -559,20 +559,16 @@ public class KronoSettingsActivity extends BaseFragment {
                 KronoConfig.setGhostMode(newState);
                 listAdapter.notifyItemRangeChanged(ghostMasterRow, 5);
             } else if (position == ghostDontReadMessagesRow) {
-                KronoConfig.dontReadMessages = !KronoConfig.dontReadMessages;
-                KronoConfig.syncGhostMasterState();
+                KronoConfig.setDontReadMessages(!KronoConfig.dontReadMessages);
                 listAdapter.notifyItemRangeChanged(ghostMasterRow, 5);
             } else if (position == ghostDontReadStoriesRow) {
-                KronoConfig.dontReadStories = !KronoConfig.dontReadStories;
-                KronoConfig.syncGhostMasterState();
+                KronoConfig.setDontReadStories(!KronoConfig.dontReadStories);
                 listAdapter.notifyItemRangeChanged(ghostMasterRow, 5);
             } else if (position == ghostDontSendTypingRow) {
-                KronoConfig.dontSendTyping = !KronoConfig.dontSendTyping;
-                KronoConfig.syncGhostMasterState();
+                KronoConfig.setDontSendTyping(!KronoConfig.dontSendTyping);
                 listAdapter.notifyItemRangeChanged(ghostMasterRow, 5);
             } else if (position == ghostDontSendOnlineRow) {
-                KronoConfig.dontSendOnline = !KronoConfig.dontSendOnline;
-                KronoConfig.syncGhostMasterState();
+                KronoConfig.setDontSendOnline(!KronoConfig.dontSendOnline);
                 listAdapter.notifyItemRangeChanged(ghostMasterRow, 5);
             } else if (position == hiddenVaultOpenRow) {
                 KronoHiddenLockHelper.authenticate(this, "Bóveda oculta", "Verifica tu identidad para abrir la bóveda", () -> presentFragment(new KronoHiddenVaultActivity()));
@@ -586,8 +582,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 if (!KronoHiddenLockHelper.canUseBiometrics(getParentActivity())) {
                     BulletinFactory.of(this).createSimpleBulletin(R.drawable.fingerprint, "Tu dispositivo no tiene biometría configurada").show();
                 } else {
-                    KronoConfig.hiddenUseBiometric = !KronoConfig.hiddenUseBiometric;
-                    KronoConfig.saveConfig();
+                    KronoConfig.setHiddenUseBiometric(!KronoConfig.hiddenUseBiometric);
                     if (view instanceof TextCheckCell) {
                         ((TextCheckCell) view).setChecked(KronoConfig.hiddenUseBiometric);
                     }
@@ -596,71 +591,60 @@ public class KronoSettingsActivity extends BaseFragment {
                     }
                 }
             } else if (position == hiddenVaultMuteNotifRow) {
-                KronoConfig.hiddenMuteNotifications = !KronoConfig.hiddenMuteNotifications;
-                KronoConfig.saveConfig();
+                KronoConfig.setHiddenMuteNotifications(!KronoConfig.hiddenMuteNotifications);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.hiddenMuteNotifications);
                 }
             } else if (position == hiddenVaultHideFolderChatsRow) {
-                KronoConfig.hiddenHideFolderChatsEverywhere = !KronoConfig.hiddenHideFolderChatsEverywhere;
-                KronoConfig.saveConfig();
+                KronoConfig.setHiddenHideFolderChatsEverywhere(!KronoConfig.hiddenHideFolderChatsEverywhere);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.hiddenHideFolderChatsEverywhere);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
             } else if (position == hiddenVaultAutoLockRow) {
-                KronoConfig.hiddenAutoLockOnBackground = !KronoConfig.hiddenAutoLockOnBackground;
-                KronoConfig.saveConfig();
+                KronoConfig.setHiddenAutoLockOnBackground(!KronoConfig.hiddenAutoLockOnBackground);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.hiddenAutoLockOnBackground);
                 }
             } else if (position == hidePhoneNumberRow) {
-                KronoConfig.hidePhoneNumber = !KronoConfig.hidePhoneNumber;
-                KronoConfig.saveConfig();
+                KronoConfig.setHidePhoneNumber(!KronoConfig.hidePhoneNumber);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.hidePhoneNumber);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.mainUserInfoChanged);
             } else if (position == hideChatListNamesRow) {
-                KronoConfig.hideChatListNamesAvatars = !KronoConfig.hideChatListNamesAvatars;
-                KronoConfig.saveConfig();
+                KronoConfig.setHideChatListNamesAvatars(!KronoConfig.hideChatListNamesAvatars);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.hideChatListNamesAvatars);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
             } else if (position == blockSecretChatsRow) {
-                KronoConfig.blockSecretChats = !KronoConfig.blockSecretChats;
-                KronoConfig.saveConfig();
+                KronoConfig.setBlockSecretChats(!KronoConfig.blockSecretChats);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.blockSecretChats);
                 }
             } else if (position == antiDeleteMessagesRow) {
-                KronoConfig.antiDeleteMessages = !KronoConfig.antiDeleteMessages;
-                KronoConfig.saveConfig();
+                KronoConfig.setAntiDeleteMessages(!KronoConfig.antiDeleteMessages);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.antiDeleteMessages);
                 }
             } else if (position == antiDeleteExcludeChannelsRow) {
-                KronoConfig.antiDeleteExcludeChannels = !KronoConfig.antiDeleteExcludeChannels;
-                KronoConfig.saveConfig();
+                KronoConfig.setAntiDeleteExcludeChannels(!KronoConfig.antiDeleteExcludeChannels);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.antiDeleteExcludeChannels);
                 }
             } else if (position == unlimitedViewOnceRow) {
-                KronoConfig.unlimitedViewOnce = !KronoConfig.unlimitedViewOnce;
-                KronoConfig.saveConfig();
+                KronoConfig.setUnlimitedViewOnce(!KronoConfig.unlimitedViewOnce);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.unlimitedViewOnce);
                 }
             } else if (position == viewOnceAllowSaveRow) {
-                KronoConfig.viewOnceAllowSaveAndScreenshots = !KronoConfig.viewOnceAllowSaveAndScreenshots;
-                KronoConfig.saveConfig();
+                KronoConfig.setViewOnceAllowSaveAndScreenshots(!KronoConfig.viewOnceAllowSaveAndScreenshots);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.viewOnceAllowSaveAndScreenshots);
                 }
             } else if (position == allowRestrictedContentBypassRow) {
-                KronoConfig.allowRestrictedContentBypass = !KronoConfig.allowRestrictedContentBypass;
-                KronoConfig.saveConfig();
+                KronoConfig.setAllowRestrictedContentBypass(!KronoConfig.allowRestrictedContentBypass);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.allowRestrictedContentBypass);
                 }
@@ -670,24 +654,19 @@ public class KronoSettingsActivity extends BaseFragment {
                 KronoConfig.setZeroTelemetry(newState);
                 listAdapter.notifyItemRangeChanged(zeroTelemetryRow, 5);
             } else if (position == blockTelegramTelemetryRow) {
-                KronoConfig.blockTelegramTelemetry = !KronoConfig.blockTelegramTelemetry;
-                KronoConfig.syncZeroTelemetryMasterState();
+                KronoConfig.setBlockTelegramTelemetry(!KronoConfig.blockTelegramTelemetry);
                 listAdapter.notifyItemRangeChanged(zeroTelemetryRow, 5);
             } else if (position == disableFirebaseAnalyticsRow) {
-                KronoConfig.disableFirebaseAnalytics = !KronoConfig.disableFirebaseAnalytics;
-                KronoConfig.syncZeroTelemetryMasterState();
+                KronoConfig.setDisableFirebaseAnalytics(!KronoConfig.disableFirebaseAnalytics);
                 listAdapter.notifyItemRangeChanged(zeroTelemetryRow, 5);
             } else if (position == blockSponsoredMessagesRow) {
-                KronoConfig.blockSponsoredMessages = !KronoConfig.blockSponsoredMessages;
-                KronoConfig.syncZeroTelemetryMasterState();
+                KronoConfig.setBlockSponsoredMessages(!KronoConfig.blockSponsoredMessages);
                 listAdapter.notifyItemRangeChanged(zeroTelemetryRow, 5);
             } else if (position == stripUrlTrackersRow) {
-                KronoConfig.stripUrlTrackers = !KronoConfig.stripUrlTrackers;
-                KronoConfig.syncZeroTelemetryMasterState();
+                KronoConfig.setStripUrlTrackers(!KronoConfig.stripUrlTrackers);
                 listAdapter.notifyItemRangeChanged(zeroTelemetryRow, 5);
             } else if (position == disableFirebasePushRow) {
-                KronoConfig.disableFirebasePush = !KronoConfig.disableFirebasePush;
-                KronoConfig.saveConfig();
+                KronoConfig.setDisableFirebasePush(!KronoConfig.disableFirebasePush);
                 KronoConfig.applyFirebasePushPreference();
                 org.telegram.messenger.ApplicationLoader.reinitPushServices();
                 if (view instanceof TextCheckCell) {
@@ -706,8 +685,7 @@ public class KronoSettingsActivity extends BaseFragment {
             } else if (position == uiStyleRow) {
                 showUiStyleSelectorDialog();
             } else if (position == disableTitleMarqueeRow) {
-                KronoConfig.disableTitleMarquee = !KronoConfig.disableTitleMarquee;
-                KronoConfig.saveConfig();
+                KronoConfig.setDisableTitleMarquee(!KronoConfig.disableTitleMarquee);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.disableTitleMarquee);
                 }
@@ -715,46 +693,39 @@ public class KronoSettingsActivity extends BaseFragment {
             } else if (position == messageSwipeActionRow) {
                 showMessageSwipeActionDialog();
             } else if (position == swipeToEditOwnRow) {
-                KronoConfig.swipeToEditOwnMessage = !KronoConfig.swipeToEditOwnMessage;
-                KronoConfig.saveConfig();
+                KronoConfig.setSwipeToEditOwnMessage(!KronoConfig.swipeToEditOwnMessage);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.swipeToEditOwnMessage);
                 }
             } else if (position == deleteForAllDefaultRow) {
-                KronoConfig.deleteForAllByDefault = !KronoConfig.deleteForAllByDefault;
-                KronoConfig.saveConfig();
+                KronoConfig.setDeleteForAllByDefault(!KronoConfig.deleteForAllByDefault);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.deleteForAllByDefault);
                 }
             } else if (position == showTimeWithSecondsRow) {
-                KronoConfig.showTimeWithSeconds = !KronoConfig.showTimeWithSeconds;
-                KronoConfig.saveConfig();
+                KronoConfig.setShowTimeWithSeconds(!KronoConfig.showTimeWithSeconds);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.showTimeWithSeconds);
                 }
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.reloadInterface);
             } else if (position == unlimitedPinnedChatsRow) {
-                KronoConfig.unlimitedPinnedChats = !KronoConfig.unlimitedPinnedChats;
-                KronoConfig.saveConfig();
+                KronoConfig.setUnlimitedPinnedChats(!KronoConfig.unlimitedPinnedChats);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.unlimitedPinnedChats);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
             } else if (position == quickGoToMessageRow) {
-                KronoConfig.quickGoToMessageInSearch = !KronoConfig.quickGoToMessageInSearch;
-                KronoConfig.saveConfig();
+                KronoConfig.setQuickGoToMessageInSearch(!KronoConfig.quickGoToMessageInSearch);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.quickGoToMessageInSearch);
                 }
             } else if (position == longClickMediaMenuRow) {
-                KronoConfig.longClickMediaShowsMenu = !KronoConfig.longClickMediaShowsMenu;
-                KronoConfig.saveConfig();
+                KronoConfig.setLongClickMediaShowsMenu(!KronoConfig.longClickMediaShowsMenu);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.longClickMediaShowsMenu);
                 }
             } else if (position == disablePullToNextChannelRow) {
-                KronoConfig.disablePullToNextChannel = !KronoConfig.disablePullToNextChannel;
-                KronoConfig.saveConfig();
+                KronoConfig.setDisablePullToNextChannel(!KronoConfig.disablePullToNextChannel);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.disablePullToNextChannel);
                 }
@@ -763,29 +734,25 @@ public class KronoSettingsActivity extends BaseFragment {
             } else if (position == tabStyleRow) {
                 showTabStyleDialog();
             } else if (position == tabStyleStrokeRow) {
-                KronoConfig.tabStyleStroke = !KronoConfig.tabStyleStroke;
-                KronoConfig.saveConfig();
+                KronoConfig.setTabStyleStroke(!KronoConfig.tabStyleStroke);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.tabStyleStroke);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             } else if (position == hideTabsCountersRow) {
-                KronoConfig.hideTabsCounters = !KronoConfig.hideTabsCounters;
-                KronoConfig.saveConfig();
+                KronoConfig.setHideTabsCounters(!KronoConfig.hideTabsCounters);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.hideTabsCounters);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             } else if (position == folderNameInHeaderRow) {
-                KronoConfig.folderNameInHeader = !KronoConfig.folderNameInHeader;
-                KronoConfig.saveConfig();
+                KronoConfig.setFolderNameInHeader(!KronoConfig.folderNameInHeader);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.folderNameInHeader);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             } else if (position == disableTabsSwipeRow) {
-                KronoConfig.disableTabsSwipe = !KronoConfig.disableTabsSwipe;
-                KronoConfig.saveConfig();
+                KronoConfig.setDisableTabsSwipe(!KronoConfig.disableTabsSwipe);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.disableTabsSwipe);
                 }
@@ -793,8 +760,10 @@ public class KronoSettingsActivity extends BaseFragment {
                     listAdapter.notifyItemChanged(infiniteFolderScrollRow);
                 }
             } else if (position == infiniteFolderScrollRow) {
-                KronoConfig.infiniteFolderScroll = !KronoConfig.infiniteFolderScroll;
-                KronoConfig.saveConfig();
+                if (KronoConfig.disableTabsSwipe) {
+                    return;
+                }
+                KronoConfig.setInfiniteFolderScroll(!KronoConfig.infiniteFolderScroll);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.infiniteFolderScroll);
                 }
@@ -811,16 +780,14 @@ public class KronoSettingsActivity extends BaseFragment {
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             } else if (position == spoilerWordsToggleRow) {
-                KronoConfig.spoilerWordsEnabled = !KronoConfig.spoilerWordsEnabled;
-                KronoConfig.saveConfig();
+                KronoConfig.setSpoilerWordsEnabled(!KronoConfig.spoilerWordsEnabled);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.spoilerWordsEnabled);
                 }
             } else if (position == spoilerWordsEditRow) {
                 showSpoilerWordsDialog();
             } else if (position == keepOriginalFilenameRow) {
-                KronoConfig.keepOriginalFilename = !KronoConfig.keepOriginalFilename;
-                KronoConfig.saveConfig();
+                KronoConfig.setKeepOriginalFilename(!KronoConfig.keepOriginalFilename);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.keepOriginalFilename);
                 }
@@ -829,8 +796,7 @@ public class KronoSettingsActivity extends BaseFragment {
             } else if (position == openStorageUsageRow) {
                 presentFragment(new CacheControlActivity());
             } else if (position == freeVoiceTranscriptionRow) {
-                KronoConfig.freeVoiceTranscription = !KronoConfig.freeVoiceTranscription;
-                KronoConfig.saveConfig();
+                KronoConfig.setFreeVoiceTranscription(!KronoConfig.freeVoiceTranscription);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.freeVoiceTranscription);
                 }
@@ -841,8 +807,7 @@ public class KronoSettingsActivity extends BaseFragment {
             } else if (position == voiceTranscriptionModelsRow) {
                 showVoiceTranscriptionModelsDialog();
             } else if (position == freeChatTranslationRow) {
-                KronoConfig.freeChatTranslation = !KronoConfig.freeChatTranslation;
-                KronoConfig.saveConfig();
+                KronoConfig.setFreeChatTranslation(!KronoConfig.freeChatTranslation);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(KronoConfig.freeChatTranslation);
                 }
@@ -852,15 +817,8 @@ public class KronoSettingsActivity extends BaseFragment {
             } else if (position == translationProviderRow) {
                 showTranslationProviderDialog();
             } else if (position == persistentForegroundServiceRow) {
-                KronoConfig.persistentForegroundService = !KronoConfig.persistentForegroundService;
-                KronoConfig.saveConfig();
-                if (KronoConfig.persistentForegroundService) {
-                    SharedPreferences globalPrefs = MessagesController.getGlobalNotificationsSettings();
-                    globalPrefs.edit()
-                            .putBoolean("pushService", true)
-                            .putBoolean("pushConnection", true)
-                            .apply();
-                }
+                boolean enabled = !KronoConfig.isPersistentForegroundService();
+                KronoConfig.setPersistentForegroundService(enabled);
                 ApplicationLoader.startPushService();
                 for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
                     if (UserConfig.getInstance(a).isClientActivated()) {
@@ -872,13 +830,16 @@ public class KronoSettingsActivity extends BaseFragment {
                 }
                 BulletinFactory.of(this).createSimpleBulletin(
                         R.drawable.msg_notifications,
-                        KronoConfig.persistentForegroundService
+                        enabled
                                 ? "Servicio persistente anti-cierre activado"
                                 : "Servicio persistente anti-cierre desactivado"
                 ).show();
             } else if (position == backgroundPushConnectionRow) {
+                if (KronoConfig.isPersistentForegroundService()) {
+                    return;
+                }
                 SharedPreferences globalPrefs = MessagesController.getGlobalNotificationsSettings();
-                boolean current = globalPrefs.getBoolean("pushConnection", getMessagesController().backgroundConnection);
+                boolean current = globalPrefs.getBoolean("pushConnection", false);
                 boolean next = !current;
                 globalPrefs.edit().putBoolean("pushConnection", next).apply();
                 for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -887,7 +848,7 @@ public class KronoSettingsActivity extends BaseFragment {
                     }
                 }
                 if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(next || KronoConfig.isPersistentForegroundService());
+                    ((TextCheckCell) view).setChecked(next);
                 }
             } else if (position == diagFcmTokenRow || position == diagFcmStatusRow) {
                 showPushDiagnosticDetailsDialog();
@@ -973,30 +934,7 @@ public class KronoSettingsActivity extends BaseFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Estilo visual de componentes");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.uiStyle = which;
-            KronoConfig.saveConfig();
-
-            int recommendedRadius = KronoConfig.getRecommendedBubbleRadius();
-            SharedConfig.bubbleRadius = recommendedRadius;
-            MessagesController.getGlobalMainSettings().edit().putInt("bubbleRadius", recommendedRadius).apply();
-
-            if (which == KronoConfig.UI_STYLE_MATERIAL_YOU) {
-                Theme.ThemeInfo current = Theme.getCurrentTheme();
-                String currentName = current != null ? current.name : "";
-                if (Theme.isCurrentThemeDark()) {
-                    if (!"Monet Dark".equals(currentName) && !"Monet AMOLED".equals(currentName)) {
-                        Theme.ThemeInfo monetDark = Theme.getTheme("Monet Dark");
-                        if (monetDark != null) {
-                            applyThemeAndPersist(monetDark, false);
-                        }
-                    }
-                } else if (!"Monet Light".equals(currentName)) {
-                    Theme.ThemeInfo monetLight = Theme.getTheme("Monet Light");
-                    if (monetLight != null) {
-                        applyThemeAndPersist(monetLight, false);
-                    }
-                }
-            }
+            KronoConfig.setUiStyle(which);
 
             Theme.refreshThemeColors();
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.didSetNewTheme, false, true);
@@ -1024,8 +962,7 @@ public class KronoSettingsActivity extends BaseFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Modo de transcripción de voz");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.voiceTranscriptionMode = which;
-            KronoConfig.saveConfig();
+            KronoConfig.setVoiceTranscriptionMode(which);
             if (listAdapter != null && voiceTranscriptionModeRow >= 0) {
                 listAdapter.notifyItemChanged(voiceTranscriptionModeRow);
             }
@@ -1056,8 +993,7 @@ public class KronoSettingsActivity extends BaseFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Idioma de transcripción local");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.voiceTranscriptionLanguage = codes[which];
-            KronoConfig.saveConfig();
+            KronoConfig.setVoiceTranscriptionLanguage(codes[which]);
             if (listAdapter != null && voiceTranscriptionLanguageRow >= 0) {
                 listAdapter.notifyItemChanged(voiceTranscriptionLanguageRow);
             }
@@ -1116,18 +1052,22 @@ public class KronoSettingsActivity extends BaseFragment {
         if (getParentActivity() == null) {
             return;
         }
+        final int[] providerValues = new int[]{
+                KronoConfig.TRANSLATE_PROVIDER_TELEGRAM,
+                KronoConfig.TRANSLATE_PROVIDER_GOOGLE,
+                KronoConfig.TRANSLATE_PROVIDER_YANDEX,
+                KronoConfig.TRANSLATE_PROVIDER_LINGVA
+        };
         final CharSequence[] items = new CharSequence[]{
-                (KronoConfig.translationProvider == 0 ? "✓ " : "") + "Telegram Oficial",
-                (KronoConfig.translationProvider == 1 ? "✓ " : "") + "Google Translate",
-                (KronoConfig.translationProvider == 2 ? "✓ " : "") + "DeepL Translate",
-                (KronoConfig.translationProvider == 3 ? "✓ " : "") + "Yandex Translate",
-                (KronoConfig.translationProvider == 4 ? "✓ " : "") + "Lingva Translate"
+                (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_TELEGRAM ? "✓ " : "") + "Telegram Oficial",
+                (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_GOOGLE ? "✓ " : "") + "Google Translate",
+                (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_YANDEX ? "✓ " : "") + "Yandex Translate",
+                (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_LINGVA ? "✓ " : "") + "Lingva Translate"
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Motor de traducción");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.translationProvider = which;
-            KronoConfig.saveConfig();
+            KronoConfig.setTranslationProvider(providerValues[which]);
             if (listAdapter != null && translationProviderRow >= 0) {
                 listAdapter.notifyItemChanged(translationProviderRow);
             }
@@ -1154,8 +1094,7 @@ public class KronoSettingsActivity extends BaseFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Acción al deslizar sobre un mensaje");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.messageSwipeAction = which;
-            KronoConfig.saveConfig();
+            KronoConfig.setMessageSwipeAction(which);
             if (listAdapter != null && messageSwipeActionRow >= 0) {
                 listAdapter.notifyItemChanged(messageSwipeActionRow);
             }
@@ -1178,8 +1117,7 @@ public class KronoSettingsActivity extends BaseFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Contenido de las pestañas");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.tabMode = which;
-            KronoConfig.saveConfig();
+            KronoConfig.setTabMode(which);
             if (listAdapter != null && tabModeRow >= 0) {
                 listAdapter.notifyItemChanged(tabModeRow);
             }
@@ -1205,8 +1143,7 @@ public class KronoSettingsActivity extends BaseFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Estilo de las pestañas");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.tabStyle = which;
-            KronoConfig.saveConfig();
+            KronoConfig.setTabStyle(which);
             if (listAdapter != null && tabStyleRow >= 0) {
                 listAdapter.notifyItemChanged(tabStyleRow);
             }
@@ -1247,13 +1184,13 @@ public class KronoSettingsActivity extends BaseFragment {
 
         builder.setView(layout);
         builder.setPositiveButton(LocaleController.getString(R.string.Save), (dialog, which) -> {
-            KronoConfig.spoilerWordsRaw = editText.getText().toString().trim();
-            if (!KronoConfig.spoilerWordsRaw.isEmpty()) {
-                KronoConfig.spoilerWordsEnabled = true;
-            }
-            KronoConfig.saveConfig();
+            String raw = editText.getText().toString().trim();
+            KronoConfig.setSpoilerWordsRaw(raw);
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
+            }
+            if (!raw.isEmpty() && !KronoConfig.spoilerWordsEnabled) {
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, "Palabras guardadas (activa el filtro arriba para aplicarlas)").show();
             }
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
@@ -1510,6 +1447,13 @@ public class KronoSettingsActivity extends BaseFragment {
 
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
+            int position = holder.getAdapterPosition();
+            if (position == infiniteFolderScrollRow && KronoConfig.disableTabsSwipe) {
+                return false;
+            }
+            if (position == backgroundPushConnectionRow && KronoConfig.isPersistentForegroundService()) {
+                return false;
+            }
             int type = holder.getItemViewType();
             return type == 1 || type == 2 || type == 3;
         }
@@ -1538,7 +1482,8 @@ public class KronoSettingsActivity extends BaseFragment {
                        position == folderNameInHeaderRow || position == disableTabsSwipeRow ||
                        position == infiniteFolderScrollRow || position == swipeToEditOwnRow ||
                        position == deleteForAllDefaultRow || position == showTimeWithSecondsRow ||
-                       position == unlimitedPinnedChatsRow || disablePullToNextChannelRow == position ||
+                       position == unlimitedPinnedChatsRow || position == quickGoToMessageRow ||
+                       position == longClickMediaMenuRow || disablePullToNextChannelRow == position ||
                        position == showFavoritesFolderRow || position == hideAllChatsTabRow || position == spoilerWordsToggleRow ||
                        position == keepOriginalFilenameRow || position == freeVoiceTranscriptionRow || position == freeChatTranslationRow ||
                        position == persistentForegroundServiceRow || position == backgroundPushConnectionRow || position == disableTitleMarqueeRow) {
@@ -1729,9 +1674,10 @@ public class KronoSettingsActivity extends BaseFragment {
                 } else if (position == persistentForegroundServiceRow) {
                     checkCell.setTextAndValueAndCheck("Servicio persistente (anti-cierre OEM)", "Mantiene una notificación silenciosa en primer plano para evitar cierres por Doze, Xiaomi, Samsung o Huawei", KronoConfig.isPersistentForegroundService(), true, true);
                 } else if (position == backgroundPushConnectionRow) {
-                    boolean bgConn = KronoConfig.isPersistentForegroundService()
-                            || MessagesController.getGlobalNotificationsSettings().getBoolean("pushConnection", getMessagesController().backgroundConnection);
+                    boolean persistent = KronoConfig.isPersistentForegroundService();
+                    boolean bgConn = persistent || MessagesController.getGlobalNotificationsSettings().getBoolean("pushConnection", false);
                     checkCell.setTextAndValueAndCheck("Conexión TCP en segundo plano", "Mantiene el socket MTProto activo si FCM falla o está desactivado", bgConn, true, false);
+                    checkCell.setEnabled(!persistent, null);
                 } else if (position == disableTitleMarqueeRow) {
                     checkCell.setTextAndValueAndCheck("Quitar efecto marquee en los títulos", "Evita el desplazamiento lateral continuo en títulos largos", KronoConfig.disableTitleMarquee, true, false);
                 }

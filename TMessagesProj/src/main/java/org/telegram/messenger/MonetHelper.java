@@ -204,7 +204,7 @@ public class MonetHelper {
             Integer special = specialColors.get(key);
             if (special != null) {
                 if (key.startsWith("monetAvatar")) {
-                    int accent = getBaseTokenColor("a1_500", false);
+                    int accent = getBaseTokenColor("a1_500");
                     float ratio = key.startsWith("monetAvatarName") ? 0.14f : 0.18f;
                     return ColorUtils.blendARGB(special, accent, ratio);
                 }
@@ -229,7 +229,7 @@ public class MonetHelper {
                 }
             }
 
-            int baseColor = getBaseTokenColor(key, amoled);
+            int baseColor = getBaseTokenColor(key);
             if (alphaPercent >= 0 && baseColor != 0) {
                 float factor = Math.max(0f, Math.min(1f, alphaPercent / 100f));
                 return ColorUtils.blendARGB(Color.BLACK, baseColor, factor);
@@ -242,7 +242,7 @@ public class MonetHelper {
     }
 
     @ColorInt
-    private static int getBaseTokenColor(String key, boolean amoled) {
+    private static int getBaseTokenColor(String key) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Context context = ApplicationLoader.applicationContext;
             Integer idObj = ids.get(key);

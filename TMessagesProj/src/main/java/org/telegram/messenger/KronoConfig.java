@@ -34,7 +34,7 @@ public class KronoConfig {
 
     private static final String PREFS_NAME = "kronoconfig";
     private static SharedPreferences preferences;
-    private static boolean loaded = false;
+    private static volatile boolean loaded = false;
 
     // 1. Ghost Mode & Privacy
     public static boolean ghostMode = false;
@@ -133,7 +133,6 @@ public class KronoConfig {
     public static String voiceTranscriptionLanguage = "auto";
     public static final int TRANSLATE_PROVIDER_TELEGRAM = 0;
     public static final int TRANSLATE_PROVIDER_GOOGLE = 1;
-    public static final int TRANSLATE_PROVIDER_DEEPL = 2;
     public static final int TRANSLATE_PROVIDER_YANDEX = 3;
     public static final int TRANSLATE_PROVIDER_LINGVA = 4;
     public static int translationProvider = TRANSLATE_PROVIDER_GOOGLE;
@@ -223,6 +222,13 @@ public class KronoConfig {
             voiceTranscriptionLanguage = "auto";
         }
         translationProvider = preferences.getInt("translationProvider", TRANSLATE_PROVIDER_GOOGLE);
+        if (translationProvider == 2 || (translationProvider != TRANSLATE_PROVIDER_TELEGRAM
+                && translationProvider != TRANSLATE_PROVIDER_GOOGLE
+                && translationProvider != TRANSLATE_PROVIDER_YANDEX
+                && translationProvider != TRANSLATE_PROVIDER_LINGVA)) {
+            translationProvider = TRANSLATE_PROVIDER_GOOGLE;
+            preferences.edit().putInt("translationProvider", translationProvider).apply();
+        }
         messageSwipeAction = preferences.getInt("messageSwipeAction", SWIPE_ACTION_REPLY);
         swipeToEditOwnMessage = preferences.getBoolean("swipeToEditOwnMessage", true);
 
@@ -238,6 +244,12 @@ public class KronoConfig {
     }
 
     public static synchronized void saveConfig() {
+        if (!loaded) {
+            loadConfig();
+            if (!loaded) {
+                return;
+            }
+        }
         if (preferences == null && ApplicationLoader.applicationContext != null) {
             preferences = ApplicationLoader.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         }
@@ -317,22 +329,347 @@ public class KronoConfig {
                 .apply();
     }
 
-    public static void setGhostMode(boolean enabled) {
-        ghostMode = enabled;
-        dontReadMessages = enabled;
-        dontReadStories = enabled;
-        dontSendTyping = enabled;
-        dontSendOnline = enabled;
+    public static synchronized void setGhostMode(boolean enabled) {
+        loadConfig();
+        if (enabled) {
+            if (!ghostMode && preferences != null) {
+                preferences.edit()
+                        .putBoolean("ghostPrev_hasSnapshot", true)
+                        .putBoolean("ghostPrev_dontReadMessages", dontReadMessages)
+                        .putBoolean("ghostPrev_dontReadStories", dontReadStories)
+                        .putBoolean("ghostPrev_dontSendTyping", dontSendTyping)
+                        .putBoolean("ghostPrev_dontSendOnline", dontSendOnline)
+                        .apply();
+            }
+            ghostMode = true;
+            dontReadMessages = true;
+            dontReadStories = true;
+            dontSendTyping = true;
+            dontSendOnline = true;
+        } else {
+            boolean restored = false;
+            if (preferences != null && preferences.getBoolean("ghostPrev_hasSnapshot", false)) {
+                boolean prevMsg = preferences.getBoolean("ghostPrev_dontReadMessages", false);
+                boolean prevStory = preferences.getBoolean("ghostPrev_dontReadStories", false);
+                boolean prevTyping = preferences.getBoolean("ghostPrev_dontSendTyping", false);
+                boolean prevOnline = preferences.getBoolean("ghostPrev_dontSendOnline", false);
+                preferences.edit().remove("ghostPrev_hasSnapshot").apply();
+                if (!(prevMsg && prevStory && prevTyping && prevOnline)) {
+                    dontReadMessages = prevMsg;
+                    dontReadStories = prevStory;
+                    dontSendTyping = prevTyping;
+                    dontSendOnline = prevOnline;
+                    restored = true;
+                }
+            }
+            ghostMode = false;
+            if (!restored) {
+                dontReadMessages = false;
+                dontReadStories = false;
+                dontSendTyping = false;
+                dontSendOnline = false;
+            }
+        }
         saveConfig();
     }
 
-    public static void toggleHideAllChatsTab() {
+    public static synchronized void toggleHideAllChatsTab() {
+        loadConfig();
         hideAllChatsTab = !hideAllChatsTab;
         saveConfig();
     }
 
-    public static void toggleShowFavoritesFolder() {
+    public static synchronized void toggleShowFavoritesFolder() {
+        loadConfig();
         showFavoritesFolder = !showFavoritesFolder;
+        saveConfig();
+    }
+
+    public static synchronized void setDontReadMessages(boolean value) {
+        loadConfig();
+        dontReadMessages = value;
+        syncGhostMasterState();
+    }
+
+    public static synchronized void setDontReadStories(boolean value) {
+        loadConfig();
+        dontReadStories = value;
+        syncGhostMasterState();
+    }
+
+    public static synchronized void setDontSendTyping(boolean value) {
+        loadConfig();
+        dontSendTyping = value;
+        syncGhostMasterState();
+    }
+
+    public static synchronized void setDontSendOnline(boolean value) {
+        loadConfig();
+        dontSendOnline = value;
+        syncGhostMasterState();
+    }
+
+    public static synchronized void setHiddenUseBiometric(boolean value) {
+        loadConfig();
+        hiddenUseBiometric = value;
+        saveConfig();
+    }
+
+    public static synchronized void setHiddenMuteNotifications(boolean value) {
+        loadConfig();
+        hiddenMuteNotifications = value;
+        saveConfig();
+    }
+
+    public static synchronized void setHiddenHideFolderChatsEverywhere(boolean value) {
+        loadConfig();
+        hiddenHideFolderChatsEverywhere = value;
+        saveConfig();
+    }
+
+    public static synchronized void setHiddenAutoLockOnBackground(boolean value) {
+        loadConfig();
+        hiddenAutoLockOnBackground = value;
+        saveConfig();
+    }
+
+    public static synchronized void setHidePhoneNumber(boolean value) {
+        loadConfig();
+        hidePhoneNumber = value;
+        saveConfig();
+    }
+
+    public static synchronized void setHideChatListNamesAvatars(boolean value) {
+        loadConfig();
+        hideChatListNamesAvatars = value;
+        saveConfig();
+    }
+
+    public static synchronized void setBlockSecretChats(boolean value) {
+        loadConfig();
+        blockSecretChats = value;
+        saveConfig();
+    }
+
+    public static synchronized void setAntiDeleteMessages(boolean value) {
+        loadConfig();
+        antiDeleteMessages = value;
+        saveConfig();
+    }
+
+    public static synchronized void setAntiDeleteExcludeChannels(boolean value) {
+        loadConfig();
+        antiDeleteExcludeChannels = value;
+        saveConfig();
+    }
+
+    public static synchronized void setUnlimitedViewOnce(boolean value) {
+        loadConfig();
+        unlimitedViewOnce = value;
+        saveConfig();
+    }
+
+    public static synchronized void setViewOnceAllowSaveAndScreenshots(boolean value) {
+        loadConfig();
+        viewOnceAllowSaveAndScreenshots = value;
+        saveConfig();
+    }
+
+    public static synchronized void setAllowRestrictedContentBypass(boolean value) {
+        loadConfig();
+        allowRestrictedContentBypass = value;
+        saveConfig();
+    }
+
+    public static synchronized void setBlockTelegramTelemetry(boolean value) {
+        loadConfig();
+        blockTelegramTelemetry = value;
+        syncZeroTelemetryMasterState();
+    }
+
+    public static synchronized void setDisableFirebaseAnalytics(boolean value) {
+        loadConfig();
+        disableFirebaseAnalytics = value;
+        syncZeroTelemetryMasterState();
+    }
+
+    public static synchronized void setBlockSponsoredMessages(boolean value) {
+        loadConfig();
+        blockSponsoredMessages = value;
+        syncZeroTelemetryMasterState();
+    }
+
+    public static synchronized void setStripUrlTrackers(boolean value) {
+        loadConfig();
+        stripUrlTrackers = value;
+        syncZeroTelemetryMasterState();
+    }
+
+    public static synchronized void setDisableFirebasePush(boolean value) {
+        loadConfig();
+        disableFirebasePush = value;
+        saveConfig();
+    }
+
+    public static synchronized void setPersistentForegroundService(boolean value) {
+        loadConfig();
+        persistentForegroundService = value;
+        saveConfig();
+    }
+
+    public static synchronized void setUiStyle(int style) {
+        loadConfig();
+        uiStyle = style;
+        saveConfig();
+    }
+
+    public static synchronized void setDisableTitleMarquee(boolean value) {
+        loadConfig();
+        disableTitleMarquee = value;
+        saveConfig();
+    }
+
+    public static synchronized void setTabMode(int mode) {
+        loadConfig();
+        tabMode = mode;
+        saveConfig();
+    }
+
+    public static synchronized void setTabStyle(int style) {
+        loadConfig();
+        tabStyle = style;
+        saveConfig();
+    }
+
+    public static synchronized void setTabStyleStroke(boolean value) {
+        loadConfig();
+        tabStyleStroke = value;
+        saveConfig();
+    }
+
+    public static synchronized void setHideTabsCounters(boolean value) {
+        loadConfig();
+        hideTabsCounters = value;
+        saveConfig();
+    }
+
+    public static synchronized void setFolderNameInHeader(boolean value) {
+        loadConfig();
+        folderNameInHeader = value;
+        saveConfig();
+    }
+
+    public static synchronized void setDisableTabsSwipe(boolean value) {
+        loadConfig();
+        disableTabsSwipe = value;
+        saveConfig();
+    }
+
+    public static synchronized void setInfiniteFolderScroll(boolean value) {
+        loadConfig();
+        infiniteFolderScroll = value;
+        saveConfig();
+    }
+
+    public static synchronized void setMessageSwipeAction(int action) {
+        loadConfig();
+        messageSwipeAction = action;
+        saveConfig();
+    }
+
+    public static synchronized void setSwipeToEditOwnMessage(boolean value) {
+        loadConfig();
+        swipeToEditOwnMessage = value;
+        saveConfig();
+    }
+
+    public static synchronized void setDeleteForAllByDefault(boolean value) {
+        loadConfig();
+        deleteForAllByDefault = value;
+        saveConfig();
+    }
+
+    public static synchronized void setShowTimeWithSeconds(boolean value) {
+        loadConfig();
+        showTimeWithSeconds = value;
+        saveConfig();
+    }
+
+    public static synchronized void setUnlimitedPinnedChats(boolean value) {
+        loadConfig();
+        unlimitedPinnedChats = value;
+        saveConfig();
+    }
+
+    public static synchronized void setQuickGoToMessageInSearch(boolean value) {
+        loadConfig();
+        quickGoToMessageInSearch = value;
+        saveConfig();
+    }
+
+    public static synchronized void setLongClickMediaShowsMenu(boolean value) {
+        loadConfig();
+        longClickMediaShowsMenu = value;
+        saveConfig();
+    }
+
+    public static synchronized void setDisablePullToNextChannel(boolean value) {
+        loadConfig();
+        disablePullToNextChannel = value;
+        saveConfig();
+    }
+
+    public static synchronized void setSpoilerWordsEnabled(boolean value) {
+        loadConfig();
+        spoilerWordsEnabled = value;
+        saveConfig();
+    }
+
+    public static synchronized void setSpoilerWordsRaw(String raw) {
+        loadConfig();
+        spoilerWordsRaw = raw != null ? raw : "";
+        saveConfig();
+    }
+
+    public static synchronized void setKeepOriginalFilename(boolean value) {
+        loadConfig();
+        keepOriginalFilename = value;
+        saveConfig();
+    }
+
+    public static synchronized void setFreeVoiceTranscription(boolean value) {
+        loadConfig();
+        freeVoiceTranscription = value;
+        saveConfig();
+    }
+
+    public static synchronized void setVoiceTranscriptionMode(int mode) {
+        loadConfig();
+        voiceTranscriptionMode = mode;
+        saveConfig();
+    }
+
+    public static synchronized void setVoiceTranscriptionLanguage(String lang) {
+        loadConfig();
+        voiceTranscriptionLanguage = TextUtils.isEmpty(lang) ? "auto" : lang;
+        saveConfig();
+    }
+
+    public static synchronized void setFreeChatTranslation(boolean value) {
+        loadConfig();
+        freeChatTranslation = value;
+        saveConfig();
+    }
+
+    public static synchronized void setTranslationProvider(int provider) {
+        loadConfig();
+        if (provider != TRANSLATE_PROVIDER_TELEGRAM
+                && provider != TRANSLATE_PROVIDER_GOOGLE
+                && provider != TRANSLATE_PROVIDER_YANDEX
+                && provider != TRANSLATE_PROVIDER_LINGVA) {
+            provider = TRANSLATE_PROVIDER_GOOGLE;
+        }
+        translationProvider = provider;
         saveConfig();
     }
 
@@ -620,7 +957,11 @@ public class KronoConfig {
         return isDialogHiddenDirectly(account, dialogId) || isDialogHiddenInHiddenFolder(account, dialogId);
     }
 
-    public static void syncGhostMasterState() {
+    public static synchronized void syncGhostMasterState() {
+        loadConfig();
+        if (preferences != null && preferences.getBoolean("ghostPrev_hasSnapshot", false)) {
+            preferences.edit().remove("ghostPrev_hasSnapshot").apply();
+        }
         ghostMode = dontReadMessages && dontReadStories && dontSendTyping && dontSendOnline;
         saveConfig();
     }
@@ -655,17 +996,56 @@ public class KronoConfig {
         return freeChatTranslation;
     }
 
-    public static void setZeroTelemetry(boolean enabled) {
-        zeroTelemetry = enabled;
-        blockTelegramTelemetry = enabled;
-        disableFirebaseAnalytics = enabled;
-        blockSponsoredMessages = enabled;
-        stripUrlTrackers = enabled;
+    public static synchronized void setZeroTelemetry(boolean enabled) {
+        loadConfig();
+        if (enabled) {
+            if (!zeroTelemetry && preferences != null) {
+                preferences.edit()
+                        .putBoolean("telemetryPrev_hasSnapshot", true)
+                        .putBoolean("telemetryPrev_blockTelegramTelemetry", blockTelegramTelemetry)
+                        .putBoolean("telemetryPrev_disableFirebaseAnalytics", disableFirebaseAnalytics)
+                        .putBoolean("telemetryPrev_blockSponsoredMessages", blockSponsoredMessages)
+                        .putBoolean("telemetryPrev_stripUrlTrackers", stripUrlTrackers)
+                        .apply();
+            }
+            zeroTelemetry = true;
+            blockTelegramTelemetry = true;
+            disableFirebaseAnalytics = true;
+            blockSponsoredMessages = true;
+            stripUrlTrackers = true;
+        } else {
+            boolean restored = false;
+            if (preferences != null && preferences.getBoolean("telemetryPrev_hasSnapshot", false)) {
+                boolean prevTele = preferences.getBoolean("telemetryPrev_blockTelegramTelemetry", false);
+                boolean prevFb = preferences.getBoolean("telemetryPrev_disableFirebaseAnalytics", false);
+                boolean prevSpon = preferences.getBoolean("telemetryPrev_blockSponsoredMessages", false);
+                boolean prevStrip = preferences.getBoolean("telemetryPrev_stripUrlTrackers", false);
+                preferences.edit().remove("telemetryPrev_hasSnapshot").apply();
+                if (!(prevTele && prevFb && prevSpon && prevStrip)) {
+                    blockTelegramTelemetry = prevTele;
+                    disableFirebaseAnalytics = prevFb;
+                    blockSponsoredMessages = prevSpon;
+                    stripUrlTrackers = prevStrip;
+                    restored = true;
+                }
+            }
+            zeroTelemetry = false;
+            if (!restored) {
+                blockTelegramTelemetry = false;
+                disableFirebaseAnalytics = false;
+                blockSponsoredMessages = false;
+                stripUrlTrackers = false;
+            }
+        }
         saveConfig();
         applyFirebaseAnalyticsPreference(ApplicationLoader.applicationContext);
     }
 
-    public static void syncZeroTelemetryMasterState() {
+    public static synchronized void syncZeroTelemetryMasterState() {
+        loadConfig();
+        if (preferences != null && preferences.getBoolean("telemetryPrev_hasSnapshot", false)) {
+            preferences.edit().remove("telemetryPrev_hasSnapshot").apply();
+        }
         zeroTelemetry = blockTelegramTelemetry && disableFirebaseAnalytics && blockSponsoredMessages && stripUrlTrackers;
         saveConfig();
         applyFirebaseAnalyticsPreference(ApplicationLoader.applicationContext);
@@ -720,7 +1100,7 @@ public class KronoConfig {
         }
     }
 
-    public static int getGhostLocalReadMaxId(int currentAccount, long dialogId) {
+    public static synchronized int getGhostLocalReadMaxId(int currentAccount, long dialogId) {
         loadConfig();
         if (!isGhostDontReadMessages() || preferences == null) {
             return 0;
@@ -728,7 +1108,7 @@ public class KronoConfig {
         return preferences.getInt("ghost_read_max_" + currentAccount + "_" + dialogId, 0);
     }
 
-    public static void setGhostLocalReadMaxId(int currentAccount, long dialogId, int maxId) {
+    public static synchronized void setGhostLocalReadMaxId(int currentAccount, long dialogId, int maxId) {
         loadConfig();
         if (preferences == null || maxId <= 0 || maxId == Integer.MAX_VALUE) {
             return;
@@ -943,8 +1323,6 @@ public class KronoConfig {
         switch (translationProvider) {
             case TRANSLATE_PROVIDER_GOOGLE:
                 return "Google Translate";
-            case TRANSLATE_PROVIDER_DEEPL:
-                return "DeepL Translate";
             case TRANSLATE_PROVIDER_YANDEX:
                 return "Yandex Translate";
             case TRANSLATE_PROVIDER_LINGVA:

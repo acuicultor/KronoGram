@@ -381,8 +381,7 @@ public final class KronoHiddenLockHelper {
             labels.add(hasPass ? "Usar solo biometría (quitar PIN/contraseña)" : "Solo biometría del dispositivo");
             actions.add(() -> {
                 KronoConfig.clearHiddenPasscode();
-                KronoConfig.hiddenUseBiometric = true;
-                KronoConfig.saveConfig();
+                KronoConfig.setHiddenUseBiometric(true);
                 BulletinFactory.of(fragment).createSimpleBulletin(R.drawable.fingerprint, "Desbloqueo biométrico activado").show();
                 if (onUpdated != null) {
                     onUpdated.run();
@@ -394,8 +393,7 @@ public final class KronoHiddenLockHelper {
             labels.add("Desactivar bloqueo");
             actions.add(() -> {
                 KronoConfig.clearHiddenPasscode();
-                KronoConfig.hiddenUseBiometric = false;
-                KronoConfig.saveConfig();
+                KronoConfig.setHiddenUseBiometric(false);
                 if (onUpdated != null) {
                     onUpdated.run();
                 }
