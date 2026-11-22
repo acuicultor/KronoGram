@@ -336,24 +336,33 @@ public class KronoBackupActivity extends BaseFragment {
 
     private void showCloudModeDialog() {
         if (getParentActivity() == null) return;
+        final int[] modeValues = new int[]{
+                KronoConfig.CLOUD_BACKUP_ON_CHANGE,
+                KronoConfig.CLOUD_BACKUP_DAILY,
+                KronoConfig.CLOUD_BACKUP_WEEKLY,
+                KronoConfig.CLOUD_BACKUP_MANUAL
+        };
         String[] items = new String[]{
-                "Manual (solo cuando tú la inicies)",
+                "Automática (al detectar cambios)",
                 "Periódica (diaria)",
-                "Periódica (semanal)"
+                "Periódica (semanal)",
+                "Manual (solo cuando tú la inicies)"
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Modo de copia en la nube");
         builder.setItems(items, (dialog, which) -> {
-            KronoConfig.setCloudBackupMode(which);
+            int chosenMode = modeValues[which];
+            KronoConfig.setCloudBackupMode(chosenMode);
+            if (chosenMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE) {
+                KronoBackupManager.startSettingsObserver(currentAccount);
+            }
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
-            if (which != KronoConfig.CLOUD_BACKUP_MANUAL) {
-                BulletinFactory.of(this).createSimpleBulletin(
-                        R.drawable.msg_saved,
-                        "Copia " + KronoConfig.getCloudBackupModeName().toLowerCase() + " activada"
-                ).show();
-            }
+            BulletinFactory.of(this).createSimpleBulletin(
+                    R.drawable.msg_saved,
+                    "Modo de copia: " + KronoConfig.getCloudBackupModeName()
+            ).show();
         });
         showDialog(builder.create());
     }
@@ -362,8 +371,8 @@ public class KronoBackupActivity extends BaseFragment {
         KronoBackupManager.BackupOptions current = KronoBackupManager.BackupOptions.fromAutoConfig();
         showCategoryPickerDialog(
                 this,
-                "Categorías para copia periódica",
-                "Selecciona qué ajustes se incluirán automáticamente en la copia periódica. Los ajustes de KronoGram se incluyen siempre y la bóveda permanece desmarcada por defecto.",
+                "Categorías para copia automática",
+                "Selecciona qué ajustes se incluirán automáticamente al detectar cambios o en copias periódicas. Los ajustes de KronoGram se incluyen siempre y la bóveda permanece desmarcada por defecto.",
                 "Guardar selección",
                 current,
                 null,
@@ -377,7 +386,7 @@ public class KronoBackupActivity extends BaseFragment {
                     if (listAdapter != null && cloudAutoScopeRow >= 0) {
                         listAdapter.notifyItemChanged(cloudAutoScopeRow);
                     }
-                    BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_saved, "Alcance de copia periódica actualizado").show();
+                    BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_saved, "Alcance de copia automática actualizado").show();
                 }
         );
     }
@@ -859,9 +868,15 @@ public class KronoBackupActivity extends BaseFragment {
                             + " · " + AndroidUtilities.formatFileSize(cloudMetadata.rawByteSize)
                             + (TextUtils.isEmpty(cloudMetadata.deviceModel) ? "" : (" · " + cloudMetadata.deviceModel))
                             + "\nIncluye: " + cloudMetadata.buildCategoriesSummary();
+                    if (KronoConfig.cloudBackupPending && KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE) {
+                        summary += "\nSincronización automática pendiente...";
+                    }
                     detailCell.setTextAndValue("Copia disponible en la nube", summary, true);
                 } else {
-                    detailCell.setTextAndValue("Sin copia en la nube", "Toca «Guardar copia en la nube» para crear tu primer respaldo.", true);
+                    String emptyMsg = (KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE)
+                            ? "La primera copia automática se subirá en breve, o toca «Guardar copia en la nube» ahora."
+                            : "Toca «Guardar copia en la nube» para crear tu primer respaldo.";
+                    detailCell.setTextAndValue("Sin copia en la nube", emptyMsg, true);
                 }
             } else if (type == 2) {
                 TextSettingsCell settingsCell = (TextSettingsCell) holder.itemView;
@@ -869,12 +884,12 @@ public class KronoBackupActivity extends BaseFragment {
                     settingsCell.setTextAndValue("Modo de copia en la nube", KronoConfig.getCloudBackupModeName(), true);
                 } else if (position == cloudAutoScopeRow) {
                     String scope = KronoBackupManager.BackupOptions.fromAutoConfig().buildCategoriesSummary();
-                    settingsCell.setTextAndValue("Alcance de copia periódica", scope, true);
+                    settingsCell.setTextAndValue("Alcance de copia automática", scope, true);
                 }
             } else if (type == 3) {
                 TextInfoPrivacyCell infoCell = (TextInfoPrivacyCell) holder.itemView;
                 if (position == cloudInfoRow) {
-                    infoCell.setText("Usa el almacenamiento privado CloudStorage oficial de Telegram mediante @" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + ", sin servidores externos ni tokens en la app. En modo periódico, KronoGram solo sube cambios cuando detecta modificaciones en tus ajustes.");
+                    infoCell.setText("Usa el almacenamiento privado CloudStorage oficial de Telegram mediante @" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + ", sin servidores externos ni tokens en la app. En modo automático, KronoGram detecta cambios en tus ajustes, agrupa modificaciones durante 20 s y sincroniza solo cuando hay cambios reales (reintentando automáticamente si estabas sin conexión).");
                 } else if (position == localInfoRow) {
                     infoCell.setText("También puedes tocar cualquier archivo .kronogram recibido en Mensajes Guardados o en un chat para restaurarlo directamente. Por seguridad, nunca se exportan sesiones, contraseñas de bloqueo ni el PIN de la bóveda.");
                 } else if (position == resetInfoRow) {

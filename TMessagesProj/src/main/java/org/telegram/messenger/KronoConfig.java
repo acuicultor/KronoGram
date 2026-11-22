@@ -141,9 +141,11 @@ public class KronoConfig {
     public static final int CLOUD_BACKUP_MANUAL = 0;
     public static final int CLOUD_BACKUP_DAILY = 1;
     public static final int CLOUD_BACKUP_WEEKLY = 2;
-    public static int cloudBackupMode = CLOUD_BACKUP_MANUAL;
+    public static final int CLOUD_BACKUP_ON_CHANGE = 3;
+    public static int cloudBackupMode = CLOUD_BACKUP_ON_CHANGE;
     public static long cloudLastBackupTime = 0L;
     public static String cloudLastBackupHash = "";
+    public static boolean cloudBackupPending = false;
     public static boolean cloudAutoIncludeTelegram = true;
     public static boolean cloudAutoIncludeTheme = true;
     public static boolean cloudAutoIncludeNotifications = false;
@@ -253,12 +255,16 @@ public class KronoConfig {
         hiddenDialogsByAccount.clear();
         hiddenFiltersByAccount.clear();
 
-        cloudBackupMode = preferences.getInt("cloudBackupMode", CLOUD_BACKUP_MANUAL);
-        if (cloudBackupMode != CLOUD_BACKUP_MANUAL && cloudBackupMode != CLOUD_BACKUP_DAILY && cloudBackupMode != CLOUD_BACKUP_WEEKLY) {
-            cloudBackupMode = CLOUD_BACKUP_MANUAL;
+        cloudBackupMode = preferences.getInt("cloudBackupMode", CLOUD_BACKUP_ON_CHANGE);
+        if (cloudBackupMode != CLOUD_BACKUP_MANUAL
+                && cloudBackupMode != CLOUD_BACKUP_DAILY
+                && cloudBackupMode != CLOUD_BACKUP_WEEKLY
+                && cloudBackupMode != CLOUD_BACKUP_ON_CHANGE) {
+            cloudBackupMode = CLOUD_BACKUP_ON_CHANGE;
         }
         cloudLastBackupTime = preferences.getLong("cloudLastBackupTime", 0L);
         cloudLastBackupHash = preferences.getString("cloudLastBackupHash", "");
+        cloudBackupPending = preferences.getBoolean("cloudBackupPending", false);
         cloudAutoIncludeTelegram = preferences.getBoolean("cloudAutoIncludeTelegram", true);
         cloudAutoIncludeTheme = preferences.getBoolean("cloudAutoIncludeTheme", true);
         cloudAutoIncludeNotifications = preferences.getBoolean("cloudAutoIncludeNotifications", false);
@@ -278,40 +284,48 @@ public class KronoConfig {
         if (context == null) {
             return;
         }
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        int savedLockType = hiddenLockType;
-        String savedLockHash = hiddenLockHash;
-        boolean savedUseBio = hiddenUseBiometric;
-        boolean savedMuteNotif = hiddenMuteNotifications;
-        boolean savedHideFolderChats = hiddenHideFolderChatsEverywhere;
-        boolean savedAutoLock = hiddenAutoLockOnBackground;
-        java.util.Map<String, ?> all = prefs.getAll();
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.clear();
-        if (preserveVault) {
-            editor.putInt("hiddenLockType", savedLockType);
-            editor.putString("hiddenLockHash", savedLockHash != null ? savedLockHash : "");
-            editor.putBoolean("hiddenUseBiometric", savedUseBio);
-            editor.putBoolean("hiddenMuteNotifications", savedMuteNotif);
-            editor.putBoolean("hiddenHideFolderChatsEverywhere", savedHideFolderChats);
-            editor.putBoolean("hiddenAutoLockOnBackground", savedAutoLock);
-            if (all != null) {
-                for (java.util.Map.Entry<String, ?> entry : all.entrySet()) {
-                    String k = entry.getKey();
-                    if (k != null && (k.startsWith("hiddenDialogs_") || k.startsWith("hiddenFilters_")) && entry.getValue() instanceof String) {
-                        editor.putString(k, (String) entry.getValue());
+        KronoBackupManager.setSuppressObserver(true);
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            int savedLockType = hiddenLockType;
+            String savedLockHash = hiddenLockHash;
+            boolean savedUseBio = hiddenUseBiometric;
+            boolean savedMuteNotif = hiddenMuteNotifications;
+            boolean savedHideFolderChats = hiddenHideFolderChatsEverywhere;
+            boolean savedAutoLock = hiddenAutoLockOnBackground;
+            java.util.Map<String, ?> all = prefs.getAll();
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.clear();
+            if (preserveVault) {
+                editor.putInt("hiddenLockType", savedLockType);
+                editor.putString("hiddenLockHash", savedLockHash != null ? savedLockHash : "");
+                editor.putBoolean("hiddenUseBiometric", savedUseBio);
+                editor.putBoolean("hiddenMuteNotifications", savedMuteNotif);
+                editor.putBoolean("hiddenHideFolderChatsEverywhere", savedHideFolderChats);
+                editor.putBoolean("hiddenAutoLockOnBackground", savedAutoLock);
+                if (all != null) {
+                    for (java.util.Map.Entry<String, ?> entry : all.entrySet()) {
+                        String k = entry.getKey();
+                        if (k != null && (k.startsWith("hiddenDialogs_") || k.startsWith("hiddenFilters_")) && entry.getValue() instanceof String) {
+                            editor.putString(k, (String) entry.getValue());
+                        }
                     }
                 }
             }
+            editor.commit();
+            reloadConfigFromDisk();
+        } finally {
+            KronoBackupManager.setSuppressObserver(false);
         }
-        editor.commit();
-        reloadConfigFromDisk();
     }
 
     public static synchronized void setCloudBackupMode(int mode) {
         loadConfig();
-        if (mode != CLOUD_BACKUP_MANUAL && mode != CLOUD_BACKUP_DAILY && mode != CLOUD_BACKUP_WEEKLY) {
-            mode = CLOUD_BACKUP_MANUAL;
+        if (mode != CLOUD_BACKUP_MANUAL
+                && mode != CLOUD_BACKUP_DAILY
+                && mode != CLOUD_BACKUP_WEEKLY
+                && mode != CLOUD_BACKUP_ON_CHANGE) {
+            mode = CLOUD_BACKUP_ON_CHANGE;
         }
         cloudBackupMode = mode;
         saveConfig();
@@ -320,6 +334,8 @@ public class KronoConfig {
     public static String getCloudBackupModeName() {
         loadConfig();
         switch (cloudBackupMode) {
+            case CLOUD_BACKUP_ON_CHANGE:
+                return "Automática (al detectar cambios)";
             case CLOUD_BACKUP_DAILY:
                 return "Periódica (diaria)";
             case CLOUD_BACKUP_WEEKLY:
@@ -339,11 +355,29 @@ public class KronoConfig {
         saveConfig();
     }
 
+    public static synchronized void setCloudBackupPending(boolean pending) {
+        loadConfig();
+        if (cloudBackupPending == pending) {
+            return;
+        }
+        cloudBackupPending = pending;
+        if (preferences != null) {
+            preferences.edit().putBoolean("cloudBackupPending", pending).apply();
+        }
+    }
+
     public static synchronized void recordCloudBackupCompleted(long timestampMs, String sha256) {
         loadConfig();
         cloudLastBackupTime = timestampMs;
         cloudLastBackupHash = sha256 != null ? sha256 : "";
-        saveConfig();
+        cloudBackupPending = false;
+        if (preferences != null) {
+            preferences.edit()
+                    .putLong("cloudLastBackupTime", cloudLastBackupTime)
+                    .putString("cloudLastBackupHash", cloudLastBackupHash)
+                    .putBoolean("cloudBackupPending", false)
+                    .apply();
+        }
     }
 
     public static synchronized void saveConfig() {
@@ -432,6 +466,7 @@ public class KronoConfig {
                 .putInt("cloudBackupMode", cloudBackupMode)
                 .putLong("cloudLastBackupTime", cloudLastBackupTime)
                 .putString("cloudLastBackupHash", cloudLastBackupHash != null ? cloudLastBackupHash : "")
+                .putBoolean("cloudBackupPending", cloudBackupPending)
                 .putBoolean("cloudAutoIncludeTelegram", cloudAutoIncludeTelegram)
                 .putBoolean("cloudAutoIncludeTheme", cloudAutoIncludeTheme)
                 .putBoolean("cloudAutoIncludeNotifications", cloudAutoIncludeNotifications)

@@ -7230,6 +7230,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         checkFreeDiscSpace(0);
         MediaController.checkGallery();
         final int autoBackupAccount = currentAccount;
+        org.telegram.messenger.KronoBackupManager.startSettingsObserver(autoBackupAccount);
         AndroidUtilities.runOnUIThread(() -> org.telegram.messenger.KronoBackupManager.maybeRunAutoBackup(autoBackupAccount), 8000);
         onPasscodeResume();
         if (passcodeDialog == null || passcodeDialog.passcodeView.getVisibility() != View.VISIBLE) {
