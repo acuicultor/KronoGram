@@ -508,24 +508,38 @@ public class TranslateAlert2 extends BottomSheet implements NotificationCenter.N
         return (idx >= start) ? idx : -1;
     }
 
-    public static ArrayList<String> cut(String encodedText, int maxLength) {
+    public static ArrayList<String> cut(String text, int maxLength) {
         ArrayList<String> result = new ArrayList<>();
+        if (TextUtils.isEmpty(text)) {
+            return result;
+        }
+        int len = text.length();
         int start = 0;
-        while (start < encodedText.length()) {
-            int end = Math.min(start + maxLength, encodedText.length());
-            int splitPos = -1;
-
-            splitPos = lastIndexOfSafe(encodedText, "%0A", start, end);
-            if (splitPos == -1) {
-                splitPos = lastIndexOfSafe(encodedText, "%20", start, end);
-            }
-            if (splitPos == -1) {
-                splitPos = end;
+        while (start < len) {
+            int end = Math.min(start + maxLength, len);
+            int splitPos;
+            if (end >= len) {
+                splitPos = len;
             } else {
-                splitPos += 3;
+                int nl = lastIndexOfSafe(text, "\n", start, end);
+                if (nl != -1 && nl >= start) {
+                    splitPos = nl + 1;
+                } else {
+                    int sp = lastIndexOfSafe(text, " ", start, end);
+                    if (sp != -1 && sp >= start) {
+                        splitPos = sp + 1;
+                    } else {
+                        splitPos = end;
+                        if (splitPos > start + 1 && Character.isHighSurrogate(text.charAt(splitPos - 1))) {
+                            splitPos--;
+                        }
+                    }
+                }
             }
-
-            result.add(encodedText.substring(start, splitPos));
+            if (splitPos <= start) {
+                splitPos = end;
+            }
+            result.add(text.substring(start, splitPos));
             start = splitPos;
         }
         return result;

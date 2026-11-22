@@ -1229,6 +1229,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         UserConfig.getInstance(0).saveConfig(false);
 
         checkCurrentAccount();
+        org.telegram.messenger.KronoConfig.setHiddenVaultUnlocked(false);
+        org.telegram.messenger.KronoBackupManager.startSettingsObserver(account);
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.activeAccountChanged, account);
         if (AndroidUtilities.isTablet()) {
             layersActionBarLayout.removeAllFragments();

@@ -32,11 +32,9 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.CheckBoxCell;
 import org.telegram.ui.Cells.HeaderCell;
-import org.telegram.ui.Cells.ShadowSectionCell;
 import org.telegram.ui.Cells.TextCell;
 import org.telegram.ui.Cells.TextDetailSettingsCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
-import org.telegram.ui.Cells.TextSettingsCell;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
@@ -211,6 +209,20 @@ public class KronoBackupActivity extends BaseFragment {
         }
     }
 
+    private boolean isFragmentAlive() {
+        return !isFinishing() && getParentActivity() != null && !getParentActivity().isFinishing() && fragmentView != null;
+    }
+
+    private static boolean isFragmentAlive(BaseFragment fragment) {
+        if (fragment == null || fragment.getParentActivity() == null || fragment.getParentActivity().isFinishing() || fragment.getFragmentView() == null) {
+            return false;
+        }
+        if (fragment instanceof KronoBackupActivity && ((KronoBackupActivity) fragment).isFinishing()) {
+            return false;
+        }
+        return true;
+    }
+
     // -------------------------------------------------------------------------
     // Cloud Operations
     // -------------------------------------------------------------------------
@@ -228,29 +240,31 @@ public class KronoBackupActivity extends BaseFragment {
             cloudLoading = false;
             cloudMetadata = meta;
             cloudErrorText = null;
+            if (!isFragmentAlive()) return;
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
-            if (userTriggered && getParentActivity() != null) {
+            if (userTriggered) {
                 BulletinFactory.of(this).createSimpleBulletin(
-                        R.drawable.msg_info,
+                        R.raw.chats_infotip,
                         meta != null ? "Estado de la nube actualizado" : "No hay ninguna copia en la nube todavía"
                 ).show();
             }
         }, err -> {
             cloudLoading = false;
             cloudErrorText = err;
+            if (!isFragmentAlive()) return;
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
-            if (userTriggered && getParentActivity() != null) {
+            if (userTriggered) {
                 BulletinFactory.of(this).createErrorBulletin(err).show();
             }
         });
     }
 
     private void performCloudUpload(KronoBackupManager.BackupOptions options) {
-        if (getParentActivity() == null) return;
+        if (!isFragmentAlive()) return;
         AlertDialog progress = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
         progress.setCanCancel(false);
         showDialog(progress);
@@ -261,23 +275,25 @@ public class KronoBackupActivity extends BaseFragment {
             } catch (Exception ignore) {}
             cloudMetadata = meta;
             cloudErrorText = null;
+            if (!isFragmentAlive()) return;
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
             BulletinFactory.of(this).createSimpleBulletin(
-                    R.drawable.msg_saved,
+                    R.raw.contact_check,
                     "Copia guardada en la nube (" + AndroidUtilities.formatFileSize(meta.rawByteSize) + ")"
             ).show();
         }, err -> {
             try {
                 progress.dismiss();
             } catch (Exception ignore) {}
+            if (!isFragmentAlive()) return;
             BulletinFactory.of(this).createErrorBulletin(err).show();
         });
     }
 
     private void performCloudDownloadAndRestore() {
-        if (getParentActivity() == null) return;
+        if (!isFragmentAlive()) return;
         AlertDialog progress = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
         progress.setCanCancel(false);
         showDialog(progress);
@@ -286,8 +302,9 @@ public class KronoBackupActivity extends BaseFragment {
             try {
                 progress.dismiss();
             } catch (Exception ignore) {}
+            if (!isFragmentAlive()) return;
             showRestoreDialogForParsedBackup(this, currentAccount, parsed, "Restaurar desde la nube", () -> {
-                if (listAdapter != null) {
+                if (isFragmentAlive() && listAdapter != null) {
                     listAdapter.notifyDataSetChanged();
                 }
             });
@@ -295,17 +312,19 @@ public class KronoBackupActivity extends BaseFragment {
             try {
                 progress.dismiss();
             } catch (Exception ignore) {}
+            if (!isFragmentAlive()) return;
             BulletinFactory.of(this).createErrorBulletin(err).show();
         });
     }
 
     private void confirmDeleteCloudBackup() {
-        if (getParentActivity() == null) return;
+        if (!isFragmentAlive()) return;
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Eliminar copia de la nube");
         builder.setMessage("Se eliminará la copia de seguridad almacenada en Telegram CloudStorage (@" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + "). Tus ajustes locales actuales no se modificarán.");
         builder.setNegativeButton("Cancelar", null);
         builder.setPositiveButton("Eliminar", (dialog, which) -> {
+            if (!isFragmentAlive()) return;
             AlertDialog progress = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
             progress.setCanCancel(false);
             showDialog(progress);
@@ -315,14 +334,16 @@ public class KronoBackupActivity extends BaseFragment {
                 } catch (Exception ignore) {}
                 cloudMetadata = null;
                 cloudErrorText = null;
+                if (!isFragmentAlive()) return;
                 if (listAdapter != null) {
                     listAdapter.notifyDataSetChanged();
                 }
-                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_delete, "Copia eliminada de la nube").show();
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.ic_delete, "Copia eliminada de la nube").show();
             }, err -> {
                 try {
                     progress.dismiss();
                 } catch (Exception ignore) {}
+                if (!isFragmentAlive()) return;
                 BulletinFactory.of(this).createErrorBulletin(err).show();
             });
         });
@@ -335,7 +356,7 @@ public class KronoBackupActivity extends BaseFragment {
     }
 
     private void showCloudModeDialog() {
-        if (getParentActivity() == null) return;
+        if (!isFragmentAlive()) return;
         final int[] modeValues = new int[]{
                 KronoConfig.CLOUD_BACKUP_ON_CHANGE,
                 KronoConfig.CLOUD_BACKUP_DAILY,
@@ -356,11 +377,12 @@ public class KronoBackupActivity extends BaseFragment {
             if (chosenMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE) {
                 KronoBackupManager.startSettingsObserver(currentAccount);
             }
+            if (!isFragmentAlive()) return;
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
             BulletinFactory.of(this).createSimpleBulletin(
-                    R.drawable.msg_saved,
+                    R.raw.contact_check,
                     "Modo de copia: " + KronoConfig.getCloudBackupModeName()
             ).show();
         });
@@ -376,6 +398,7 @@ public class KronoBackupActivity extends BaseFragment {
                 "Guardar selección",
                 current,
                 null,
+                true,
                 selected -> {
                     KronoConfig.setCloudAutoBackupScope(
                             selected.includeTelegramMain,
@@ -383,10 +406,11 @@ public class KronoBackupActivity extends BaseFragment {
                             selected.includeTelegramNotifications,
                             selected.includeHiddenVault
                     );
+                    if (!isFragmentAlive()) return;
                     if (listAdapter != null && cloudAutoScopeRow >= 0) {
                         listAdapter.notifyItemChanged(cloudAutoScopeRow);
                     }
-                    BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_saved, "Alcance de copia automática actualizado").show();
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, "Alcance de copia automática actualizado").show();
                 }
         );
     }
@@ -396,7 +420,7 @@ public class KronoBackupActivity extends BaseFragment {
     // -------------------------------------------------------------------------
 
     private void performSavedMessagesExport(KronoBackupManager.BackupOptions options) {
-        if (getParentActivity() == null) return;
+        if (!isFragmentAlive()) return;
         AlertDialog progress = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
         progress.setCanCancel(false);
         showDialog(progress);
@@ -405,14 +429,16 @@ public class KronoBackupActivity extends BaseFragment {
             try {
                 progress.dismiss();
             } catch (Exception ignore) {}
+            if (!isFragmentAlive()) return;
             BulletinFactory.of(this).createSimpleBulletin(
-                    R.drawable.msg_saved,
-                    "Copia enviada a Mensajes Guardados (" + fileName + ")"
+                    R.raw.saved_messages,
+                    "Copia enviada a Mensajes Guardados"
             ).show();
         }, err -> {
             try {
                 progress.dismiss();
             } catch (Exception ignore) {}
+            if (!isFragmentAlive()) return;
             BulletinFactory.of(this).createErrorBulletin(err).show();
         });
     }
@@ -466,14 +492,16 @@ public class KronoBackupActivity extends BaseFragment {
                 try {
                     progress.dismiss();
                 } catch (Exception ignore) {}
+                if (!isFragmentAlive()) return;
                 BulletinFactory.of(this).createSimpleBulletin(
-                        R.drawable.msg_saved,
+                        R.raw.contact_check,
                         "Archivo exportado (" + AndroidUtilities.formatFileSize(meta.rawByteSize) + ")"
                 ).show();
             }, err -> {
                 try {
                     progress.dismiss();
                 } catch (Exception ignore) {}
+                if (!isFragmentAlive()) return;
                 BulletinFactory.of(this).createErrorBulletin(err).show();
             });
         } else if (requestCode == REQUEST_CODE_IMPORT_BACKUP) {
@@ -485,8 +513,9 @@ public class KronoBackupActivity extends BaseFragment {
                 try {
                     progress.dismiss();
                 } catch (Exception ignore) {}
+                if (!isFragmentAlive()) return;
                 showRestoreDialogForParsedBackup(this, currentAccount, parsed, "Importar desde archivo", () -> {
-                    if (listAdapter != null) {
+                    if (isFragmentAlive() && listAdapter != null) {
                         listAdapter.notifyDataSetChanged();
                     }
                 });
@@ -494,6 +523,7 @@ public class KronoBackupActivity extends BaseFragment {
                 try {
                     progress.dismiss();
                 } catch (Exception ignore) {}
+                if (!isFragmentAlive()) return;
                 BulletinFactory.of(this).createErrorBulletin(err).show();
             });
         }
@@ -536,10 +566,11 @@ public class KronoBackupActivity extends BaseFragment {
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogsNeedReload, true);
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.mainUserInfoChanged);
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogFiltersUpdated);
+            if (!isFragmentAlive()) return;
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_reset, "Ajustes de KronoGram restablecidos").show();
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, "Ajustes de KronoGram restablecidos").show();
         });
         AlertDialog alert = builder.create();
         showDialog(alert);
@@ -554,7 +585,7 @@ public class KronoBackupActivity extends BaseFragment {
     // -------------------------------------------------------------------------
 
     public static void openImportFromFile(BaseFragment fragment, File file) {
-        if (fragment == null || fragment.getParentActivity() == null) {
+        if (!isFragmentAlive(fragment)) {
             return;
         }
         AlertDialog progress = new AlertDialog(fragment.getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
@@ -565,11 +596,13 @@ public class KronoBackupActivity extends BaseFragment {
             try {
                 progress.dismiss();
             } catch (Exception ignore) {}
+            if (!isFragmentAlive(fragment)) return;
             showRestoreDialogForParsedBackup(fragment, fragment.getCurrentAccount(), parsed, "Importar copia de KronoGram", null);
         }, err -> {
             try {
                 progress.dismiss();
             } catch (Exception ignore) {}
+            if (!isFragmentAlive(fragment)) return;
             BulletinFactory.of(fragment).createErrorBulletin(err).show();
         });
     }
@@ -581,7 +614,7 @@ public class KronoBackupActivity extends BaseFragment {
             String title,
             Runnable onAfterRestore
     ) {
-        if (fragment == null || fragment.getParentActivity() == null || parsed == null || parsed.metadata == null) {
+        if (!isFragmentAlive(fragment) || parsed == null || parsed.metadata == null) {
             return;
         }
         KronoBackupManager.BackupMetadata meta = parsed.metadata;
@@ -607,7 +640,9 @@ public class KronoBackupActivity extends BaseFragment {
                 "Restaurar",
                 defaults,
                 meta,
+                false,
                 chosen -> {
+                    if (!isFragmentAlive(fragment)) return;
                     AlertDialog progress = new AlertDialog(fragment.getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
                     progress.setCanCancel(false);
                     fragment.showDialog(progress);
@@ -622,6 +657,7 @@ public class KronoBackupActivity extends BaseFragment {
                                 if (onAfterRestore != null) {
                                     onAfterRestore.run();
                                 }
+                                if (!isFragmentAlive(fragment)) return;
                                 if (res.requiresRestart) {
                                     showRestartPrompt(fragment, res);
                                 } else {
@@ -629,7 +665,7 @@ public class KronoBackupActivity extends BaseFragment {
                                     if (res.restoredVault) {
                                         msg += " (bóveda incluida; tu PIN local se mantiene)";
                                     }
-                                    BulletinFactory.of(fragment).createSimpleBulletin(R.drawable.msg_saved, msg).show();
+                                    BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, msg).show();
                                 }
                             });
                         } catch (Exception e) {
@@ -639,6 +675,7 @@ public class KronoBackupActivity extends BaseFragment {
                                 try {
                                     progress.dismiss();
                                 } catch (Exception ignore) {}
+                                if (!isFragmentAlive(fragment)) return;
                                 BulletinFactory.of(fragment).createErrorBulletin(errMsg).show();
                             });
                         }
@@ -656,11 +693,24 @@ public class KronoBackupActivity extends BaseFragment {
             KronoBackupManager.BackupMetadata availableFilter,
             Utilities.Callback<KronoBackupManager.BackupOptions> onConfirm
     ) {
+        showCategoryPickerDialog(fragment, title, description, positiveButtonText, initial, availableFilter, false, onConfirm);
+    }
+
+    private static void showCategoryPickerDialog(
+            BaseFragment fragment,
+            String title,
+            String description,
+            String positiveButtonText,
+            KronoBackupManager.BackupOptions initial,
+            KronoBackupManager.BackupMetadata availableFilter,
+            boolean lockKronoChecked,
+            Utilities.Callback<KronoBackupManager.BackupOptions> onConfirm
+    ) {
         Context ctx = fragment.getParentActivity();
         if (ctx == null) return;
 
         KronoBackupManager.BackupOptions opts = new KronoBackupManager.BackupOptions();
-        opts.includeKrono = initial.includeKrono;
+        opts.includeKrono = lockKronoChecked || initial.includeKrono;
         opts.includeTelegramMain = initial.includeTelegramMain;
         opts.includeTelegramTheme = initial.includeTelegramTheme;
         opts.includeTelegramNotifications = initial.includeTelegramNotifications;
@@ -682,19 +732,23 @@ public class KronoBackupActivity extends BaseFragment {
         }
 
         if (availableFilter == null || availableFilter.hasKrono) {
-            addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Fantasma, pestañas, gestos, IA, spoilers", opts.includeKrono, true, checked -> opts.includeKrono = checked);
+            if (lockKronoChecked) {
+                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Siempre incluido (Fantasma, pestañas, gestos, IA)", true, true, true, null);
+            } else {
+                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Fantasma, pestañas, gestos, IA, spoilers", opts.includeKrono, true, false, checked -> opts.includeKrono = checked);
+            }
         }
         if (availableFilter == null || availableFilter.hasTelegramMain) {
-            addCategoryCheckbox(container, ctx, "Ajustes de Telegram", "Fuente, burbujas, multimedia, cámara, caché", opts.includeTelegramMain, true, checked -> opts.includeTelegramMain = checked);
+            addCategoryCheckbox(container, ctx, "Ajustes de Telegram", "Fuente, burbujas, multimedia, cámara, caché", opts.includeTelegramMain, true, false, checked -> opts.includeTelegramMain = checked);
         }
         if (availableFilter == null || availableFilter.hasTelegramTheme) {
-            addCategoryCheckbox(container, ctx, "Tema y apariencia", "Tema día/noche y modo noche automático", opts.includeTelegramTheme, true, checked -> opts.includeTelegramTheme = checked);
+            addCategoryCheckbox(container, ctx, "Tema y apariencia", "Tema día/noche y modo noche automático", opts.includeTelegramTheme, true, false, checked -> opts.includeTelegramTheme = checked);
         }
         if (availableFilter == null || availableFilter.hasTelegramNotifications) {
-            addCategoryCheckbox(container, ctx, "Notificaciones de Telegram", "Preferencias globales de aviso y conexión", opts.includeTelegramNotifications, true, checked -> opts.includeTelegramNotifications = checked);
+            addCategoryCheckbox(container, ctx, "Notificaciones de Telegram", "Preferencias globales de aviso y conexión", opts.includeTelegramNotifications, true, false, checked -> opts.includeTelegramNotifications = checked);
         }
         if (availableFilter == null || availableFilter.hasHiddenVault) {
-            addCategoryCheckbox(container, ctx, "Bóveda oculta (sin PIN)", "Chats y carpetas ocultas (sin exportar PIN)", opts.includeHiddenVault, false, checked -> opts.includeHiddenVault = checked);
+            addCategoryCheckbox(container, ctx, "Bóveda oculta (sin PIN)", "Chats y carpetas ocultas (sin exportar PIN)", opts.includeHiddenVault, false, false, checked -> opts.includeHiddenVault = checked);
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
@@ -703,7 +757,9 @@ public class KronoBackupActivity extends BaseFragment {
         builder.setNegativeButton("Cancelar", null);
         builder.setPositiveButton(positiveButtonText, (dialog, which) -> {
             if (!opts.hasAnySelected()) {
-                BulletinFactory.of(fragment).createErrorBulletin("Selecciona al menos una categoría").show();
+                if (isFragmentAlive(fragment)) {
+                    BulletinFactory.of(fragment).createErrorBulletin("Selecciona al menos una categoría").show();
+                }
                 return;
             }
             if (onConfirm != null) {
@@ -720,18 +776,26 @@ public class KronoBackupActivity extends BaseFragment {
             String subtitle,
             boolean initialChecked,
             boolean divider,
+            boolean locked,
             Utilities.Callback<Boolean> onToggle
     ) {
         CheckBoxCell cell = new CheckBoxCell(ctx, CheckBoxCell.TYPE_CHECK_BOX_DEFAULT);
-        cell.setBackground(Theme.getSelectorDrawable(false));
         cell.setMultiline(true);
         cell.setText(title + "\n" + subtitle, "", initialChecked, divider);
-        final boolean[] state = new boolean[]{initialChecked};
-        cell.setOnClickListener(v -> {
-            state[0] = !state[0];
-            cell.setChecked(state[0], true);
-            onToggle.run(state[0]);
-        });
+        if (locked) {
+            cell.setEnabled(false);
+            cell.setAlpha(0.75f);
+        } else {
+            cell.setBackground(Theme.getSelectorDrawable(false));
+            final boolean[] state = new boolean[]{initialChecked};
+            cell.setOnClickListener(v -> {
+                state[0] = !state[0];
+                cell.setChecked(state[0], true);
+                if (onToggle != null) {
+                    onToggle.run(state[0]);
+                }
+            });
+        }
         parent.addView(cell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
     }
 
@@ -804,10 +868,8 @@ public class KronoBackupActivity extends BaseFragment {
         public int getItemViewType(int position) {
             if (position == cloudHeaderRow || position == localHeaderRow || position == resetHeaderRow) {
                 return 0; // HeaderCell
-            } else if (position == cloudStatusRow) {
-                return 1; // TextDetailSettingsCell
-            } else if (position == cloudModeRow || position == cloudAutoScopeRow) {
-                return 2; // TextSettingsCell
+            } else if (position == cloudStatusRow || position == cloudModeRow || position == cloudAutoScopeRow) {
+                return 1; // TextDetailSettingsCell (multiline-safe)
             } else if (position == cloudInfoRow || position == localInfoRow || position == resetInfoRow) {
                 return 3; // TextInfoPrivacyCell
             } else {
@@ -828,10 +890,6 @@ public class KronoBackupActivity extends BaseFragment {
                     view = new TextDetailSettingsCell(mContext);
                     view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
                     break;
-                case 2:
-                    view = new TextSettingsCell(mContext);
-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
-                    break;
                 case 3:
                     view = new TextInfoPrivacyCell(mContext);
                     break;
@@ -850,7 +908,7 @@ public class KronoBackupActivity extends BaseFragment {
             if (type == 0) {
                 HeaderCell headerCell = (HeaderCell) holder.itemView;
                 if (position == cloudHeaderRow) {
-                    headerCell.setText("Nube de Telegram (@" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + ")");
+                    headerCell.setText("Nube de Telegram");
                 } else if (position == localHeaderRow) {
                     headerCell.setText("Archivo local y Mensajes Guardados");
                 } else if (position == resetHeaderRow) {
@@ -859,32 +917,31 @@ public class KronoBackupActivity extends BaseFragment {
             } else if (type == 1) {
                 TextDetailSettingsCell detailCell = (TextDetailSettingsCell) holder.itemView;
                 detailCell.setMultilineDetail(true);
-                if (cloudLoading) {
-                    detailCell.setTextAndValue("Estado de la nube", "Consultando @" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + "...", true);
-                } else if (!TextUtils.isEmpty(cloudErrorText)) {
-                    detailCell.setTextAndValue("Estado de la nube (toca para reintentar)", cloudErrorText, true);
-                } else if (cloudMetadata != null) {
-                    String summary = KronoBackupManager.formatTimestamp(cloudMetadata.timestamp)
-                            + " · " + AndroidUtilities.formatFileSize(cloudMetadata.rawByteSize)
-                            + (TextUtils.isEmpty(cloudMetadata.deviceModel) ? "" : (" · " + cloudMetadata.deviceModel))
-                            + "\nIncluye: " + cloudMetadata.buildCategoriesSummary();
-                    if (KronoConfig.cloudBackupPending && KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE) {
-                        summary += "\nSincronización automática pendiente...";
+                if (position == cloudStatusRow) {
+                    if (cloudLoading) {
+                        detailCell.setTextAndValue("Estado de la nube", "Consultando @" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + "...", true);
+                    } else if (!TextUtils.isEmpty(cloudErrorText)) {
+                        detailCell.setTextAndValue("Estado de la nube (toca para reintentar)", cloudErrorText, true);
+                    } else if (cloudMetadata != null) {
+                        String summary = KronoBackupManager.formatTimestamp(cloudMetadata.timestamp)
+                                + " · " + AndroidUtilities.formatFileSize(cloudMetadata.rawByteSize)
+                                + (TextUtils.isEmpty(cloudMetadata.deviceModel) ? "" : (" · " + cloudMetadata.deviceModel))
+                                + "\nIncluye: " + cloudMetadata.buildCategoriesSummary();
+                        if (KronoConfig.isCloudBackupPending(currentAccount) && KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE) {
+                            summary += "\nSincronización automática pendiente...";
+                        }
+                        detailCell.setTextAndValue("Copia disponible en la nube", summary, true);
+                    } else {
+                        String emptyMsg = (KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE)
+                                ? "La primera copia automática se subirá en breve, o toca «Guardar copia en la nube» ahora."
+                                : "Toca «Guardar copia en la nube» para crear tu primer respaldo.";
+                        detailCell.setTextAndValue("Sin copia en la nube", emptyMsg, true);
                     }
-                    detailCell.setTextAndValue("Copia disponible en la nube", summary, true);
-                } else {
-                    String emptyMsg = (KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE)
-                            ? "La primera copia automática se subirá en breve, o toca «Guardar copia en la nube» ahora."
-                            : "Toca «Guardar copia en la nube» para crear tu primer respaldo.";
-                    detailCell.setTextAndValue("Sin copia en la nube", emptyMsg, true);
-                }
-            } else if (type == 2) {
-                TextSettingsCell settingsCell = (TextSettingsCell) holder.itemView;
-                if (position == cloudModeRow) {
-                    settingsCell.setTextAndValue("Modo de copia en la nube", KronoConfig.getCloudBackupModeName(), true);
+                } else if (position == cloudModeRow) {
+                    detailCell.setTextAndValue("Modo de copia en la nube", KronoConfig.getCloudBackupModeName(), true);
                 } else if (position == cloudAutoScopeRow) {
                     String scope = KronoBackupManager.BackupOptions.fromAutoConfig().buildCategoriesSummary();
-                    settingsCell.setTextAndValue("Alcance de copia automática", scope, true);
+                    detailCell.setTextAndValue("Alcance de copia automática", scope, true);
                 }
             } else if (type == 3) {
                 TextInfoPrivacyCell infoCell = (TextInfoPrivacyCell) holder.itemView;
@@ -908,16 +965,16 @@ public class KronoBackupActivity extends BaseFragment {
                     textCell.setTextAndIcon("Eliminar copia de la nube", R.drawable.msg_delete, false);
                 } else if (position == sendSavedMessagesRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
-                    textCell.setTextAndIcon("Enviar copia a Mensajes Guardados", R.drawable.msg_shareout, true);
+                    textCell.setTextAndIcon("Enviar a Guardados", R.drawable.msg_shareout, true);
                 } else if (position == exportFileRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
-                    textCell.setTextAndIcon("Exportar a archivo (.kronogram)", R.drawable.msg_download, true);
+                    textCell.setTextAndIcon("Exportar a archivo", R.drawable.msg_download, true);
                 } else if (position == importFileRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
                     textCell.setTextAndIcon("Importar desde archivo", R.drawable.msg_folders, false);
                 } else if (position == resetKronoRow) {
                     textCell.setColors(Theme.key_text_RedRegular, Theme.key_text_RedRegular);
-                    textCell.setTextAndIcon("Restablecer ajustes de KronoGram", R.drawable.msg_reset, false);
+                    textCell.setTextAndIcon("Restablecer ajustes", R.drawable.msg_reset, false);
                 }
             }
         }

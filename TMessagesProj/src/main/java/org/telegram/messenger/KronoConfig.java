@@ -143,9 +143,6 @@ public class KronoConfig {
     public static final int CLOUD_BACKUP_WEEKLY = 2;
     public static final int CLOUD_BACKUP_ON_CHANGE = 3;
     public static int cloudBackupMode = CLOUD_BACKUP_ON_CHANGE;
-    public static long cloudLastBackupTime = 0L;
-    public static String cloudLastBackupHash = "";
-    public static boolean cloudBackupPending = false;
     public static boolean cloudAutoIncludeTelegram = true;
     public static boolean cloudAutoIncludeTheme = true;
     public static boolean cloudAutoIncludeNotifications = false;
@@ -262,9 +259,6 @@ public class KronoConfig {
                 && cloudBackupMode != CLOUD_BACKUP_ON_CHANGE) {
             cloudBackupMode = CLOUD_BACKUP_ON_CHANGE;
         }
-        cloudLastBackupTime = preferences.getLong("cloudLastBackupTime", 0L);
-        cloudLastBackupHash = preferences.getString("cloudLastBackupHash", "");
-        cloudBackupPending = preferences.getBoolean("cloudBackupPending", false);
         cloudAutoIncludeTelegram = preferences.getBoolean("cloudAutoIncludeTelegram", true);
         cloudAutoIncludeTheme = preferences.getBoolean("cloudAutoIncludeTheme", true);
         cloudAutoIncludeNotifications = preferences.getBoolean("cloudAutoIncludeNotifications", false);
@@ -315,7 +309,7 @@ public class KronoConfig {
             editor.commit();
             reloadConfigFromDisk();
         } finally {
-            KronoBackupManager.setSuppressObserver(false);
+            KronoBackupManager.releaseSuppressObserverAfterMainDrain();
         }
     }
 
@@ -355,27 +349,62 @@ public class KronoConfig {
         saveConfig();
     }
 
-    public static synchronized void setCloudBackupPending(boolean pending) {
+    public static synchronized long getCloudLastBackupTime(int account) {
         loadConfig();
-        if (cloudBackupPending == pending) {
-            return;
+        if (preferences == null) {
+            return 0L;
         }
-        cloudBackupPending = pending;
-        if (preferences != null) {
-            preferences.edit().putBoolean("cloudBackupPending", pending).apply();
+        String key = "cloudLastBackupTime_" + account;
+        if (preferences.contains(key)) {
+            return preferences.getLong(key, 0L);
         }
+        return account == 0 ? preferences.getLong("cloudLastBackupTime", 0L) : 0L;
     }
 
-    public static synchronized void recordCloudBackupCompleted(long timestampMs, String sha256) {
+    public static synchronized String getCloudLastBackupHash(int account) {
         loadConfig();
-        cloudLastBackupTime = timestampMs;
-        cloudLastBackupHash = sha256 != null ? sha256 : "";
-        cloudBackupPending = false;
+        if (preferences == null) {
+            return "";
+        }
+        String key = "cloudLastBackupHash_" + account;
+        if (preferences.contains(key)) {
+            return preferences.getString(key, "");
+        }
+        return account == 0 ? preferences.getString("cloudLastBackupHash", "") : "";
+    }
+
+    public static synchronized boolean isCloudBackupPending(int account) {
+        loadConfig();
+        if (preferences == null) {
+            return false;
+        }
+        String key = "cloudBackupPending_" + account;
+        if (preferences.contains(key)) {
+            return preferences.getBoolean(key, false);
+        }
+        return account == 0 && preferences.getBoolean("cloudBackupPending", false);
+    }
+
+    public static synchronized void setCloudBackupPending(int account, boolean pending) {
+        loadConfig();
+        if (preferences == null) {
+            return;
+        }
+        String key = "cloudBackupPending_" + account;
+        if (preferences.contains(key) && preferences.getBoolean(key, false) == pending) {
+            return;
+        }
+        preferences.edit().putBoolean(key, pending).apply();
+    }
+
+    public static synchronized void recordCloudBackupCompleted(int account, long timestampMs, String sha256) {
+        loadConfig();
+        String safeHash = sha256 != null ? sha256 : "";
         if (preferences != null) {
             preferences.edit()
-                    .putLong("cloudLastBackupTime", cloudLastBackupTime)
-                    .putString("cloudLastBackupHash", cloudLastBackupHash)
-                    .putBoolean("cloudBackupPending", false)
+                    .putLong("cloudLastBackupTime_" + account, timestampMs)
+                    .putString("cloudLastBackupHash_" + account, safeHash)
+                    .putBoolean("cloudBackupPending_" + account, false)
                     .apply();
         }
     }
@@ -464,9 +493,6 @@ public class KronoConfig {
                 .putBoolean("hiddenHideFolderChatsEverywhere", hiddenHideFolderChatsEverywhere)
                 .putBoolean("hiddenAutoLockOnBackground", hiddenAutoLockOnBackground)
                 .putInt("cloudBackupMode", cloudBackupMode)
-                .putLong("cloudLastBackupTime", cloudLastBackupTime)
-                .putString("cloudLastBackupHash", cloudLastBackupHash != null ? cloudLastBackupHash : "")
-                .putBoolean("cloudBackupPending", cloudBackupPending)
                 .putBoolean("cloudAutoIncludeTelegram", cloudAutoIncludeTelegram)
                 .putBoolean("cloudAutoIncludeTheme", cloudAutoIncludeTheme)
                 .putBoolean("cloudAutoIncludeNotifications", cloudAutoIncludeNotifications)
@@ -1595,37 +1621,17 @@ public class KronoConfig {
         return freed;
     }
 
-    public static long calculateCacheSize() {
-        long total = 0;
+    private static List<File> getClearableCacheDirs() {
+        ArrayList<File> dirs = new ArrayList<>();
+        HashSet<String> seenPaths = new HashSet<>();
         try {
-            Context context = ApplicationLoader.applicationContext;
-            if (context != null) {
-                total += getDirSize(context.getCacheDir());
-                File extCache = context.getExternalCacheDir();
-                if (extCache != null) {
-                    total += getDirSize(extCache);
-                }
-            }
-            for (int a = 0; a <= FileLoader.MEDIA_DIR_STORIES; a++) {
-                File dir = FileLoader.checkDirectory(a);
-                if (dir != null && dir.exists()) {
-                    total += getDirSize(dir);
-                }
-            }
-        } catch (Exception ignore) {}
-        return total;
-    }
+            File downloadsPub = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            String downloadsPath = downloadsPub != null ? downloadsPub.getAbsolutePath() : null;
 
-    public static long clearCacheFilesSync() {
-        long freed = 0;
-        try {
             Context context = ApplicationLoader.applicationContext;
             if (context != null) {
-                freed += deleteDirContents(context.getCacheDir());
-                File extCache = context.getExternalCacheDir();
-                if (extCache != null) {
-                    freed += deleteDirContents(extCache);
-                }
+                addCacheDirIfValid(dirs, seenPaths, context.getCacheDir(), downloadsPath);
+                addCacheDirIfValid(dirs, seenPaths, context.getExternalCacheDir(), downloadsPath);
             }
             int[] cacheMediaDirs = new int[]{
                     FileLoader.MEDIA_DIR_CACHE,
@@ -1635,16 +1641,50 @@ public class KronoConfig {
                     FileLoader.MEDIA_DIR_DOCUMENT,
                     FileLoader.MEDIA_DIR_STORIES
             };
-            File downloadsPub = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            String downloadsPath = downloadsPub != null ? downloadsPub.getAbsolutePath() : null;
             for (int dirType : cacheMediaDirs) {
-                File dir = FileLoader.checkDirectory(dirType);
-                if (dir != null && dir.exists()) {
-                    if (downloadsPath != null && dir.getAbsolutePath().startsWith(downloadsPath)) {
-                        continue;
-                    }
-                    freed += deleteDirContents(dir);
-                }
+                addCacheDirIfValid(dirs, seenPaths, FileLoader.checkDirectory(dirType), downloadsPath);
+            }
+        } catch (Exception ignore) {}
+        return dirs;
+    }
+
+    private static void addCacheDirIfValid(List<File> dirs, Set<String> seenPaths, File dir, String downloadsPath) {
+        if (dir == null || !dir.exists()) {
+            return;
+        }
+        String path;
+        try {
+            path = dir.getCanonicalPath();
+        } catch (Exception e) {
+            path = dir.getAbsolutePath();
+        }
+        if (downloadsPath != null && path.startsWith(downloadsPath)) {
+            return;
+        }
+        for (String existing : seenPaths) {
+            if (path.equals(existing) || path.startsWith(existing + File.separator)) {
+                return;
+            }
+        }
+        seenPaths.add(path);
+        dirs.add(dir);
+    }
+
+    public static long calculateCacheSize() {
+        long total = 0;
+        try {
+            for (File dir : getClearableCacheDirs()) {
+                total += getDirSize(dir);
+            }
+        } catch (Exception ignore) {}
+        return total;
+    }
+
+    public static long clearCacheFilesSync() {
+        long freed = 0;
+        try {
+            for (File dir : getClearableCacheDirs()) {
+                freed += deleteDirContents(dir);
             }
         } catch (Exception ignore) {}
         return freed;

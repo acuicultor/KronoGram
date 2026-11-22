@@ -87,7 +87,6 @@ public class KronoSettingsActivity extends BaseFragment {
     private int aiCategoryRow = -1;
     private int notificationsCategoryRow = -1;
     private int backupCategoryRow = -1;
-    private int categoriesInfoRow = -1;
 
     // Privacy section rows
     private int ghostHeaderRow = -1;
@@ -219,7 +218,7 @@ public class KronoSettingsActivity extends BaseFragment {
     @Override
     public void onResume() {
         super.onResume();
-        if ((currentSection == SECTION_NOTIFICATIONS || currentSection == SECTION_PRIVACY) && listAdapter != null) {
+        if ((currentSection == SECTION_NOTIFICATIONS || currentSection == SECTION_PRIVACY || currentSection == SECTION_APPEARANCE) && listAdapter != null) {
             listAdapter.notifyDataSetChanged();
         } else if (currentSection == SECTION_AI) {
             refreshVoiceModelsStatus();
@@ -268,7 +267,6 @@ public class KronoSettingsActivity extends BaseFragment {
         aiCategoryRow = -1;
         notificationsCategoryRow = -1;
         backupCategoryRow = -1;
-        categoriesInfoRow = -1;
 
         ghostHeaderRow = -1;
         ghostMasterRow = -1;
@@ -1590,7 +1588,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 } else if (position == notificationsCategoryRow) {
                     settingCell.set(0xFFFA5858, 0xFFE3324B, R.drawable.settings_sounds, "Notificaciones y Diagnóstico", "Servicio anti-cierre, estado FCM, batería y pruebas push", null);
                 } else if (position == backupCategoryRow) {
-                    settingCell.set(0xFF19B5C9, 0xFF0E88A6, R.drawable.settings_data, "Copia de seguridad", "Nube de Telegram (@KronoGramCloudBot), archivo y Mensajes Guardados", null);
+                    settingCell.set(0xFF19B5C9, 0xFF0E88A6, R.drawable.settings_data, "Copia de seguridad", "Nube de Telegram, archivo local y Mensajes Guardados", null);
                 }
             } else if (type == 2) {
                 TextCheckCell checkCell = (TextCheckCell) holder.itemView;

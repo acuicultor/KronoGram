@@ -382,18 +382,19 @@ public final class KronoHiddenLockHelper {
             actions.add(() -> {
                 KronoConfig.clearHiddenPasscode();
                 KronoConfig.setHiddenUseBiometric(true);
-                BulletinFactory.of(fragment).createSimpleBulletin(R.drawable.fingerprint, "Desbloqueo biométrico activado").show();
+                BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, "Desbloqueo biométrico activado").show();
                 if (onUpdated != null) {
                     onUpdated.run();
                 }
             });
         }
 
-        if (hasPass && (!bioAvailable || !KronoConfig.hiddenUseBiometric)) {
+        if (hasPass || (bioAvailable && KronoConfig.hiddenUseBiometric)) {
             labels.add("Desactivar bloqueo");
             actions.add(() -> {
                 KronoConfig.clearHiddenPasscode();
                 KronoConfig.setHiddenUseBiometric(false);
+                BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, "Bloqueo de la bóveda desactivado").show();
                 if (onUpdated != null) {
                     onUpdated.run();
                 }
@@ -488,7 +489,7 @@ public final class KronoHiddenLockHelper {
             KronoConfig.setHiddenPasscode(lockType, v1);
             AndroidUtilities.hideKeyboard(confirmInput);
             dialog.dismiss();
-            BulletinFactory.of(fragment).createSimpleBulletin(R.drawable.msg_pin_code, isPin ? "PIN guardado" : "Contraseña guardada").show();
+            BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, isPin ? "PIN guardado" : "Contraseña guardada").show();
             if (onUpdated != null) {
                 onUpdated.run();
             }

@@ -483,11 +483,19 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         final ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
         if (filters == null || filters.size() <= 1) return false;
 
+        boolean hasVisibleCustomFilter = false;
+        for (int i = 0; i < filters.size(); i++) {
+            final MessagesController.DialogFilter f = filters.get(i);
+            if (!f.isDefault() && !org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, f.id)) {
+                hasVisibleCustomFilter = true;
+                break;
+            }
+        }
         final ItemOptions o = ItemOptions.makeOptions(this, anchor);
         int visibleCount = 0;
         for (int i = 0; i < filters.size(); i++) {
             final MessagesController.DialogFilter folder = filters.get(i);
-            if (folder.isDefault() && org.telegram.messenger.KronoConfig.hideAllChatsTab && filters.size() > 1) {
+            if (folder.isDefault() && org.telegram.messenger.KronoConfig.hideAllChatsTab && hasVisibleCustomFilter) {
                 continue;
             }
             if (!folder.isDefault() && org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, folder.id)) {
