@@ -137,6 +137,18 @@ public class KronoConfig {
     public static final int TRANSLATE_PROVIDER_LINGVA = 4;
     public static int translationProvider = TRANSLATE_PROVIDER_GOOGLE;
 
+    // 5. Cloud & Local Backup
+    public static final int CLOUD_BACKUP_MANUAL = 0;
+    public static final int CLOUD_BACKUP_DAILY = 1;
+    public static final int CLOUD_BACKUP_WEEKLY = 2;
+    public static int cloudBackupMode = CLOUD_BACKUP_MANUAL;
+    public static long cloudLastBackupTime = 0L;
+    public static String cloudLastBackupHash = "";
+    public static boolean cloudAutoIncludeTelegram = true;
+    public static boolean cloudAutoIncludeTheme = true;
+    public static boolean cloudAutoIncludeNotifications = false;
+    public static boolean cloudAutoIncludeVault = false;
+
     static {
         loadConfig();
     }
@@ -240,7 +252,98 @@ public class KronoConfig {
         hiddenAutoLockOnBackground = preferences.getBoolean("hiddenAutoLockOnBackground", true);
         hiddenDialogsByAccount.clear();
         hiddenFiltersByAccount.clear();
+
+        cloudBackupMode = preferences.getInt("cloudBackupMode", CLOUD_BACKUP_MANUAL);
+        if (cloudBackupMode != CLOUD_BACKUP_MANUAL && cloudBackupMode != CLOUD_BACKUP_DAILY && cloudBackupMode != CLOUD_BACKUP_WEEKLY) {
+            cloudBackupMode = CLOUD_BACKUP_MANUAL;
+        }
+        cloudLastBackupTime = preferences.getLong("cloudLastBackupTime", 0L);
+        cloudLastBackupHash = preferences.getString("cloudLastBackupHash", "");
+        cloudAutoIncludeTelegram = preferences.getBoolean("cloudAutoIncludeTelegram", true);
+        cloudAutoIncludeTheme = preferences.getBoolean("cloudAutoIncludeTheme", true);
+        cloudAutoIncludeNotifications = preferences.getBoolean("cloudAutoIncludeNotifications", false);
+        cloudAutoIncludeVault = preferences.getBoolean("cloudAutoIncludeVault", false);
         loaded = true;
+    }
+
+    public static synchronized void reloadConfigFromDisk() {
+        loaded = false;
+        preferences = null;
+        loadConfig();
+    }
+
+    public static synchronized void resetKronoDefaults(boolean preserveVault) {
+        loadConfig();
+        Context context = ApplicationLoader.applicationContext;
+        if (context == null) {
+            return;
+        }
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        int savedLockType = hiddenLockType;
+        String savedLockHash = hiddenLockHash;
+        boolean savedUseBio = hiddenUseBiometric;
+        boolean savedMuteNotif = hiddenMuteNotifications;
+        boolean savedHideFolderChats = hiddenHideFolderChatsEverywhere;
+        boolean savedAutoLock = hiddenAutoLockOnBackground;
+        java.util.Map<String, ?> all = prefs.getAll();
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.clear();
+        if (preserveVault) {
+            editor.putInt("hiddenLockType", savedLockType);
+            editor.putString("hiddenLockHash", savedLockHash != null ? savedLockHash : "");
+            editor.putBoolean("hiddenUseBiometric", savedUseBio);
+            editor.putBoolean("hiddenMuteNotifications", savedMuteNotif);
+            editor.putBoolean("hiddenHideFolderChatsEverywhere", savedHideFolderChats);
+            editor.putBoolean("hiddenAutoLockOnBackground", savedAutoLock);
+            if (all != null) {
+                for (java.util.Map.Entry<String, ?> entry : all.entrySet()) {
+                    String k = entry.getKey();
+                    if (k != null && (k.startsWith("hiddenDialogs_") || k.startsWith("hiddenFilters_")) && entry.getValue() instanceof String) {
+                        editor.putString(k, (String) entry.getValue());
+                    }
+                }
+            }
+        }
+        editor.commit();
+        reloadConfigFromDisk();
+    }
+
+    public static synchronized void setCloudBackupMode(int mode) {
+        loadConfig();
+        if (mode != CLOUD_BACKUP_MANUAL && mode != CLOUD_BACKUP_DAILY && mode != CLOUD_BACKUP_WEEKLY) {
+            mode = CLOUD_BACKUP_MANUAL;
+        }
+        cloudBackupMode = mode;
+        saveConfig();
+    }
+
+    public static String getCloudBackupModeName() {
+        loadConfig();
+        switch (cloudBackupMode) {
+            case CLOUD_BACKUP_DAILY:
+                return "Periódica (diaria)";
+            case CLOUD_BACKUP_WEEKLY:
+                return "Periódica (semanal)";
+            case CLOUD_BACKUP_MANUAL:
+            default:
+                return "Manual";
+        }
+    }
+
+    public static synchronized void setCloudAutoBackupScope(boolean includeTelegram, boolean includeTheme, boolean includeNotifications, boolean includeVault) {
+        loadConfig();
+        cloudAutoIncludeTelegram = includeTelegram;
+        cloudAutoIncludeTheme = includeTheme;
+        cloudAutoIncludeNotifications = includeNotifications;
+        cloudAutoIncludeVault = includeVault;
+        saveConfig();
+    }
+
+    public static synchronized void recordCloudBackupCompleted(long timestampMs, String sha256) {
+        loadConfig();
+        cloudLastBackupTime = timestampMs;
+        cloudLastBackupHash = sha256 != null ? sha256 : "";
+        saveConfig();
     }
 
     public static synchronized void saveConfig() {
@@ -326,6 +429,13 @@ public class KronoConfig {
                 .putBoolean("hiddenMuteNotifications", hiddenMuteNotifications)
                 .putBoolean("hiddenHideFolderChatsEverywhere", hiddenHideFolderChatsEverywhere)
                 .putBoolean("hiddenAutoLockOnBackground", hiddenAutoLockOnBackground)
+                .putInt("cloudBackupMode", cloudBackupMode)
+                .putLong("cloudLastBackupTime", cloudLastBackupTime)
+                .putString("cloudLastBackupHash", cloudLastBackupHash != null ? cloudLastBackupHash : "")
+                .putBoolean("cloudAutoIncludeTelegram", cloudAutoIncludeTelegram)
+                .putBoolean("cloudAutoIncludeTheme", cloudAutoIncludeTheme)
+                .putBoolean("cloudAutoIncludeNotifications", cloudAutoIncludeNotifications)
+                .putBoolean("cloudAutoIncludeVault", cloudAutoIncludeVault)
                 .apply();
     }
 

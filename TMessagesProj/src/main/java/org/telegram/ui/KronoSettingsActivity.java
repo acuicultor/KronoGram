@@ -86,6 +86,7 @@ public class KronoSettingsActivity extends BaseFragment {
     private int chatsCategoryRow = -1;
     private int aiCategoryRow = -1;
     private int notificationsCategoryRow = -1;
+    private int backupCategoryRow = -1;
     private int categoriesInfoRow = -1;
 
     // Privacy section rows
@@ -266,6 +267,7 @@ public class KronoSettingsActivity extends BaseFragment {
         chatsCategoryRow = -1;
         aiCategoryRow = -1;
         notificationsCategoryRow = -1;
+        backupCategoryRow = -1;
         categoriesInfoRow = -1;
 
         ghostHeaderRow = -1;
@@ -375,6 +377,7 @@ public class KronoSettingsActivity extends BaseFragment {
             chatsCategoryRow = rowCount++;
             aiCategoryRow = rowCount++;
             notificationsCategoryRow = rowCount++;
+            backupCategoryRow = rowCount++;
         } else if (currentSection == SECTION_PRIVACY) {
             ghostHeaderRow = rowCount++;
             ghostMasterRow = rowCount++;
@@ -554,6 +557,8 @@ public class KronoSettingsActivity extends BaseFragment {
                 presentFragment(new KronoSettingsActivity(SECTION_AI));
             } else if (position == notificationsCategoryRow) {
                 presentFragment(new KronoSettingsActivity(SECTION_NOTIFICATIONS));
+            } else if (position == backupCategoryRow) {
+                presentFragment(new KronoBackupActivity());
             } else if (position == ghostMasterRow) {
                 boolean newState = !KronoConfig.ghostMode;
                 KronoConfig.setGhostMode(newState);
@@ -1465,7 +1470,8 @@ public class KronoSettingsActivity extends BaseFragment {
                 position == notifServiceHeaderRow || position == diagHeaderRow) {
                 return 0; // HeaderCell
             } else if (position == privacyCategoryRow || position == appearanceCategoryRow ||
-                       position == chatsCategoryRow || position == aiCategoryRow || position == notificationsCategoryRow) {
+                       position == chatsCategoryRow || position == aiCategoryRow ||
+                       position == notificationsCategoryRow || position == backupCategoryRow) {
                 return 1; // TextCell with icon
             } else if (position == ghostMasterRow || position == ghostDontReadMessagesRow ||
                        position == ghostDontReadStoriesRow || position == ghostDontSendTypingRow ||
@@ -1583,6 +1589,8 @@ public class KronoSettingsActivity extends BaseFragment {
                     settingCell.set(0xFF9663FA, 0xFF7244E6, R.drawable.settings_language, "Voz y Traducción", "Transcripción de voz gratuita y motores de traducción", null);
                 } else if (position == notificationsCategoryRow) {
                     settingCell.set(0xFFFA5858, 0xFFE3324B, R.drawable.settings_sounds, "Notificaciones y Diagnóstico", "Servicio anti-cierre, estado FCM, batería y pruebas push", null);
+                } else if (position == backupCategoryRow) {
+                    settingCell.set(0xFF19B5C9, 0xFF0E88A6, R.drawable.settings_data, "Copia de seguridad", "Nube de Telegram (@KronoGramCloudBot), archivo y Mensajes Guardados", null);
                 }
             } else if (type == 2) {
                 TextCheckCell checkCell = (TextCheckCell) holder.itemView;

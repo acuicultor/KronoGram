@@ -43174,7 +43174,27 @@ public class ChatActivity extends BaseFragment implements
                     presentFragment(fragment);
                 }
             } else if (message.type == MessageObject.TYPE_FILE || message.type == MessageObject.TYPE_TEXT) {
-                if (message.getDocumentName().toLowerCase().endsWith("attheme")) {
+                String docNameLower = message.getDocumentName() != null ? message.getDocumentName().toLowerCase() : "";
+                if (docNameLower.endsWith(org.telegram.messenger.KronoBackupManager.BACKUP_FILE_EXTENSION)) {
+                    File locFile = null;
+                    if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {
+                        File f = new File(message.messageOwner.attachPath);
+                        if (f.exists()) {
+                            locFile = f;
+                        }
+                    }
+                    if (locFile == null) {
+                        File f = getFileLoader().getPathToMessage(message.messageOwner);
+                        if (f.exists()) {
+                            locFile = f;
+                        }
+                    }
+                    if (locFile != null && locFile.exists()) {
+                        KronoBackupActivity.openImportFromFile(ChatActivity.this, locFile);
+                        return;
+                    }
+                }
+                if (docNameLower.endsWith("attheme")) {
                     File locFile = null;
                     if (message.messageOwner.attachPath != null && message.messageOwner.attachPath.length() != 0) {
                         File f = new File(message.messageOwner.attachPath);
