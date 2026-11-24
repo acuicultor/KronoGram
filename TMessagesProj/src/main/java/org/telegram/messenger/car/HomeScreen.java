@@ -1,5 +1,6 @@
 package org.telegram.messenger.car;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
@@ -8,6 +9,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.net.Uri;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -28,6 +30,7 @@ import androidx.car.app.messaging.model.CarMessage;
 import androidx.car.app.messaging.model.ConversationCallback;
 import androidx.car.app.messaging.model.ConversationItem;
 import androidx.core.app.Person;
+import androidx.core.content.FileProvider;
 import androidx.core.graphics.drawable.IconCompat;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
@@ -39,6 +42,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
@@ -46,6 +50,7 @@ import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessagesHelper;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.TelegramMediaSession;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
@@ -68,7 +73,6 @@ public class HomeScreen extends Screen
     private static final int MAX_MESSAGES_PER_CONV = 5;
     private static final int MAX_MUSIC_DIALOGS = 50;
 
-    private final long sessionStartMillis;
     private int currentAccount;
 
     private String activeTabId = TAB_NOTIFICATIONS;
@@ -76,7 +80,6 @@ public class HomeScreen extends Screen
 
     public HomeScreen(@NonNull CarContext carContext) {
         super(carContext);
-        sessionStartMillis = System.currentTimeMillis();
         currentAccount = UserConfig.selectedAccount;
         getLifecycle().addObserver(this);
     }
@@ -136,6 +139,15 @@ public class HomeScreen extends Screen
     }
 
     private Template buildTabContent(String tabId) {
+        if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
+            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoNewCarMessages))
+                    .build();
+        }
+        TelegramMediaSession mediaSession = TelegramMediaSession.getInstance(getCarContext().getApplicationContext());
+        if (SharedConfig.isWaitingForPasscodeEnter || mediaSession.isPasscodeLocked()) {
+            return new MessageTemplate.Builder(LocaleController.getString(R.string.EnterYourTelegramPasscode))
+                    .build();
+        }
         switch (tabId) {
             case TAB_MUSIC:
                 return buildMusicTemplate();
@@ -148,7 +160,7 @@ public class HomeScreen extends Screen
     // ===== Notifications tab =====
 
     private Template buildNotificationsTemplate() {
-        Map<Long, ArrayList<MessageObject>> grouped = collectUnreadDuringDrive();
+        Map<Long, ArrayList<MessageObject>> grouped = collectUnreadMessages();
         if (grouped.isEmpty()) {
             return new MessageTemplate.Builder(LocaleController.getString(R.string.NoNewCarMessages))
                     .build();
@@ -156,26 +168,32 @@ public class HomeScreen extends Screen
         ItemList.Builder list = new ItemList.Builder();
         int count = 0;
         for (Map.Entry<Long, ArrayList<MessageObject>> entry : grouped.entrySet()) {
-            if (count++ >= MAX_CONVERSATIONS) break;
+            if (count >= MAX_CONVERSATIONS) break;
             ConversationItem item = buildConversationItem(entry.getKey(), entry.getValue());
-            if (item != null) list.addItem(item);
+            if (item != null) {
+                list.addItem(item);
+                count++;
+            }
+        }
+        if (count == 0) {
+            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoNewCarMessages))
+                    .build();
         }
         return new ListTemplate.Builder()
                 .setSingleList(list.build())
                 .build();
     }
 
-    private Map<Long, ArrayList<MessageObject>> collectUnreadDuringDrive() {
+    private Map<Long, ArrayList<MessageObject>> collectUnreadMessages() {
         LinkedHashMap<Long, ArrayList<MessageObject>> grouped = new LinkedHashMap<>();
         NotificationsController nc = NotificationsController.getInstance(currentAccount);
         ArrayList<MessageObject> snapshot = nc.getPushMessagesSnapshot();
-        long sessionStartSec = sessionStartMillis / 1000;
         for (MessageObject mo : snapshot) {
             if (mo == null || mo.messageOwner == null) continue;
-            if (mo.messageOwner.date < sessionStartSec) continue;
             long dialogId = mo.getDialogId();
             if (DialogObject.isEncryptedDialog(dialogId)) continue;
             if (UserObject.isReplyUser(dialogId)) continue;
+            if (KronoConfig.isDialogOrFolderHidden(currentAccount, dialogId)) continue;
             ArrayList<MessageObject> bucket = grouped.get(dialogId);
             if (bucket == null) {
                 bucket = new ArrayList<>();
@@ -271,12 +289,33 @@ public class HomeScreen extends Screen
             senderBuilder.setName("");
         }
 
-        return new CarMessage.Builder()
+        CarMessage.Builder msgBuilder = new CarMessage.Builder()
                 .setBody(CarText.create(body))
                 .setReceivedTimeEpochMillis(((long) mo.messageOwner.date) * 1000L)
                 .setSender(senderBuilder.build())
-                .setRead(false)
-                .build();
+                .setRead(false);
+
+        if (preview[0] && mo.isVoice()) {
+            try {
+                File voiceFile = FileLoader.getInstance(currentAccount).getPathToMessage(mo.messageOwner);
+                if (voiceFile != null && voiceFile.exists()) {
+                    Uri uri = FileProvider.getUriForFile(
+                            ApplicationLoader.applicationContext,
+                            ApplicationLoader.getApplicationId() + ".provider",
+                            voiceFile);
+                    if (uri != null) {
+                        ApplicationLoader.applicationContext.grantUriPermission(
+                                "com.google.android.projection.gearhead",
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        msgBuilder.setMultimediaMimeType("audio/ogg");
+                        msgBuilder.setMultimediaUri(uri);
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return msgBuilder.build();
     }
 
     // ===== Music tab =====
@@ -299,8 +338,9 @@ public class HomeScreen extends Screen
         int added = 0;
         for (int i = 0; i < dialogs.size() && added < MAX_MUSIC_DIALOGS; i++) {
             long dialogId = dialogs.get(i);
-            ArrayList<MessageObject> messages = session.getMusicMessages(dialogId);
-            if (messages == null || messages.isEmpty()) continue;
+            if (KronoConfig.isDialogOrFolderHidden(currentAccount, dialogId)) continue;
+            int musicCount = session.getMusicCount(dialogId);
+            if (musicCount <= 0) continue;
             String title;
             TLRPC.FileLocation avatarLoc = null;
             if (DialogObject.isUserDialog(dialogId)) {
@@ -326,7 +366,7 @@ public class HomeScreen extends Screen
 
             Row.Builder row = new Row.Builder()
                     .setTitle(title)
-                    .addText(LocaleController.formatPluralString("MusicFiles", messages.size()))
+                    .addText(LocaleController.formatPluralString("MusicFiles", musicCount))
                     .setBrowsable(true)
                     .setOnClickListener(() -> getScreenManager().push(new MusicSongsScreen(getCarContext(), dialogId, title)));
 
@@ -338,6 +378,10 @@ public class HomeScreen extends Screen
             }
             list.addItem(row.build());
             added++;
+        }
+        if (added == 0) {
+            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoCarMusic))
+                    .build();
         }
         return new ListTemplate.Builder()
                 .setSingleList(list.build())

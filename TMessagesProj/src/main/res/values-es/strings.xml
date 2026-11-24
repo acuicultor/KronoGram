@@ -1322,4 +1322,6 @@
     <string name="KronoQuickGoToMessageDesc">Muestra un botón directo en archivos, enlaces y audios para saltar al mensaje</string>
     <string name="KronoLongClickMediaMenu">Menú contextual en búsqueda y multimedia</string>
     <string name="KronoLongClickMediaMenuDesc">Al mantener pulsado en búsquedas o multimedia muestra opciones rápidas (Ir al mensaje, Seleccionar, Reenviar)</string>
+    <string name="NoNewCarMessages">No hay mensajes nuevos</string>
+    <string name="NoCarMusic">No hay música en tus chats</string>
 </resources>

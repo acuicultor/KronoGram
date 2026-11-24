@@ -151,6 +151,7 @@
 - **Persistent Foreground Service (OEM anti-kill):** Optional low-priority silent notification designed for devices with aggressive battery management (Xiaomi/HyperOS, Samsung, Huawei, Oppo…) so messages arrive reliably with the screen off.
 - **Background MTProto TCP Connection:** Keeps push delivery active when Google Push (FCM) fails or is disabled.
 - **Built-in Push Diagnostics Center:** Inspect Google Play Services, FCM status, FCM token and registration (with full technical details and quick copy), notification permission, battery optimization status (with direct shortcuts to system settings), anti-kill service status, and last received FCM push; also lets you **force FCM token re-registration** and trigger a **local test notification** in one tap.
+- **Android Auto support:** Read and reply to messages from your car display via `MessagingStyle` notifications and the native Android Auto messaging app (`CarAppService`), play voice notes, and browse music from your chats while respecting app passcode lock and KronoGram's Hidden Vault.
 
 ---
 

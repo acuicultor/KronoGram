@@ -16,11 +16,13 @@ import androidx.core.graphics.drawable.IconCompat;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
 
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.TelegramMediaSession;
 
 import java.util.ArrayList;
@@ -32,6 +34,7 @@ public class MusicSongsScreen extends Screen
 
     private final long dialogId;
     private final String title;
+    private boolean loadRequested;
 
     public MusicSongsScreen(@NonNull CarContext carContext, long dialogId, String title) {
         super(carContext);
@@ -69,8 +72,32 @@ public class MusicSongsScreen extends Screen
         TelegramMediaSession session = TelegramMediaSession.getInstance(getCarContext().getApplicationContext());
         String headerTitle = title.isEmpty() ? " " : title;
 
+        if (SharedConfig.isWaitingForPasscodeEnter || session.isPasscodeLocked()) {
+            return new MessageTemplate.Builder(LocaleController.getString(R.string.EnterYourTelegramPasscode))
+                    .setTitle(headerTitle)
+                    .setHeaderAction(Action.BACK)
+                    .build();
+        }
+        if (KronoConfig.isDialogOrFolderHidden(session.getCurrentAccount(), dialogId)) {
+            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoCarMusic))
+                    .setTitle(headerTitle)
+                    .setHeaderAction(Action.BACK)
+                    .build();
+        }
+
         ArrayList<MessageObject> songs = session.getMusicMessages(dialogId);
-        if (songs == null || songs.isEmpty()) {
+        if (songs == null) {
+            if (!loadRequested) {
+                loadRequested = true;
+                session.ensureMusicLoadedForDialog(dialogId, this::invalidate);
+            }
+            return new ListTemplate.Builder()
+                    .setTitle(headerTitle)
+                    .setHeaderAction(Action.BACK)
+                    .setLoading(true)
+                    .build();
+        }
+        if (songs.isEmpty()) {
             return new MessageTemplate.Builder(LocaleController.getString(R.string.NoCarMusic))
                     .setTitle(headerTitle)
                     .setHeaderAction(Action.BACK)

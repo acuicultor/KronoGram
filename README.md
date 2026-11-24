@@ -151,6 +151,7 @@
 - **Servicio persistente en primer plano (anti-cierre OEM):** Notificación silenciosa de baja prioridad diseñada para capas con ahorro agresivo de batería (Xiaomi/HyperOS, Samsung, Huawei, Oppo…) para evitar retrasos o cierres en segundo plano.
 - **Conexión TCP MTProto en segundo plano:** Mantiene la recepción de mensajes activa cuando Google Push (FCM) falla o está desactivado.
 - **Centro de diagnóstico Push integrado:** Comprueba en un solo panel Google Play Services, estado de FCM, token FCM y registro (con detalles técnicos y copia rápida), permiso de notificaciones, estado de optimización de batería (con accesos directos a los ajustes del sistema), estado del servicio anti-cierre y último push recibido; además permite **forzar el re-registro del token FCM** y enviar una **notificación local de prueba** con un toque.
+- **Soporte para Android Auto:** Lee y responde mensajes desde la pantalla del coche mediante notificaciones `MessagingStyle` y la app nativa de Android Auto (`CarAppService`), reproduce notas de voz y explora la música de tus chats respetando el bloqueo por código y la Bóveda Oculta.
 
 ---
 

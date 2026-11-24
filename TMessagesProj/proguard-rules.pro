@@ -100,5 +100,9 @@
 -keep class org.vosk.** { *; }
 -keep class com.sun.jna.** { *; }
 
+# Android Auto / Car App Library
+-keep class org.telegram.messenger.car.** { *; }
+-keep class androidx.car.app.** { *; }
+
 # Suppress warnings from optional / compileOnly / third-party transitive references
 -dontwarn **

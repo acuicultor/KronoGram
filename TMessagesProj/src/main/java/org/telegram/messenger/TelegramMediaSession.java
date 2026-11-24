@@ -85,6 +85,7 @@ public class TelegramMediaSession {
     private final LongSparseArray<TLRPC.User> users = new LongSparseArray<>();
     private final LongSparseArray<TLRPC.Chat> chats = new LongSparseArray<>();
     private final LongSparseArray<ArrayList<MessageObject>> musicObjects = new LongSparseArray<>();
+    private final LongSparseArray<Integer> musicCounts = new LongSparseArray<>();
     private final LongSparseArray<ArrayList<MediaSessionCompat.QueueItem>> musicQueues = new LongSparseArray<>();
     private final LongSparseArray<ArrayList<Runnable>> pendingMusicLoads = new LongSparseArray<>();
 
@@ -140,6 +141,7 @@ public class TelegramMediaSession {
         users.clear();
         chats.clear();
         musicObjects.clear();
+        musicCounts.clear();
         musicQueues.clear();
         pendingMusicLoads.clear();
         try {
@@ -154,7 +156,13 @@ public class TelegramMediaSession {
     }
 
     public ArrayList<Long> getMusicDialogsSortedByVisibleOrder() {
-        ArrayList<Long> sorted = new ArrayList<>(dialogs);
+        ArrayList<Long> sorted = new ArrayList<>();
+        for (int i = 0; i < dialogs.size(); i++) {
+            long did = dialogs.get(i);
+            if (!KronoConfig.isDialogOrFolderHidden(currentAccount, did)) {
+                sorted.add(did);
+            }
+        }
         ArrayList<TLRPC.Dialog> all = MessagesController.getInstance(currentAccount).getAllDialogs();
         final java.util.HashMap<Long, Integer> rank = new java.util.HashMap<>();
         for (int i = 0; i < all.size(); i++) {
@@ -231,6 +239,23 @@ public class TelegramMediaSession {
         return musicObjects.get(dialogId);
     }
 
+    public int getMusicCount(long dialogId) {
+        ArrayList<MessageObject> loaded = musicObjects.get(dialogId);
+        if (loaded != null) {
+            return loaded.size();
+        }
+        Integer count = musicCounts.get(dialogId);
+        return count != null ? count : 0;
+    }
+
+    public void ensureMusicLoadedForDialog(long dialogId, Runnable onLoaded) {
+        if (musicObjects.get(dialogId) != null) {
+            if (onLoaded != null) AndroidUtilities.runOnUIThread(onLoaded);
+            return;
+        }
+        loadMusicForDialog(dialogId, onLoaded);
+    }
+
     public Bitmap getRoundedAvatar(File path) {
         return createRoundBitmap(path);
     }
@@ -283,18 +308,24 @@ public class TelegramMediaSession {
         MessagesStorage messagesStorage = MessagesStorage.getInstance(account);
         messagesStorage.getStorageQueue().postRunnable(() -> {
             ArrayList<Long> loadedDialogs = new ArrayList<>();
+            LongSparseArray<Integer> loadedCounts = new LongSparseArray<>();
             LongSparseArray<TLRPC.User> loadedUsers = new LongSparseArray<>();
             LongSparseArray<TLRPC.Chat> loadedChats = new LongSparseArray<>();
             try {
                 ArrayList<Long> usersToLoad = new ArrayList<>();
                 ArrayList<Long> chatsToLoad = new ArrayList<>();
-                SQLiteCursor cursor = messagesStorage.getDatabase().queryFinalized(String.format(Locale.US, "SELECT DISTINCT uid FROM media_v4 WHERE uid != 0 AND mid > 0 AND type = %d", MediaDataController.MEDIA_MUSIC));
+                SQLiteCursor cursor = messagesStorage.getDatabase().queryFinalized(String.format(Locale.US, "SELECT uid, COUNT(*) FROM media_v4 WHERE uid != 0 AND mid > 0 AND type = %d GROUP BY uid", MediaDataController.MEDIA_MUSIC));
                 while (cursor.next()) {
                     long dialogId = cursor.longValue(0);
-                    if (DialogObject.isEncryptedDialog(dialogId)) {
+                    int count = cursor.intValue(1);
+                    if (DialogObject.isEncryptedDialog(dialogId) || count <= 0) {
+                        continue;
+                    }
+                    if (KronoConfig.isDialogOrFolderHidden(account, dialogId)) {
                         continue;
                     }
                     loadedDialogs.add(dialogId);
+                    loadedCounts.put(dialogId, count);
                     if (DialogObject.isUserDialog(dialogId)) {
                         usersToLoad.add(dialogId);
                     } else {
@@ -327,6 +358,10 @@ public class TelegramMediaSession {
                 }
                 dialogs.clear();
                 dialogs.addAll(loadedDialogs);
+                musicCounts.clear();
+                for (int i = 0; i < loadedCounts.size(); i++) {
+                    musicCounts.put(loadedCounts.keyAt(i), loadedCounts.valueAt(i));
+                }
                 users.clear();
                 for (int i = 0; i < loadedUsers.size(); i++) {
                     users.put(loadedUsers.keyAt(i), loadedUsers.valueAt(i));
@@ -439,6 +474,9 @@ public class TelegramMediaSession {
         if (MEDIA_ID_ROOT.equals(parentMediaId)) {
             for (int a = 0; a < dialogs.size(); a++) {
                 long dialogId = dialogs.get(a);
+                if (KronoConfig.isDialogOrFolderHidden(currentAccount, dialogId)) {
+                    continue;
+                }
                 android.media.MediaDescription.Builder builder = new android.media.MediaDescription.Builder()
                         .setMediaId(MEDIA_ID_CHAT_PREFIX + dialogId);
                 TLRPC.FileLocation avatar = null;

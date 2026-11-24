@@ -5564,6 +5564,13 @@ public class NotificationsController extends BaseController implements Notificat
                                     if (uri != null) {
                                         NotificationCompat.MessagingStyle.Message addedMessage = messages.get(messages.size() - 1);
                                         addedMessage.setData("audio/ogg", uri);
+                                        try {
+                                            ApplicationLoader.applicationContext.grantUriPermission(
+                                                    "com.google.android.projection.gearhead",
+                                                    uri,
+                                                    Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                        } catch (Exception ignore) {
+                                        }
                                     }
                                 } else if (messageObject.getDocument() != null) {
                                     String fileName = FileLoader.getAttachFileName(messageObject.getDocument());
