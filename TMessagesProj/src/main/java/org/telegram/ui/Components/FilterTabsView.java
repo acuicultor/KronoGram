@@ -1941,22 +1941,50 @@ public class FilterTabsView extends FrameLayout {
         adapter.notifyDataSetChanged();
         invalidate();
         if (!isEditing && orderChanged) {
-            MessagesStorage.getInstance(UserConfig.selectedAccount).saveDialogFiltersOrder();
-            TLRPC.TL_messages_updateDialogFiltersOrder req = new TLRPC.TL_messages_updateDialogFiltersOrder();
-            ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(UserConfig.selectedAccount).getDialogFilters();
+            int account = UserConfig.selectedAccount;
+            ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(account).getDialogFilters();
+            ArrayList<Integer> localOrder = new ArrayList<>(filters.size());
             for (int a = 0, N = filters.size(); a < N; a++) {
                 MessagesController.DialogFilter filter = filters.get(a);
-                if (filter.isLocalFavorites()) {
-                    continue;
+                filter.order = a;
+                localOrder.add(filter.id);
+            }
+            KronoConfig.saveCustomFilterOrder(account, localOrder);
+            MessagesStorage.getInstance(account).saveDialogFiltersOrder();
+            TLRPC.TL_messages_updateDialogFiltersOrder req = new TLRPC.TL_messages_updateDialogFiltersOrder();
+            boolean isPremium = UserConfig.getInstance(account).isPremium();
+            if (isPremium) {
+                for (int a = 0, N = filters.size(); a < N; a++) {
+                    MessagesController.DialogFilter filter = filters.get(a);
+                    if (filter.isLocalFavorites()) {
+                        continue;
+                    }
+                    if (filter.isDefault()) {
+                        req.order.add(0);
+                    } else {
+                        req.order.add(filter.id);
+                    }
                 }
-                if (filter.isDefault()) {
+            } else {
+                boolean hasDefault = false;
+                for (int a = 0, N = filters.size(); a < N; a++) {
+                    if (filters.get(a).isDefault()) {
+                        hasDefault = true;
+                        break;
+                    }
+                }
+                if (hasDefault) {
                     req.order.add(0);
-                } else {
-                    req.order.add(filter.id);
+                }
+                for (int a = 0, N = filters.size(); a < N; a++) {
+                    MessagesController.DialogFilter filter = filters.get(a);
+                    if (!filter.isLocalFavorites() && !filter.isDefault()) {
+                        req.order.add(filter.id);
+                    }
                 }
             }
-            MessagesController.getInstance(UserConfig.selectedAccount).lockFiltersInternal();
-            ConnectionsManager.getInstance(UserConfig.selectedAccount).sendRequest(req, (response, error) -> {
+            MessagesController.getInstance(account).lockFiltersInternal();
+            ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
             });
             orderChanged = false;
         }
@@ -2089,13 +2117,13 @@ public class FilterTabsView extends FrameLayout {
             }
             MessagesController.DialogFilter filter1 = filters.get(idx1);
             MessagesController.DialogFilter filter2 = filters.get(idx2);
-            int temp = filter1.order;
-            filter1.order = filter2.order;
-            filter2.order = temp;
             filters.set(idx1, filter2);
             filters.set(idx2, filter1);
+            for (int i = 0; i < filters.size(); i++) {
+                filters.get(i).order = i;
+            }
 
-            temp = tab1.id;
+            int temp = tab1.id;
             tab1.id = tab2.id;
             tab2.id = temp;
 
@@ -2188,7 +2216,7 @@ public class FilterTabsView extends FrameLayout {
 
         @Override
         public int getMovementFlags(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
-            if (MessagesController.getInstance(UserConfig.selectedAccount).premiumFeaturesBlocked() && (!isEditing || (viewHolder.getAdapterPosition() == 0 && tabs.get(0).isDefault && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium()))) {
+            if (!isEditing) {
                 return makeMovementFlags(0, 0);
             }
             return makeMovementFlags(ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0);
@@ -2196,26 +2224,9 @@ public class FilterTabsView extends FrameLayout {
 
         @Override
         public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder source, @NonNull RecyclerView.ViewHolder target) {
-            if (MessagesController.getInstance(UserConfig.selectedAccount).premiumFeaturesBlocked() && ((source.getAdapterPosition() == 0 || target.getAdapterPosition() == 0) && !UserConfig.getInstance(UserConfig.selectedAccount).isPremium())) {
-                return false;
-            }
             adapter.swapElements(source.getAdapterPosition(), target.getAdapterPosition());
             return true;
         }
-
-        private final Runnable resetDefaultPosition = () ->  {
-            if (UserConfig.getInstance(UserConfig.selectedAccount).isPremium()) {
-                return;
-            }
-            for (int i = 0; i < tabs.size(); ++i) {
-                if (tabs.get(i).isDefault && i != 0) {
-                    adapter.moveElementToStart(i);
-                    listView.scrollToPosition(0);
-                    onDefaultTabMoved();
-                    break;
-                }
-            }
-        };
 
         @Override
         public void onSelectedChanged(RecyclerView.ViewHolder viewHolder, int actionState) {
@@ -2223,9 +2234,6 @@ public class FilterTabsView extends FrameLayout {
                 listView.cancelClickRunnables(false);
                 viewHolder.itemView.setPressed(true);
                 ThemeBind.backgroundColor(viewHolder.itemView, backgroundColorKey, resourcesProvider);
-            } else {
-                AndroidUtilities.cancelRunOnUIThread(resetDefaultPosition);
-                AndroidUtilities.runOnUIThread(resetDefaultPosition, 320);
             }
             super.onSelectedChanged(viewHolder, actionState);
             if (viewHolder != null) {

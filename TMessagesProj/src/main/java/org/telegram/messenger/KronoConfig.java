@@ -85,6 +85,7 @@ public class KronoConfig {
     public static boolean hiddenAutoLockOnBackground = true;
     private static final SparseArray<Set<Long>> hiddenDialogsByAccount = new SparseArray<>();
     private static final SparseArray<Set<Integer>> hiddenFiltersByAccount = new SparseArray<>();
+    private static final SparseArray<ArrayList<Integer>> customFilterOrderByAccount = new SparseArray<>();
     private static volatile boolean hiddenVaultUnlocked = false;
 
     // Chat Folder Tabs customization
@@ -1073,6 +1074,62 @@ public class KronoConfig {
 
     public static synchronized boolean hasAnyHiddenItems(int account) {
         return !getOrLoadHiddenDialogsLocked(account).isEmpty() || !getOrLoadHiddenFiltersLocked(account).isEmpty();
+    }
+
+    private static ArrayList<Integer> getOrLoadCustomFilterOrderLocked(int account) {
+        loadConfig();
+        ArrayList<Integer> list = customFilterOrderByAccount.get(account);
+        if (list != null) {
+            return list;
+        }
+        list = new ArrayList<>();
+        if (preferences != null) {
+            String raw = preferences.getString("customFilterOrder_" + account, "");
+            if (!TextUtils.isEmpty(raw)) {
+                String[] parts = raw.split(",");
+                for (String p : parts) {
+                    try {
+                        int id = Integer.parseInt(p.trim());
+                        if (!list.contains(id)) {
+                            list.add(id);
+                        }
+                    } catch (Exception ignore) {}
+                }
+            }
+        }
+        customFilterOrderByAccount.put(account, list);
+        return list;
+    }
+
+    public static synchronized ArrayList<Integer> getCustomFilterOrder(int account) {
+        return new ArrayList<>(getOrLoadCustomFilterOrderLocked(account));
+    }
+
+    public static synchronized boolean hasCustomFilterOrder(int account) {
+        return !getOrLoadCustomFilterOrderLocked(account).isEmpty();
+    }
+
+    public static synchronized void saveCustomFilterOrder(int account, List<Integer> orderIds) {
+        loadConfig();
+        ArrayList<Integer> list = new ArrayList<>();
+        if (orderIds != null) {
+            for (Integer id : orderIds) {
+                if (id != null && !list.contains(id)) {
+                    list.add(id);
+                }
+            }
+        }
+        customFilterOrderByAccount.put(account, list);
+        if (preferences != null) {
+            StringBuilder sb = new StringBuilder();
+            for (Integer id : list) {
+                if (sb.length() > 0) {
+                    sb.append(",");
+                }
+                sb.append(id);
+            }
+            preferences.edit().putString("customFilterOrder_" + account, sb.toString()).apply();
+        }
     }
 
     public static boolean isDialogHiddenInHiddenFolder(int account, long dialogId) {

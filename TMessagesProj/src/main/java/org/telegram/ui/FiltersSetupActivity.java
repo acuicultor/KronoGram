@@ -736,14 +736,41 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             return;
         }
         orderChanged = false;
+        ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
+        ArrayList<Integer> localOrder = new ArrayList<>(filters.size());
+        for (int a = 0, N = filters.size(); a < N; a++) {
+            MessagesController.DialogFilter filter = filters.get(a);
+            filter.order = a;
+            localOrder.add(filter.id);
+        }
+        org.telegram.messenger.KronoConfig.saveCustomFilterOrder(currentAccount, localOrder);
         getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
         getMessagesStorage().saveDialogFiltersOrder();
         TLRPC.TL_messages_updateDialogFiltersOrder req = new TLRPC.TL_messages_updateDialogFiltersOrder();
-        ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
-        for (int a = 0, N = filters.size(); a < N; a++) {
-            MessagesController.DialogFilter filter = filters.get(a);
-            if (!filter.isLocalFavorites()) {
-                req.order.add(filter.id);
+        boolean isPremium = getUserConfig().isPremium();
+        if (isPremium) {
+            for (int a = 0, N = filters.size(); a < N; a++) {
+                MessagesController.DialogFilter filter = filters.get(a);
+                if (!filter.isLocalFavorites()) {
+                    req.order.add(filter.isDefault() ? 0 : filter.id);
+                }
+            }
+        } else {
+            boolean hasDefault = false;
+            for (int a = 0, N = filters.size(); a < N; a++) {
+                if (filters.get(a).isDefault()) {
+                    hasDefault = true;
+                    break;
+                }
+            }
+            if (hasDefault) {
+                req.order.add(0);
+            }
+            for (int a = 0, N = filters.size(); a < N; a++) {
+                MessagesController.DialogFilter filter = filters.get(a);
+                if (!filter.isLocalFavorites() && !filter.isDefault()) {
+                    req.order.add(filter.id);
+                }
             }
         }
         getConnectionsManager().sendRequest(req, (response, error) -> {
@@ -1299,13 +1326,13 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
             if (from == null || to == null || from.filter == null || to.filter == null) {
                 return;
             }
-            int temp = from.filter.order;
-            from.filter.order = to.filter.order;
-            to.filter.order = temp;
             ArrayList<MessagesController.DialogFilter> filters = getMessagesController().dialogFilters;
             try {
                 filters.set(fromPosition - filtersStartPosition, to.filter);
                 filters.set(toPosition - filtersStartPosition, from.filter);
+                for (int i = 0; i < filters.size(); i++) {
+                    filters.get(i).order = i;
+                }
             } catch (Exception ignore) {}
             orderChanged = true;
             updateRows(true);
@@ -1355,24 +1382,8 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
         }
 
         private final Runnable onReorderDone = () -> {
-            resetDefaultPosition();
             saveFiltersOrder(null);
         };
-
-        private void resetDefaultPosition() {
-            if (UserConfig.getInstance(UserConfig.selectedAccount).isPremium()) {
-                return;
-            }
-            ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
-            for (int i = 0; i < filters.size(); ++i) {
-                if (filters.get(i).isDefault() && i != 0) {
-                    adapter.moveElementToStart(i);
-                    listView.scrollToPosition(0);
-                    onDefaultTabMoved();
-                    break;
-                }
-            }
-        }
 
         @Override
         public void onSelectedChanged(RecyclerView.ViewHolder viewHolder, int actionState) {

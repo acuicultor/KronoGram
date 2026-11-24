@@ -2839,6 +2839,10 @@ public class MessagesStorage extends BaseController {
                     return 0;
                 });
 
+                if (applyCustomFilterOrderInternal()) {
+                    saveDialogFiltersOrderInternal();
+                }
+
                 if (updateCounters) {
                     calcUnreadCounters(true);
                 }
@@ -3827,7 +3831,7 @@ public class MessagesStorage extends BaseController {
             MessagesController.DialogFilter filter = dialogFilters.get(a);
             if (filter.isLocalFavorites()) {
                 favoritesFilter = filter;
-                int preservedOrder = Math.max(1, filter.order);
+                int preservedOrder = Math.max(0, filter.order);
                 if (filter.order != preservedOrder) {
                     filter.order = preservedOrder;
                     orderChanged = true;
@@ -3860,7 +3864,12 @@ public class MessagesStorage extends BaseController {
             anythingChanged = true;
             orderChanged = true;
         }
-        if (orderChanged) {
+        if (KronoConfig.hasCustomFilterOrder(currentAccount)) {
+            if (applyCustomFilterOrderInternal() || orderChanged) {
+                saveDialogFiltersOrderInternal();
+                anythingChanged = true;
+            }
+        } else if (orderChanged) {
             Collections.sort(dialogFilters, (o1, o2) -> {
                 if (o1.order > o2.order) {
                     return 1;
@@ -3942,6 +3951,59 @@ public class MessagesStorage extends BaseController {
                 state.dispose();
             }
         }
+    }
+
+    private boolean applyCustomFilterOrderInternal() {
+        ArrayList<Integer> customOrder = KronoConfig.getCustomFilterOrder(currentAccount);
+        if (customOrder.isEmpty() || dialogFilters.isEmpty()) {
+            return false;
+        }
+        HashMap<Integer, Integer> rankMap = new HashMap<>(customOrder.size());
+        for (int i = 0; i < customOrder.size(); i++) {
+            rankMap.put(customOrder.get(i), i);
+        }
+        ArrayList<MessagesController.DialogFilter> unknown = new ArrayList<>();
+        for (int i = 0; i < dialogFilters.size(); i++) {
+            MessagesController.DialogFilter f = dialogFilters.get(i);
+            if (!rankMap.containsKey(f.id)) {
+                unknown.add(f);
+            }
+        }
+        if (!unknown.isEmpty()) {
+            Collections.sort(unknown, (o1, o2) -> Integer.compare(o1.order, o2.order));
+            int nextRank = customOrder.size();
+            for (int i = 0; i < unknown.size(); i++) {
+                rankMap.put(unknown.get(i).id, nextRank++);
+            }
+        }
+        ArrayList<Integer> beforeIds = new ArrayList<>(dialogFilters.size());
+        for (int i = 0; i < dialogFilters.size(); i++) {
+            beforeIds.add(dialogFilters.get(i).id);
+        }
+        Collections.sort(dialogFilters, (o1, o2) -> {
+            Integer r1 = rankMap.get(o1.id);
+            Integer r2 = rankMap.get(o2.id);
+            int v1 = r1 != null ? r1 : Integer.MAX_VALUE;
+            int v2 = r2 != null ? r2 : Integer.MAX_VALUE;
+            return Integer.compare(v1, v2);
+        });
+        boolean changed = false;
+        ArrayList<Integer> normalizedIds = new ArrayList<>(dialogFilters.size());
+        for (int i = 0; i < dialogFilters.size(); i++) {
+            MessagesController.DialogFilter f = dialogFilters.get(i);
+            if (f.order != i) {
+                f.order = i;
+                changed = true;
+            }
+            normalizedIds.add(f.id);
+        }
+        if (!beforeIds.equals(normalizedIds)) {
+            changed = true;
+        }
+        if (!normalizedIds.equals(customOrder)) {
+            KronoConfig.saveCustomFilterOrder(currentAccount, normalizedIds);
+        }
+        return changed;
     }
 
     public void saveDialogFiltersOrder() {

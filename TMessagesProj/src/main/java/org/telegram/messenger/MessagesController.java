@@ -856,15 +856,6 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         if (!premium) {
-            if (!dialogFilters.get(0).isDefault()) {
-                for (int i = 1; i < dialogFilters.size(); i++) {
-                    if (dialogFilters.get(i).isDefault()) {
-                        DialogFilter defaultFilter = dialogFilters.remove(i);
-                        dialogFilters.add(0, defaultFilter);
-                        break;
-                    }
-                }
-            }
             lockFiltersInternal();
         } else {
             for (int i = 0; i < dialogFilters.size(); i++) {
@@ -2022,7 +2013,7 @@ public class MessagesController extends BaseController implements NotificationCe
         final ArrayList<TLRPC.InputChannel> inputChannelsSnapshot = req instanceof TLRPC.TL_channels_getChannels ? new ArrayList<>(((TLRPC.TL_channels_getChannels) req).id) : null;
         final ArrayList<TLRPC.InputDialogPeer> inputDialogsSnapshot = req instanceof TLRPC.TL_messages_getPeerDialogs ? new ArrayList<>(((TLRPC.TL_messages_getPeerDialogs) req).peers) : null;
 
-        getConnectionsManager().sendRequest(req, (response, error) -> {
+        getConnectionsManager().sendRequest(req, (response, error) -> Utilities.stageQueue.postRunnable(() -> {
             if (error != null) {
                 if (isPeerBatchError(error)) {
                     if (inputUsersSnapshot != null && inputUsersSnapshot.size() > 1) {
@@ -2090,8 +2081,12 @@ public class MessagesController extends BaseController implements NotificationCe
                 TLRPC.TL_messages_peerDialogs peerDialogs = (TLRPC.TL_messages_peerDialogs) response;
                 pinnedDialogs.dialogs.addAll(peerDialogs.dialogs);
                 pinnedDialogs.messages.addAll(peerDialogs.messages);
+                pinnedDialogs.users.addAll(peerDialogs.users);
+                pinnedDialogs.chats.addAll(peerDialogs.chats);
                 pinnedRemoteDialogs.dialogs.addAll(peerDialogs.dialogs);
                 pinnedRemoteDialogs.messages.addAll(peerDialogs.messages);
+                pinnedRemoteDialogs.users.addAll(peerDialogs.users);
+                pinnedRemoteDialogs.chats.addAll(peerDialogs.chats);
                 users.addAll(peerDialogs.users);
                 chats.addAll(peerDialogs.chats);
             }
@@ -2100,7 +2095,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 remoteFilterPeersFailed = hasTransientError[0];
                 getMessagesStorage().processLoadedFilterPeers(pinnedDialogs, pinnedRemoteDialogs, users, chats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
             }
-        });
+        }));
     }
 
     protected void loadFilterPeers(HashMap<Long, TLRPC.InputPeer> dialogsToLoadMap, HashMap<Long, TLRPC.InputPeer> usersToLoadMap, HashMap<Long, TLRPC.InputPeer> chatsToLoadMap, TLRPC.messages_Dialogs pinnedDialogs, TLRPC.messages_Dialogs pinnedRemoteDialogs, ArrayList<TLRPC.User> users, ArrayList<TLRPC.Chat> chats, ArrayList<DialogFilter> filtersToSave, SparseArray<DialogFilter> filtersToDelete, ArrayList<Integer> filtersOrder, HashMap<Integer, HashSet<Long>> filterDialogRemovals, HashSet<Integer> filtersUnreadCounterReset, Runnable onDone) {
@@ -2211,6 +2206,22 @@ public class MessagesController extends BaseController implements NotificationCe
             LongSparseArray<TLRPC.User> usersDict = new LongSparseArray<>();
             LongSparseArray<TLRPC.Chat> chatsDict = new LongSparseArray<>();
 
+            if (users != null) {
+                for (int a = 0; a < users.size(); a++) {
+                    TLRPC.User u = users.get(a);
+                    if (u != null) {
+                        usersDict.put(u.id, u);
+                    }
+                }
+            }
+            if (chats != null) {
+                for (int a = 0; a < chats.size(); a++) {
+                    TLRPC.Chat c = chats.get(a);
+                    if (c != null) {
+                        chatsDict.put(c.id, c);
+                    }
+                }
+            }
             for (int a = 0; a < pinnedDialogs.users.size(); a++) {
                 TLRPC.User u = pinnedDialogs.users.get(a);
                 usersDict.put(u.id, u);
@@ -2355,6 +2366,14 @@ public class MessagesController extends BaseController implements NotificationCe
                     for (int a = 0, N = dialogFilters.size(); a < N; a++) {
                         DialogFilter filter = dialogFilters.get(a);
                         dialogFiltersById.put(filter.id, filter);
+                    }
+                    for (int b = 0; b < selectedDialogFilter.length; b++) {
+                        if (selectedDialogFilter[b] != null) {
+                            DialogFilter updated = dialogFiltersById.get(selectedDialogFilter[b].id);
+                            if (updated != null) {
+                                selectedDialogFilter[b] = updated;
+                            }
+                        }
                     }
                     syncLocalFavoritesFilter(false);
                     Collections.sort(dialogFilters, (o1, o2) -> {
@@ -2672,8 +2691,51 @@ public class MessagesController extends BaseController implements NotificationCe
         });
     }
 
+    private long lastFilterPeerRepairTime;
+
+    public void ensureFilterPeersLoaded(DialogFilter filter) {
+        if (filter == null || filter.isDefault() || filter.isLocalFavorites() || loadingRemoteFilters) {
+            return;
+        }
+        boolean missingPeer = false;
+        for (int i = 0, N = filter.alwaysShow.size(); i < N; i++) {
+            long did = filter.alwaysShow.get(i);
+            if (did == 0 || DialogObject.isEncryptedDialog(did)) {
+                continue;
+            }
+            if (dialogs_dict.get(did) == null) {
+                missingPeer = true;
+                break;
+            }
+            if (DialogObject.isChatDialog(did)) {
+                if (getChat(-did) == null) {
+                    missingPeer = true;
+                    break;
+                }
+            } else if (DialogObject.isUserDialog(did)) {
+                if (getUser(did) == null) {
+                    missingPeer = true;
+                    break;
+                }
+            }
+        }
+        if (missingPeer) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastFilterPeerRepairTime > 15000L) {
+                lastFilterPeerRepairTime = now;
+                loadRemoteFilters(true);
+            }
+        }
+    }
+
     public void selectDialogFilter(DialogFilter filter, int index) {
         if (selectedDialogFilter[index] == filter) {
+            if (filter != null) {
+                if (filter.dialogs.isEmpty() && !allDialogs.isEmpty()) {
+                    sortDialogs(null);
+                }
+                ensureFilterPeersLoaded(filter);
+            }
             return;
         }
         DialogFilter prevFilter = selectedDialogFilter[index];
@@ -2688,6 +2750,7 @@ public class MessagesController extends BaseController implements NotificationCe
             }
         } else {
             sortDialogs(null);
+            ensureFilterPeersLoaded(filter);
         }
     }
 
