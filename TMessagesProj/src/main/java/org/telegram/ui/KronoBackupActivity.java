@@ -819,15 +819,17 @@ public class KronoBackupActivity extends BaseFragment {
 
     private static void restartApp(Activity activity) {
         try {
+            KronoBackupManager.setSuppressObserver(true);
             PackageManager pm = activity.getPackageManager();
             Intent intent = pm.getLaunchIntentForPackage(activity.getPackageName());
+            activity.finishAffinity();
             if (intent != null) {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 activity.startActivity(intent);
             }
-            activity.finishAffinity();
-            Runtime.getRuntime().exit(0);
+            System.exit(0);
         } catch (Throwable e) {
+            KronoBackupManager.setSuppressObserver(false);
             FileLog.e(e);
         }
     }

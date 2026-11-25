@@ -252,6 +252,7 @@ public class KronoConfig {
         hiddenAutoLockOnBackground = preferences.getBoolean("hiddenAutoLockOnBackground", true);
         hiddenDialogsByAccount.clear();
         hiddenFiltersByAccount.clear();
+        customFilterOrderByAccount.clear();
 
         cloudBackupMode = preferences.getInt("cloudBackupMode", CLOUD_BACKUP_ON_CHANGE);
         if (cloudBackupMode != CLOUD_BACKUP_MANUAL

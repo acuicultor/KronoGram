@@ -256,6 +256,20 @@ public class NotificationsController extends BaseController implements Notificat
         });
     }
 
+    public void reloadPreferencesFromDisk() {
+        try {
+            SharedPreferences preferences = getAccountInstance().getNotificationsSettings();
+            if (preferences != null) {
+                inChatSoundEnabled = preferences.getBoolean("EnableInChatSound", true);
+                showBadgeNumber = preferences.getBoolean("badgeNumber", true);
+                showBadgeMuted = preferences.getBoolean("badgeNumberMuted", false);
+                showBadgeMessages = preferences.getBoolean("badgeNumberMessages", true);
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
     public static void checkOtherNotificationsChannel() {
         if (Build.VERSION.SDK_INT < 26) {
             return;

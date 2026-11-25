@@ -699,6 +699,14 @@ public class SharedConfig {
         }
     }
 
+    public static void reloadConfigFromDisk() {
+        synchronized (sync) {
+            configLoaded = false;
+            loadConfig();
+        }
+        LiteMode.loadPreference();
+    }
+
     public static int buildVersion() {
         try {
             return ApplicationLoader.applicationContext.getPackageManager().getPackageInfo(ApplicationLoader.applicationContext.getPackageName(), 0).versionCode;

@@ -43193,6 +43193,13 @@ public class ChatActivity extends BaseFragment implements
                         KronoBackupActivity.openImportFromFile(ChatActivity.this, locFile);
                         return;
                     }
+                    if (message.getDocument() != null) {
+                        getFileLoader().loadFile(message.getDocument(), message, FileLoader.PRIORITY_HIGH, 0);
+                        if (BulletinFactory.canShowBulletin(ChatActivity.this)) {
+                            BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.ic_download, "Descargando copia de seguridad...").show();
+                        }
+                        return;
+                    }
                 }
                 if (docNameLower.endsWith("attheme")) {
                     File locFile = null;

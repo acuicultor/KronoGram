@@ -3977,8 +3977,10 @@ public class Theme {
         themeAccentExclusionKeys.add(key_stories_circle_dialog2);
         themeAccentExclusionKeys.add(key_stories_circle_closeFriends1);
         themeAccentExclusionKeys.add(key_stories_circle_closeFriends2);
+        initOrReloadThemes(false);
+    }
 
-
+    private static void initOrReloadThemes(boolean isReload) {
         themes = new ArrayList<>();
         otherThemes = new ArrayList<>();
         themesDict = new HashMap<>();
@@ -4457,7 +4459,24 @@ public class Theme {
             applyingTheme = currentNightTheme;
         }
         applyTheme(applyingTheme, false, false, switchToTheme == 2);
-        AndroidUtilities.runOnUIThread(Theme::checkAutoNightThemeConditions);
+        if (isReload) {
+            checkAutoNightThemeConditions();
+        } else {
+            AndroidUtilities.runOnUIThread(Theme::checkAutoNightThemeConditions);
+        }
+    }
+
+    public static void reloadThemesFromDisk() {
+        AndroidUtilities.runOnUIThread(() -> {
+            try {
+                initOrReloadThemes(true);
+                if (ApplicationLoader.applicationContext != null) {
+                    reloadAllResources(ApplicationLoader.applicationContext);
+                }
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
     }
 
     private static void sortAccents(ThemeInfo info) {

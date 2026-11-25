@@ -437,6 +437,12 @@ public class UserConfig extends BaseController {
         return null;
     }
 
+    public void clearSaveGalleryExceptionsCache() {
+        userSaveGalleryExceptions = null;
+        groupsSaveGalleryExceptions = null;
+        chanelSaveGalleryExceptions = null;
+    }
+
     public void updateSaveGalleryExceptions(int type, LongSparseArray<SaveToGallerySettingsHelper.DialogException> exceptions) {
         if (type == SharedConfig.SAVE_TO_GALLERY_FLAG_PEER) {
             userSaveGalleryExceptions = exceptions;
