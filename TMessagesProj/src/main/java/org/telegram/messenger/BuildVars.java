@@ -25,6 +25,7 @@ public class BuildVars {
     public static boolean CHECK_UPDATES = true;
     public static boolean NO_SCOPED_STORAGE = Build.VERSION.SDK_INT <= 29;
     public static String BUILD_VERSION_STRING = BuildConfig.BUILD_VERSION_STRING;
+    public static String KRONO_VERSION_STRING = BuildConfig.BUILD_VERSION_STRING_KRONO;
 
     public static int APP_ID = 37574376;
     public static String APP_HASH = "51b61cb9574c106fd63b3f3c0f1e74fd";
