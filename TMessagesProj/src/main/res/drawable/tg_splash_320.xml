@@ -1,8 +1,232 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="200dp"
-        android:height="200dp"
-        android:gravity="center"
-        android:drawable="@drawable/kronogram_brand_logo" />
-</layer-list>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:name="kronogram_splash"
+            android:width="320dp"
+            android:height="320dp"
+            android:viewportWidth="320"
+            android:viewportHeight="320">
+
+            <group
+                android:name="badge_group"
+                android:pivotX="160"
+                android:pivotY="160"
+                android:scaleX="0.6"
+                android:scaleY="0.6">
+
+                <path
+                    android:name="badge_glow"
+                    android:pathData="M 160,60 A 100,100 0 1,1 159.99,60 Z"
+                    android:fillColor="#0B1E28"
+                    android:strokeColor="#3800E5FF"
+                    android:strokeWidth="4" />
+
+                <path
+                    android:name="badge_inner"
+                    android:pathData="M 160,66 A 94,94 0 1,1 159.99,66 Z"
+                    android:fillColor="#0E2633" />
+
+                <group android:name="clipped_content">
+                    <clip-path
+                        android:name="circle_mask"
+                        android:pathData="M 160,62 A 98,98 0 1,1 159.99,62 Z" />
+
+                    <group
+                        android:name="arrows_group"
+                        android:pivotX="160"
+                        android:pivotY="160"
+                        android:rotation="-90"
+                        android:scaleX="0.72"
+                        android:scaleY="0.72">
+
+                        <path
+                            android:name="arrows_glow_arcs"
+                            android:fillColor="#00000000"
+                            android:strokeColor="#4000E5FF"
+                            android:strokeWidth="15"
+                            android:strokeLineCap="round"
+                            android:pathData="M 127.88,228.88 A 76,76 0 0,1 152.06,84.42 M 192.12,91.12 A 76,76 0 0,1 167.94,235.58" />
+                        <path
+                            android:name="arrows_glow_heads"
+                            android:fillColor="#4000E5FF"
+                            android:strokeColor="#4000E5FF"
+                            android:strokeWidth="7"
+                            android:strokeLineJoin="round"
+                            android:pathData="M 148,69 L 174,84 L 148,99 Z M 172,251 L 146,236 L 172,221 Z" />
+                        <path
+                            android:name="arrows_mid_arcs"
+                            android:fillColor="#00000000"
+                            android:strokeColor="#7800F0FF"
+                            android:strokeWidth="10.5"
+                            android:strokeLineCap="round"
+                            android:pathData="M 127.88,228.88 A 76,76 0 0,1 152.06,84.42 M 192.12,91.12 A 76,76 0 0,1 167.94,235.58" />
+                        <path
+                            android:name="arrows_core_arcs"
+                            android:fillColor="#00000000"
+                            android:strokeColor="#00F2FF"
+                            android:strokeWidth="7"
+                            android:strokeLineCap="round"
+                            android:pathData="M 127.88,228.88 A 76,76 0 0,1 152.06,84.42 M 192.12,91.12 A 76,76 0 0,1 167.94,235.58" />
+                        <path
+                            android:name="arrows_core_heads"
+                            android:fillColor="#00F2FF"
+                            android:strokeColor="#00F2FF"
+                            android:strokeWidth="2.5"
+                            android:strokeLineJoin="round"
+                            android:pathData="M 148,69 L 174,84 L 148,99 Z M 172,251 L 146,236 L 172,221 Z" />
+                        <path
+                            android:name="arrows_highlight_arcs"
+                            android:fillColor="#00000000"
+                            android:strokeColor="#B8FFFF"
+                            android:strokeWidth="2.2"
+                            android:strokeLineCap="round"
+                            android:pathData="M 127.88,228.88 A 76,76 0 0,1 152.06,84.42 M 192.12,91.12 A 76,76 0 0,1 167.94,235.58" />
+                    </group>
+
+                    <group
+                        android:name="plane_group"
+                        android:pivotX="160"
+                        android:pivotY="160"
+                        android:translateX="-120"
+                        android:translateY="80"
+                        android:scaleX="0.58"
+                        android:scaleY="0.58"
+                        android:rotation="-12">
+
+                        <path
+                            android:name="plane_fill"
+                            android:fillColor="#1800E5FF"
+                            android:pathData="M 116,156 L 201,124 L 187,194 L 155,174 L 147,192 L 138,167 Z" />
+                        <path
+                            android:name="plane_glow"
+                            android:fillColor="#00000000"
+                            android:strokeColor="#4800E5FF"
+                            android:strokeWidth="10.5"
+                            android:strokeLineCap="round"
+                            android:strokeLineJoin="round"
+                            android:pathData="M 116,156 L 201,124 L 187,194 L 155,174 L 184,138 L 138,167 Z M 138,167 L 147,192 L 155,174 M 147,192 L 163,179" />
+                        <path
+                            android:name="plane_core"
+                            android:fillColor="#00000000"
+                            android:strokeColor="#00F5FF"
+                            android:strokeWidth="5"
+                            android:strokeLineCap="round"
+                            android:strokeLineJoin="round"
+                            android:pathData="M 116,156 L 201,124 L 187,194 L 155,174 L 184,138 L 138,167 Z M 138,167 L 147,192 L 155,174 M 147,192 L 163,179" />
+                        <path
+                            android:name="plane_highlight"
+                            android:fillColor="#00000000"
+                            android:strokeColor="#C8FFFF"
+                            android:strokeWidth="1.6"
+                            android:strokeLineCap="round"
+                            android:strokeLineJoin="round"
+                            android:pathData="M 116,156 L 201,124 L 187,194 L 155,174 L 184,138 L 138,167 Z M 138,167 L 147,192 L 155,174 M 147,192 L 163,179" />
+                    </group>
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+
+    <target android:name="badge_group">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:propertyName="scaleX"
+                    android:startOffset="0"
+                    android:duration="340"
+                    android:valueFrom="0.6"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                <objectAnimator
+                    android:propertyName="scaleY"
+                    android:startOffset="0"
+                    android:duration="340"
+                    android:valueFrom="0.6"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+            </set>
+        </aapt:attr>
+    </target>
+
+    <target android:name="arrows_group">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:propertyName="rotation"
+                    android:startOffset="20"
+                    android:duration="440"
+                    android:valueFrom="-90"
+                    android:valueTo="0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                <objectAnimator
+                    android:propertyName="scaleX"
+                    android:startOffset="20"
+                    android:duration="400"
+                    android:valueFrom="0.72"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                <objectAnimator
+                    android:propertyName="scaleY"
+                    android:startOffset="20"
+                    android:duration="400"
+                    android:valueFrom="0.72"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+            </set>
+        </aapt:attr>
+    </target>
+
+    <target android:name="plane_group">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:propertyName="translateX"
+                    android:startOffset="40"
+                    android:duration="430"
+                    android:valueFrom="-120"
+                    android:valueTo="0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                <objectAnimator
+                    android:propertyName="translateY"
+                    android:startOffset="40"
+                    android:duration="430"
+                    android:valueFrom="80"
+                    android:valueTo="0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                <objectAnimator
+                    android:propertyName="scaleX"
+                    android:startOffset="40"
+                    android:duration="400"
+                    android:valueFrom="0.58"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                <objectAnimator
+                    android:propertyName="scaleY"
+                    android:startOffset="40"
+                    android:duration="400"
+                    android:valueFrom="0.58"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                <objectAnimator
+                    android:propertyName="rotation"
+                    android:startOffset="40"
+                    android:duration="430"
+                    android:valueFrom="-12"
+                    android:valueTo="0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>
