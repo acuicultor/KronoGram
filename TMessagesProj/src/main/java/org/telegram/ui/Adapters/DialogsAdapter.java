@@ -1826,7 +1826,16 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
                 }
             }
 
-            if (communityId == 0 && !forceShowEmptyCell && dialogsType != 7 && dialogsType != 8 && !MessagesController.getInstance(currentAccount).isDialogsEndReached(folderId)) {
+            boolean isFolderList = dialogsType == DialogsActivity.DIALOGS_TYPE_FOLDER1 || dialogsType == DialogsActivity.DIALOGS_TYPE_FOLDER2;
+            boolean hasMoreDialogsToLoad = !MessagesController.getInstance(currentAccount).isDialogsEndReached(folderId)
+                    || (isFolderList && !MessagesController.getInstance(currentAccount).isServerDialogsEndReached(folderId));
+            if (isFolderList && hasMoreDialogsToLoad) {
+                MessagesController.DialogFilter currentFilter = MessagesController.getInstance(currentAccount).selectedDialogFilter[dialogsType == DialogsActivity.DIALOGS_TYPE_FOLDER1 ? 0 : 1];
+                if (currentFilter != null && currentFilter.isLocalFavorites()) {
+                    hasMoreDialogsToLoad = false;
+                }
+            }
+            if (communityId == 0 && !forceShowEmptyCell && hasMoreDialogsToLoad) {
                 if (dialogsCount != 0) {
                     itemInternals.add(new ItemInternal(VIEW_TYPE_FLICKER));
                 }

@@ -7020,8 +7020,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     updateCurrentTab = true;
                 }
                 for (int a = 0; a < viewPages.length; a++) {
-                    if (viewPages[a].selectedType >= filters.size()) {
-                        viewPages[a].selectedType = filters.size() - 1;
+                    if (viewPages[a].selectedType >= filters.size() || (!filterTabsView.isEmpty() && !filterTabsView.hasTab(viewPages[a].selectedType))) {
+                        viewPages[a].selectedType = !filterTabsView.isEmpty() ? filterTabsView.getFirstTabId() : Math.max(0, filters.size() - 1);
+                        if (a == 0) {
+                            updateCurrentTab = true;
+                        }
                     }
                     viewPages[a].listView.setScrollingTouchSlop(RecyclerView.TOUCH_SLOP_PAGING);
                 }
@@ -7080,6 +7083,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         final int currentDialogsType = viewPages[0].dialogsType;
         if (currentDialogsType == 7 || currentDialogsType == 8) {
             MessagesController.DialogFilter currentFilter = getMessagesController().selectedDialogFilter[currentDialogsType - 7];
+            MessagesController.DialogFilter expectedFilter = viewPages[0].selectedType >= 0 && viewPages[0].selectedType < filters.size() ? filters.get(viewPages[0].selectedType) : null;
             if (currentFilter != null) {
                 boolean found = false;
                 boolean instanceChanged = false;
@@ -7093,10 +7097,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         break;
                     }
                 }
-                if (!found || instanceChanged) {
+                if (!found || instanceChanged || (expectedFilter != null && expectedFilter != currentFilter)) {
                     switchToCurrentSelectedMode(false);
                 }
+            } else if (expectedFilter != null && !expectedFilter.isDefault()) {
+                switchToCurrentSelectedMode(false);
             }
+        } else if (filters.size() > 1 && filterTabsView.getVisibility() == View.VISIBLE && viewPages[0].selectedType >= 0 && viewPages[0].selectedType < filters.size() && !filters.get(viewPages[0].selectedType).isDefault()) {
+            switchToCurrentSelectedMode(false);
         }
         updateKronoHeaderTitle();
     }
@@ -8008,7 +8016,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         boolean loadFromCache = false;
         boolean isFolderPage = viewPage.dialogsType == DIALOGS_TYPE_FOLDER1 || viewPage.dialogsType == DIALOGS_TYPE_FOLDER2;
         int currentDialogsCount = getDialogsArray(currentAccount, viewPage.dialogsType, folderId, dialogsListFrozen).size();
-        boolean needsMoreFolderDialogs = isFolderPage && (currentDialogsCount < 20 || visibleItemCount == 0 || lastVisibleItem >= currentDialogsCount - 10);
+        boolean needsMoreServerFolderDialogs = isFolderPage && (currentDialogsCount < 50 || visibleItemCount == 0 || lastVisibleItem >= currentDialogsCount - 15 || getUserConfig().getTotalDialogsCount(folderId) < 1000);
         if (isFolderPage) {
             MessagesController.DialogFilter filter = getMessagesController().selectedDialogFilter[viewPage.dialogsType == DIALOGS_TYPE_FOLDER1 ? 0 : 1];
             if (filter == null) {
@@ -8018,18 +8026,23 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             }
             if (filter != null) {
-                if (currentDialogsCount < filter.alwaysShow.size()) {
+                if (!filter.isLocalFavorites() && currentDialogsCount < filter.alwaysShow.size() + filter.pinnedDialogs.size()) {
+                    getMessagesController().ensureFilterPeersLoaded(filter);
+                } else if (!filter.isLocalFavorites() && (!filter.alwaysShow.isEmpty() || filter.pinnedDialogs.size() > 0)) {
                     getMessagesController().ensureFilterPeersLoaded(filter);
                 }
-                if ((filter.flags & MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) == 0 && needsMoreFolderDialogs) {
+                if (!filter.isLocalFavorites() && (filter.flags & MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) == 0) {
                     loadArchivedFromCache = !getMessagesController().isDialogsEndReached(1);
-                    if (loadArchivedFromCache || !getMessagesController().isServerDialogsEndReached(1)) {
+                    if (loadArchivedFromCache || (needsMoreServerFolderDialogs && !getMessagesController().isServerDialogsEndReached(1))) {
                         loadArchived = true;
                     }
                 }
             }
-        }
-        if (needsMoreFolderDialogs || (visibleItemCount > 0 && lastVisibleItem >= currentDialogsCount - 10)) {
+            loadFromCache = !getMessagesController().isDialogsEndReached(folderId);
+            if (loadFromCache || (needsMoreServerFolderDialogs && !getMessagesController().isServerDialogsEndReached(folderId))) {
+                load = true;
+            }
+        } else if (visibleItemCount > 0 && lastVisibleItem >= currentDialogsCount - 10) {
             loadFromCache = !getMessagesController().isDialogsEndReached(folderId);
             if (loadFromCache || !getMessagesController().isServerDialogsEndReached(folderId)) {
                 load = true;
@@ -10895,9 +10908,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 animateContactsAlpha(1f);
             }
 
+            getMessagesController().sortDialogs(null);
             boolean updateVisibleRows = false;
             for (int a = 0; a < viewPages.length; a++) {
-                if (viewPages[a].isDefaultDialogType() && getMessagesController().getAllFoldersDialogsCount() <= 10) {
+                if (viewPages[a].dialogsType == DIALOGS_TYPE_FOLDER1 || viewPages[a].dialogsType == DIALOGS_TYPE_FOLDER2) {
+                    reloadViewPageDialogs(viewPages[a], false);
+                } else if (viewPages[a].isDefaultDialogType() && getMessagesController().getAllFoldersDialogsCount() <= 10) {
                     viewPages[a].dialogsAdapter.notifyDataSetChanged();
                 } else {
                     updateVisibleRows = true;

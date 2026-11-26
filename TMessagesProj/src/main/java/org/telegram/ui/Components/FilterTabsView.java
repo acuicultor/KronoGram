@@ -2168,37 +2168,73 @@ public class FilterTabsView extends FrameLayout {
 
         public void moveElementToStart(int theIndex) {
             int count = tabs.size();
-            if (theIndex < 0 || theIndex >= count) {
+            if (theIndex <= 0 || theIndex >= count) {
                 return;
             }
             ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(UserConfig.selectedAccount).getDialogFilters();
-            int temp = positionToStableId.get(theIndex),
-                temp2 = tabs.get(theIndex).id;
-            for (int i = theIndex - 1; i >= 0; --i) {
-//                notifyItemMoved(i, i + 1);
-                positionToStableId.put(i + 1, positionToStableId.get(i));
+            Tab movedTab = tabs.get(theIndex);
+            int filterIdx = movedTab.id;
+            if (filterIdx < 0 || filterIdx >= filters.size()) {
+                return;
             }
-            MessagesController.DialogFilter filter = filters.remove(theIndex);
-            filter.order = 0;
-            filters.add(0, filter);
-            positionToStableId.put(0, temp);
-            tabs.add(0, tabs.remove(theIndex));
-            tabs.get(0).id = temp2;
-            for (int i = 0; i <= theIndex; ++i) {
-                tabs.get(i).id = i;
+            int temp = positionToStableId.get(theIndex);
+            int oldId = movedTab.id;
+            int minTargetFilterIdx = tabs.get(0).id;
+            if (minTargetFilterIdx < 0 || minTargetFilterIdx > filterIdx || minTargetFilterIdx >= filters.size()) {
+                minTargetFilterIdx = 0;
+            }
+
+            MessagesController.DialogFilter filter = filters.remove(filterIdx);
+            filters.add(minTargetFilterIdx, filter);
+            for (int i = 0; i < filters.size(); ++i) {
                 filters.get(i).order = i;
             }
-            for (int i = 0; i <= theIndex; ++i) {
-                if (currentPosition == i) {
-                    currentPosition = selectedTabId = i == theIndex ? 0 : i + 1;
-                }
-                if (previousPosition == i) {
-                    previousPosition = previousId = i == theIndex ? 0 : i + 1;
-                }
+
+            for (int i = theIndex - 1; i >= 0; --i) {
+                positionToStableId.put(i + 1, positionToStableId.get(i));
             }
+            positionToStableId.put(0, temp);
+            tabs.add(0, tabs.remove(theIndex));
+
+            for (int i = 0; i < count; ++i) {
+                Tab tab = tabs.get(i);
+                int newTabId = tab.id;
+                if (i == 0) {
+                    newTabId = minTargetFilterIdx;
+                } else if (tab.id >= minTargetFilterIdx && tab.id < oldId) {
+                    newTabId = tab.id + 1;
+                }
+                tab.id = newTabId;
+                positionToId.put(i, newTabId);
+                idToPosition.put(newTabId, i);
+            }
+
+            int oldSelectedTabId = selectedTabId;
+            if (currentPosition == theIndex) {
+                currentPosition = 0;
+                selectedTabId = tabs.get(0).id;
+            } else if (currentPosition >= 0 && currentPosition < theIndex) {
+                currentPosition = currentPosition + 1;
+                selectedTabId = tabs.get(currentPosition).id;
+            } else if (currentPosition >= 0 && currentPosition < count) {
+                selectedTabId = tabs.get(currentPosition).id;
+            }
+
+            if (previousPosition == theIndex) {
+                previousPosition = 0;
+                previousId = tabs.get(0).id;
+            } else if (previousPosition >= 0 && previousPosition < theIndex) {
+                previousPosition = previousPosition + 1;
+                previousId = tabs.get(previousPosition).id;
+            } else if (previousPosition >= 0 && previousPosition < count) {
+                previousId = tabs.get(previousPosition).id;
+            }
+
             notifyItemMoved(theIndex, 0);
 
-            delegate.onPageReorder(tabs.get(theIndex).id, temp2);
+            if (oldSelectedTabId != selectedTabId || oldId != tabs.get(0).id) {
+                delegate.onPageReorder(oldId, tabs.get(0).id);
+            }
 
             updateTabsWidths();
 
