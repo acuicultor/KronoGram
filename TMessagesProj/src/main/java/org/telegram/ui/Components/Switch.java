@@ -398,8 +398,8 @@ public class Switch extends View implements Theme.Colorable {
 
         final boolean isM3 = KronoConfig.isMaterialYouStyle();
         final boolean isIos = KronoConfig.isIosStyle();
-        final float requiredW = (isM3 || isIos) ? AndroidUtilities.dpf2(46f) : AndroidUtilities.dpf2(37f);
-        final float requiredH = isIos ? AndroidUtilities.dpf2(28.5f) : (isM3 ? AndroidUtilities.dpf2(26f) : AndroidUtilities.dpf2(21f));
+        final float requiredW = isM3 ? AndroidUtilities.dpf2(50f) : (isIos ? AndroidUtilities.dpf2(48f) : AndroidUtilities.dpf2(37f));
+        final float requiredH = isIos ? AndroidUtilities.dpf2(30f) : (isM3 ? AndroidUtilities.dpf2(28f) : AndroidUtilities.dpf2(21f));
         final int measuredW = getMeasuredWidth();
         final int measuredH = getMeasuredHeight();
         boolean scaledCanvas = false;
@@ -410,15 +410,15 @@ public class Switch extends View implements Theme.Colorable {
             scaledCanvas = true;
         }
 
-        int width = isM3 ? AndroidUtilities.dp(44) : isIos ? AndroidUtilities.dp(44) : AndroidUtilities.dp(31);
-        float trackHeight = isM3 ? AndroidUtilities.dpf2(24) : isIos ? AndroidUtilities.dpf2(26) : AndroidUtilities.dpf2(14);
+        int width = isM3 ? AndroidUtilities.dp(48) : isIos ? AndroidUtilities.dp(46) : AndroidUtilities.dp(31);
+        float trackHeight = isM3 ? AndroidUtilities.dpf2(26) : isIos ? AndroidUtilities.dpf2(28) : AndroidUtilities.dpf2(14);
         int x = (getMeasuredWidth() - width) / 2;
         float y = (getMeasuredHeight() - trackHeight) / 2;
         int tx;
         if (isM3) {
-            tx = x + AndroidUtilities.dp(12) + (int) (AndroidUtilities.dp(20) * progress);
+            tx = x + AndroidUtilities.dp(13) + (int) (AndroidUtilities.dp(22) * progress);
         } else if (isIos) {
-            tx = x + AndroidUtilities.dp(13) + (int) (AndroidUtilities.dp(18) * progress);
+            tx = x + AndroidUtilities.dp(14) + (int) (AndroidUtilities.dp(18) * progress);
         } else {
             tx = x + AndroidUtilities.dp(7) + (int) (AndroidUtilities.dp(17) * progress);
         }
@@ -557,16 +557,16 @@ public class Switch extends View implements Theme.Colorable {
 
             float thumbRadius;
             if (isM3) {
-                thumbRadius = AndroidUtilities.dpf2(6.5f + 2.8f * colorProgress);
+                thumbRadius = AndroidUtilities.dpf2(6.0f + 4.2f * colorProgress);
                 if (colorProgress < 0.5f) {
                     int offColor = processColor(Theme.getColor(trackColorKey, resourcesProvider));
                     paint.setColor(offColor);
                 }
             } else if (isIos) {
-                thumbRadius = AndroidUtilities.dpf2(10.5f);
+                thumbRadius = AndroidUtilities.dpf2(11.5f);
                 paint.setColor(0xFFFFFFFF);
                 // Subtle Cupertino drop shadow ring
-                paint2.setColor(0x22000000);
+                paint2.setColor(0x28000000);
                 paint2.setStrokeWidth(AndroidUtilities.dpf2(1f));
                 canvasToDraw.drawCircle(tx, ty + AndroidUtilities.dpf2(0.8f), thumbRadius, paint2);
                 paint2.setStrokeWidth(AndroidUtilities.dp(2));

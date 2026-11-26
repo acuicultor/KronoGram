@@ -23,6 +23,7 @@ import android.widget.TextView;
 import androidx.core.view.ViewCompat;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
@@ -81,24 +82,41 @@ public class HeaderCell extends FrameLayout {
         this.bottomMargin = bottomMargin;
         this.animated = animated;
 
+        final boolean isIos = KronoConfig.isIosStyle();
+        final boolean isM3 = KronoConfig.isMaterialYouStyle();
+        final int effectiveColorKey = (isIos && textColorKey == Theme.key_windowBackgroundWhiteBlueHeader)
+                ? Theme.key_windowBackgroundWhiteGrayText
+                : textColorKey;
+        if (isIos) {
+            this.height = 36;
+        } else if (isM3) {
+            this.height = 44;
+        }
+
         if (animated) {
             animatedTextView = new AnimatedTextView(getContext());
-            animatedTextView.setTextSize(AndroidUtilities.dp(14));
-            animatedTextView.setTypeface(AndroidUtilities.bold());
+            animatedTextView.setTextSize(AndroidUtilities.dp(isIos ? 12.5f : (isM3 ? 14.5f : 14f)));
+            animatedTextView.setTypeface(isIos ? AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM) : AndroidUtilities.bold());
             animatedTextView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
-            ThemeBind.textColor(animatedTextView, textColorKey, resourcesProvider);
-            animatedTextView.setTag(textColorKey);
+            ThemeBind.textColor(animatedTextView, effectiveColorKey, resourcesProvider);
+            animatedTextView.setTag(effectiveColorKey);
             animatedTextView.getDrawable().setHacks(true, true, false);
             addView(animatedTextView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, height - topMargin, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, padding, topMargin, padding, text2 ? 0 : bottomMargin));
         } else {
             textView = new TextView(getContext());
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
-            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, isIos ? 12.5f : (isM3 ? 14.5f : 14f));
+            textView.setTypeface(isIos ? AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM) : AndroidUtilities.bold());
+            if (isIos) {
+                textView.setAllCaps(true);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    textView.setLetterSpacing(0.04f);
+                }
+            }
             textView.setEllipsize(TextUtils.TruncateAt.END);
             textView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
             textView.setMinHeight(AndroidUtilities.dp(height - topMargin));
-            ThemeBind.textColor(textView, textColorKey, resourcesProvider);
-            textView.setTag(textColorKey);
+            ThemeBind.textColor(textView, effectiveColorKey, resourcesProvider);
+            textView.setTag(effectiveColorKey);
             addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, (LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.TOP, padding, topMargin, padding, text2 ? 0 : bottomMargin));
         }
 
@@ -184,12 +202,16 @@ public class HeaderCell extends FrameLayout {
     }
 
     public void setText(CharSequence text, boolean animate) {
+        CharSequence displayText = text;
+        if (KronoConfig.isIosStyle() && text != null) {
+            displayText = text.toString().toUpperCase(LocaleController.getInstance().getCurrentLocale());
+        }
         if (this.animated) {
             animatedTextView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
-            animatedTextView.setText(text, animate);
+            animatedTextView.setText(displayText, animate);
         } else {
             textView.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
-            textView.setText(text);
+            textView.setText(displayText);
         }
     }
 

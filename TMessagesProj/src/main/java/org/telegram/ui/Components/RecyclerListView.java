@@ -3574,8 +3574,35 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
 //        }
     }
 
+    public void refreshSectionsStyle() {
+        if (isSectionView == null || isViewTypeSection == null || drawSectionBackground == null) {
+            return;
+        }
+        int newPadding = KronoConfig.getEffectiveSectionPaddingPx(dp(12));
+        float newRadius = KronoConfig.getEffectiveSectionRadiusPx(dp(16));
+        this.sectionPadding = newPadding;
+        this.sectionRadius = newRadius;
+        this.sectionRadiusTop = new float[] {
+            newRadius, newRadius,
+            newRadius, newRadius,
+            0, 0,
+            0, 0
+        };
+        this.sectionRadiusBottom = new float[] {
+            0, 0,
+            0, 0,
+            newRadius, newRadius,
+            newRadius, newRadius
+        };
+        installSectionsDecoration();
+        invalidateItemDecorations();
+        invalidate();
+    }
+
     int getSectionColorForDecoration() {
-        return Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+        int rawCard = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+        int bgCanvas = getSectionsBackgroundColorForDecoration();
+        return KronoConfig.getEffectiveSectionCardColor(rawCard, bgCanvas);
     }
 
     int getSectionsBackgroundColorForDecoration() {
@@ -3820,17 +3847,33 @@ public class RecyclerListView extends RecyclerView implements IBlur3Capture {
     private final static float[] radii = new float[8];
     public static void drawBackgroundRect(Canvas canvas, RectF rect, float topRadius, float bottomRadius, float alpha, Theme.ResourcesProvider resourcesProvider) {
         sectionBackgroundPaint.setShadowLayer(0, 0, 0, 0);
-        sectionBackgroundPaint.setColor(multAlpha(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider), alpha));
+        int rawCard = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+        int bgCanvas = Theme.getColor(Theme.key_windowBackgroundGray, resourcesProvider);
+        int cardColor = KronoConfig.getEffectiveSectionCardColor(rawCard, bgCanvas);
+        sectionBackgroundPaint.setColor(multAlpha(cardColor, alpha));
+        int strokeColor = (topRadius > 0 || bottomRadius > 0) ? KronoConfig.getEffectiveSectionStrokeColor(rawCard, bgCanvas) : 0;
         if (topRadius <= 0 && bottomRadius <= 0) {
             canvas.drawRect(rect, sectionBackgroundPaint);
         } else if (topRadius == bottomRadius) {
             canvas.drawRoundRect(rect, topRadius, topRadius, sectionBackgroundPaint);
+            if (strokeColor != 0) {
+                sectionBackgroundStrokePaint.setStyle(Paint.Style.STROKE);
+                sectionBackgroundStrokePaint.setStrokeWidth(AndroidUtilities.dpf2(0.75f));
+                sectionBackgroundStrokePaint.setColor(multAlpha(strokeColor, alpha));
+                canvas.drawRoundRect(rect, topRadius, topRadius, sectionBackgroundStrokePaint);
+            }
         } else {
             sectionBackgroundPath.rewind();
             radii[0] = radii[1] = radii[2] = radii[3] = topRadius;
             radii[4] = radii[5] = radii[6] = radii[7] = bottomRadius;
             sectionBackgroundPath.addRoundRect(rect, radii, Path.Direction.CW);
             canvas.drawPath(sectionBackgroundPath, sectionBackgroundPaint);
+            if (strokeColor != 0) {
+                sectionBackgroundStrokePaint.setStyle(Paint.Style.STROKE);
+                sectionBackgroundStrokePaint.setStrokeWidth(AndroidUtilities.dpf2(0.75f));
+                sectionBackgroundStrokePaint.setColor(multAlpha(strokeColor, alpha));
+                canvas.drawPath(sectionBackgroundPath, sectionBackgroundStrokePaint);
+            }
         }
     }
     public void drawBackgroundRect(Canvas canvas, RectF rect, float topRadius, float bottomRadius, float alpha) {

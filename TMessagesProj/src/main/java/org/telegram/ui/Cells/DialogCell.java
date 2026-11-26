@@ -1043,7 +1043,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             );
         }
         if (isTopic) {
-            int effectiveDefault = (KronoConfig.isTelegramXStyle() && heightDefault == 70) ? 66 : heightDefault;
+            int effectiveDefault = KronoConfig.getDialogRowHeightDp(heightDefault);
             setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), dp((useForceThreeLines || SharedConfig.useThreeLinesLayout ? heightThreeLines : effectiveDefault) + (hasTags() && (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) || isForumCell()) ? (isForumCell() ? addForumHeightForTags : addHeightForTags) : 0)) + (useSeparator ? 1 : 0));
             checkTwoLinesForName();
         }
@@ -1070,7 +1070,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     }
 
     private int getCollapsedHeight() {
-        int effectiveDefault = (KronoConfig.isTelegramXStyle() && heightDefault == 70) ? 66 : heightDefault;
+        int effectiveDefault = KronoConfig.getDialogRowHeightDp(heightDefault);
         int height = dp(useForceThreeLines || SharedConfig.useThreeLinesLayout ? heightThreeLines : effectiveDefault);
         if (useSeparator || true) {
             height += 1;
@@ -2506,7 +2506,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 thumbImage[i].setImageCoords(thumbLeft + (thumbSize + 2) * i, avatarTop + dp(31) + (twoLinesForName ? dp(20) : 0) - (!(useForceThreeLines || SharedConfig.useThreeLinesLayout) && tags != null && !tags.isEmpty() ? dp(9) : 0), dp(18), dp(18));
             }
         } else {
-            avatarTop = KronoConfig.isTelegramXStyle() ? dp(7) : dp(9);
+            avatarTop = dp(KronoConfig.getDialogAvatarTopDp());
             messageNameTop = dp(31);
             timeTop = dp(16);
             errorTop = dp(38);
@@ -4880,8 +4880,12 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
         if (useSeparator) {
             int left;
+            int rightInset = 0;
             if (KronoConfig.isTelegramXStyle() || fullSeparator || currentDialogFolderId != 0 && archiveHidden && !fullSeparator2 || fullSeparator2 && !archiveHidden) {
                 left = 0;
+            } else if (KronoConfig.isMaterialYouStyle()) {
+                left = dp(messagePaddingStart + 6);
+                rightInset = dp(12);
             } else {
                 left = dp(messagePaddingStart);
             }
@@ -4893,9 +4897,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 }
                 float y = getMeasuredHeight() - 1 - rightFragmentOffset * rightFragmentOpenedProgress;
                 if (LocaleController.isRTL) {
-                    canvas.drawLine(0, y, getMeasuredWidth() - left, y, Theme.dividerPaint);
+                    canvas.drawLine(rightInset, y, getMeasuredWidth() - left, y, Theme.dividerPaint);
                 } else {
-                    canvas.drawLine(left, y, getMeasuredWidth(), y, Theme.dividerPaint);
+                    canvas.drawLine(left, y, getMeasuredWidth() - rightInset, y, Theme.dividerPaint);
                 }
                 if (rightFragmentOpenedProgress != 0) {
                     Theme.dividerPaint.setAlpha(alpha);

@@ -449,8 +449,16 @@ public class TextSettingsCell extends FrameLayout {
         super.dispatchDraw(canvas);
 
         if (needDivider) {
-            int offset = KronoConfig.isTelegramXStyle() ? 0 : AndroidUtilities.dp(imageView.getVisibility() == View.VISIBLE ? 58 : 20);
-            canvas.drawLine(LocaleController.isRTL ? 0 : offset, getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? offset : 0), getMeasuredHeight() - 1, Theme.dividerPaint);
+            if (KronoConfig.isTelegramXStyle()) {
+                canvas.drawLine(0, getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight() - 1, Theme.dividerPaint);
+            } else if (KronoConfig.isMaterialYouStyle()) {
+                int startInset = AndroidUtilities.dp(imageView.getVisibility() == View.VISIBLE ? 58 : 20);
+                int endInset = AndroidUtilities.dp(20);
+                canvas.drawLine(LocaleController.isRTL ? endInset : startInset, getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? startInset : endInset), getMeasuredHeight() - 1, Theme.dividerPaint);
+            } else {
+                int offset = AndroidUtilities.dp(imageView.getVisibility() == View.VISIBLE ? 60 : 20);
+                canvas.drawLine(LocaleController.isRTL ? 0 : offset, getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? offset : 0), getMeasuredHeight() - 1, Theme.dividerPaint);
+            }
         }
     }
 

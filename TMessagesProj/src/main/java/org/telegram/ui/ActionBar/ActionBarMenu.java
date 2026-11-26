@@ -446,7 +446,9 @@ public class ActionBarMenu extends LinearLayout {
             if (view instanceof ActionBarMenuItem) {
                 ActionBarMenuItem item = (ActionBarMenuItem) view;
                 if (item.isSearchField()) {
-                    item.getSearchField().setCursorColor(color);
+                    if (item.getSearchField() != null) {
+                        item.applyExternalSearchCursorColor(color);
+                    }
                     break;
                 }
             }
@@ -460,12 +462,23 @@ public class ActionBarMenu extends LinearLayout {
             if (view instanceof ActionBarMenuItem) {
                 ActionBarMenuItem item = (ActionBarMenuItem) view;
                 if (item.isSearchField()) {
-                    if (placeholder) {
-                        item.getSearchField().setHintTextColor(color);
-                    } else {
-                        item.getSearchField().setTextColor(color);
+                    if (item.getSearchField() != null) {
+                        item.applyExternalSearchTextColor(color, placeholder);
                     }
                     break;
+                }
+            }
+        }
+    }
+
+    public void refreshSearchFieldColors() {
+        int count = getChildCount();
+        for (int a = 0; a < count; a++) {
+            View view = getChildAt(a);
+            if (view instanceof ActionBarMenuItem) {
+                ActionBarMenuItem item = (ActionBarMenuItem) view;
+                if (item.isSearchField()) {
+                    item.applySearchFieldColors();
                 }
             }
         }

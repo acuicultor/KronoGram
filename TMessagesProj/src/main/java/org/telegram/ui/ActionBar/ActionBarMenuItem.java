@@ -1653,11 +1653,10 @@ public class ActionBarMenuItem extends FrameLayout {
 
             searchFieldCaption = new TextView(getContext());
             searchFieldCaption.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
-            ThemeBind.textColor(searchFieldCaption, Theme.key_actionBarDefaultSearch, resourcesProvider);
             searchFieldCaption.setSingleLine(true);
             searchFieldCaption.setEllipsize(TextUtils.TruncateAt.END);
             searchFieldCaption.setVisibility(GONE);
-            searchFieldCaption.setGravity(LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT);
+            searchFieldCaption.setGravity((LocaleController.isRTL ? Gravity.RIGHT : Gravity.LEFT) | Gravity.CENTER_VERTICAL);
 
             searchField = new EditTextBoldCursor(getContext()) {
 
@@ -1704,13 +1703,11 @@ public class ActionBarMenuItem extends FrameLayout {
             };
             searchField.setScrollContainer(false);
             searchField.setCursorWidth(1.5f);
-            ThemeBind.cursorColor(searchField, Theme.key_actionBarDefaultSearch, resourcesProvider);
             searchField.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
-            ThemeBind.hintTextColor(searchField, Theme.key_actionBarDefaultSearchPlaceholder, resourcesProvider);
-            ThemeBind.textColor(searchField, Theme.key_actionBarDefaultSearch, resourcesProvider);
             searchField.setSingleLine(true);
             searchField.setBackgroundResource(0);
             searchField.setPadding(0, 0, 0, 0);
+            applySearchFieldColors();
             int inputType = searchField.getInputType() | EditorInfo.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
             searchField.setInputType(inputType);
             if (Build.VERSION.SDK_INT < 23) {
@@ -2281,11 +2278,94 @@ public class ActionBarMenuItem extends FrameLayout {
             }
         }
         if (searchField != null) {
-            ThemeBind.cursorColor(searchField, Theme.key_actionBarDefaultSearch, resourcesProvider);
-            ThemeBind.hintTextColor(searchField, Theme.key_actionBarDefaultSearchPlaceholder, resourcesProvider);
-            ThemeBind.textColor(searchField, Theme.key_actionBarDefaultSearch, resourcesProvider);
+            applySearchFieldColors();
             ThemeBind.highlightColor(searchField, Theme.key_chat_inTextSelectionHighlight, resourcesProvider);
             ThemeBind.editHandlesColor(searchField, Theme.key_chat_TextSelectionCursor, resourcesProvider);
+        }
+    }
+
+    private int resolveSearchSurfaceColor() {
+        if (parentMenu != null && parentMenu.parentActionBar != null) {
+            ActionBar bar = parentMenu.parentActionBar;
+            int glassBg = bar.getButtonsGlassBackgroundColor();
+            if (glassBg != 0) {
+                int baseCanvas = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
+                if (Theme.isCurrentThemeDark() || (resourcesProvider != null && resourcesProvider.isDark())) {
+                    baseCanvas = 0xFF000000;
+                }
+                return ColorUtils.compositeColors(glassBg, baseCanvas | 0xFF000000);
+            }
+            if (bar.getBackgroundColor() != 0) {
+                return bar.getBackgroundColor() | 0xFF000000;
+            }
+        }
+        return Theme.getColor(Theme.key_actionBarDefault, resourcesProvider) | 0xFF000000;
+    }
+
+    private boolean isSearchSurfaceDark(int surfaceColor) {
+        if (parentMenu != null && parentMenu.parentActionBar != null && parentMenu.parentActionBar.getButtonsGlassBackgroundColor() != 0) {
+            if (resourcesProvider != null && resourcesProvider.isDark()) {
+                return true;
+            }
+            if (Theme.isCurrentThemeDark() && AndroidUtilities.computePerceivedBrightness(surfaceColor) < 0.6f) {
+                return true;
+            }
+        }
+        return AndroidUtilities.computePerceivedBrightness(surfaceColor) < 0.5f;
+    }
+
+    private int ensureReadableSearchColor(int candidate, boolean placeholder) {
+        int surface = resolveSearchSurfaceColor();
+        boolean darkSurface = isSearchSurfaceDark(surface);
+        int opaqueCandidate = candidate | 0xFF000000;
+        double contrast = ColorUtils.calculateContrast(opaqueCandidate, surface);
+        double minContrast = placeholder ? 2.4 : 4.2;
+        if (contrast >= minContrast && (!darkSurface || AndroidUtilities.computePerceivedBrightness(opaqueCandidate) >= 0.35f)) {
+            return candidate;
+        }
+        int fallbackText = Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider) | 0xFF000000;
+        if (ColorUtils.calculateContrast(fallbackText, surface) < 4.5) {
+            fallbackText = darkSurface ? 0xFFFFFFFF : 0xFF1A1D21;
+        }
+        if (placeholder) {
+            return ColorUtils.setAlphaComponent(fallbackText, darkSurface ? 160 : 145);
+        }
+        return fallbackText;
+    }
+
+    public void applySearchFieldColors() {
+        if (searchField == null) {
+            return;
+        }
+        int textColor = ensureReadableSearchColor(getThemedColor(Theme.key_actionBarDefaultSearch), false);
+        int hintColor = ensureReadableSearchColor(getThemedColor(Theme.key_actionBarDefaultSearchPlaceholder), true);
+        searchField.setTextColor(textColor);
+        searchField.setCursorColor(textColor);
+        searchField.setHintTextColor(hintColor);
+        if (searchFieldCaption != null) {
+            searchFieldCaption.setTextColor(textColor);
+        }
+    }
+
+    public void applyExternalSearchTextColor(int color, boolean placeholder) {
+        if (searchField == null) {
+            return;
+        }
+        int safeColor = ensureReadableSearchColor(color, placeholder);
+        if (placeholder) {
+            searchField.setHintTextColor(safeColor);
+        } else {
+            searchField.setTextColor(safeColor);
+            searchField.setCursorColor(safeColor);
+            if (searchFieldCaption != null) {
+                searchFieldCaption.setTextColor(safeColor);
+            }
+        }
+    }
+
+    public void applyExternalSearchCursorColor(int color) {
+        if (searchField != null) {
+            searchField.setCursorColor(ensureReadableSearchColor(color, false));
         }
     }
 

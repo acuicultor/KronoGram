@@ -432,6 +432,10 @@ public class TextCheckCell extends FrameLayout {
             if (dividerPaint != null) {
                 if (KronoConfig.isTelegramXStyle()) {
                     canvas.drawLine(0, getMeasuredHeight() - 1, getMeasuredWidth(), getMeasuredHeight() - 1, dividerPaint);
+                } else if (KronoConfig.isMaterialYouStyle()) {
+                    int startInset = imageView != null ? padding : AndroidUtilities.dp(20);
+                    int endInset = AndroidUtilities.dp(20);
+                    canvas.drawLine(LocaleController.isRTL ? endInset : startInset, getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? startInset : endInset), getMeasuredHeight() - 1, dividerPaint);
                 } else if (imageView != null) {
                     canvas.drawLine(LocaleController.isRTL ? 0 : padding, getMeasuredHeight() - 1, getMeasuredWidth() - (LocaleController.isRTL ? padding : 0), getMeasuredHeight() - 1, dividerPaint);
                 } else {

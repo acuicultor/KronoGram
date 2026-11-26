@@ -252,29 +252,30 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         glassFactory = factory;
         glassColorProvider = colorProvider;
 
+        final float glassRadius = KronoConfig.isIosStyle() ? dp(19) : (KronoConfig.isTelegramXStyle() ? dp(14) : dp(23));
         glassDrawable = factory.create(this)
                 .setColorProvider(colorProvider)
                 .setPadding(dp(6));
         if (isForum) {
-            glassDrawable.setRadius(dp(18.33f), dp(23), dp(23), dp(18.33f));
+            glassDrawable.setRadius(dp(18.33f), glassRadius, glassRadius, dp(18.33f));
         } else {
-            glassDrawable.setRadius(dp(23));
+            glassDrawable.setRadius(glassRadius);
         }
 
 
         glassDrawableBack = factory.create(this)
                 .setColorProvider(colorProvider)
-                .setRadius(dp(23))
+                .setRadius(glassRadius)
                 .setPadding(dp(6));
 
         glassDrawableMenu = factory.create(this)
                 .setColorProvider(colorProvider)
-                .setRadius(dp(23))
+                .setRadius(glassRadius)
                 .setPadding(dp(6));
 
         glassDrawableRightAvatar = factory.create(this)
                 .setColorProvider(colorProvider)
-                .setRadius(dp(23))
+                .setRadius(glassRadius)
                 .setPadding(dp(6));
 
         if (menu != null) {
@@ -1413,6 +1414,9 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public void onSearchFieldVisibilityChanged(boolean visible) {
         isSearchFieldVisible = visible;
+        if (visible && menu != null) {
+            menu.refreshSearchFieldColors();
+        }
         checkMenuItemsWidth();
         if (searchVisibleAnimator != null) {
             searchVisibleAnimator.cancel();

@@ -1500,7 +1500,7 @@ public class KronoConfig {
         loadConfig();
         switch (uiStyle) {
             case UI_STYLE_IOS:
-                return defaultPaddingPx > 0 ? AndroidUtilities.dp(14) : 0;
+                return defaultPaddingPx > 0 ? AndroidUtilities.dp(16) : 0;
             case UI_STYLE_TELEGRAM_X:
                 return 0;
             case UI_STYLE_MATERIAL_YOU:
@@ -1522,12 +1522,74 @@ public class KronoConfig {
         }
     }
 
+    public static int getEffectiveSectionCardColor(int cardColor, int canvasBgColor) {
+        loadConfig();
+        if (uiStyle == UI_STYLE_TELEGRAM_X) {
+            return cardColor;
+        }
+        int opaqueCard = cardColor | 0xFF000000;
+        int opaqueBg = canvasBgColor | 0xFF000000;
+        if (AndroidUtilities.getColorDistance(opaqueCard, opaqueBg) < 1200) {
+            float lum = AndroidUtilities.computePerceivedBrightness(opaqueBg);
+            if (lum < 0.25f) {
+                int elevated = uiStyle == UI_STYLE_IOS ? 0xFF16161A : 0xFF14151B;
+                return androidx.core.graphics.ColorUtils.blendARGB(opaqueCard, elevated, uiStyle == UI_STYLE_IOS ? 0.92f : 0.96f);
+            } else if (lum > 0.85f) {
+                return androidx.core.graphics.ColorUtils.blendARGB(opaqueCard, 0xFFF2F4F8, 0.55f);
+            }
+        }
+        return cardColor;
+    }
+
+    public static int getEffectiveSectionStrokeColor(int cardColor, int canvasBgColor) {
+        loadConfig();
+        if (uiStyle == UI_STYLE_TELEGRAM_X) {
+            return 0;
+        }
+        int opaqueBg = canvasBgColor | 0xFF000000;
+        float lum = AndroidUtilities.computePerceivedBrightness(opaqueBg);
+        if (lum < 0.25f) {
+            return uiStyle == UI_STYLE_IOS ? 0x26FFFFFF : 0x1AFFFFFF;
+        }
+        return uiStyle == UI_STYLE_IOS ? 0x16000000 : 0x10000000;
+    }
+
+    public static int getDialogRowHeightDp(int defaultHeightDp) {
+        loadConfig();
+        if (defaultHeightDp != 70) {
+            return defaultHeightDp;
+        }
+        switch (uiStyle) {
+            case UI_STYLE_IOS:
+                return 68;
+            case UI_STYLE_TELEGRAM_X:
+                return 64;
+            case UI_STYLE_MATERIAL_YOU:
+            default:
+                return 74;
+        }
+    }
+
+    public static int getDialogAvatarTopDp() {
+        loadConfig();
+        switch (uiStyle) {
+            case UI_STYLE_IOS:
+                return 8;
+            case UI_STYLE_TELEGRAM_X:
+                return 6;
+            case UI_STYLE_MATERIAL_YOU:
+            default:
+                return 11;
+        }
+    }
+
     public static int getRecommendedBubbleRadius() {
         loadConfig();
         switch (uiStyle) {
             case UI_STYLE_TELEGRAM_X:
                 return 10;
             case UI_STYLE_IOS:
+                return 16;
             case UI_STYLE_MATERIAL_YOU:
             default:
                 return 18;

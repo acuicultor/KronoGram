@@ -938,14 +938,24 @@ public class KronoSettingsActivity extends BaseFragment {
         builder.setTitle("Estilo visual de componentes");
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setUiStyle(which);
+            int recommendedRadius = KronoConfig.getRecommendedBubbleRadius();
+            if (SharedConfig.bubbleRadius != recommendedRadius) {
+                SharedConfig.bubbleRadius = recommendedRadius;
+                SharedPreferences preferences = MessagesController.getGlobalMainSettings();
+                preferences.edit().putInt("bubbleRadius", SharedConfig.bubbleRadius).apply();
+            }
 
             Theme.refreshThemeColors();
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.didSetNewTheme, false, true);
+            NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.reloadInterface);
+            if (listView != null) {
+                listView.refreshSectionsStyle();
+            }
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
             if (parentLayout != null) {
-                parentLayout.rebuildFragments(INavigationLayout.REBUILD_FLAG_REBUILD_LAST);
+                parentLayout.rebuildAllFragmentViews(true, true);
             }
             dialog.dismiss();
             BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, "Estilo aplicado: " + KronoConfig.getUiStyleName()).show();
@@ -1516,22 +1526,31 @@ public class KronoSettingsActivity extends BaseFragment {
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view;
+            final boolean flatClassic = KronoConfig.isTelegramXStyle();
             switch (viewType) {
                 case 0:
                     view = new HeaderCell(mContext);
-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    if (flatClassic) {
+                        view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    }
                     break;
                 case 1:
                     view = new SettingsActivity.SettingCell(mContext, getResourceProvider());
-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    if (flatClassic) {
+                        view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    }
                     break;
                 case 2:
                     view = new TextCheckCell(mContext);
-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    if (flatClassic) {
+                        view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    }
                     break;
                 case 3:
                     view = new TextSettingsCell(mContext);
-                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    if (flatClassic) {
+                        view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    }
                     break;
                 case 5:
                     view = new ShadowSectionCell(mContext);
