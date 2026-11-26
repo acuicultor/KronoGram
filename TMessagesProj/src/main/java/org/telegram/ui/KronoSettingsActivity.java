@@ -128,6 +128,11 @@ public class KronoSettingsActivity extends BaseFragment {
     private int openThemesRow = -1;
     private int monetThemeRow = -1;
     private int uiStyleRow = -1;
+    private int glassModeRow = -1;
+    private int glassSettingsBarRow = -1;
+    private int glassSearchBarsRow = -1;
+    private int glassBottomBarRow = -1;
+    private int glassChatBarsRow = -1;
     private int disableTitleMarqueeRow = -1;
     private int themeInfoRow = -1;
 
@@ -306,6 +311,11 @@ public class KronoSettingsActivity extends BaseFragment {
         openThemesRow = -1;
         monetThemeRow = -1;
         uiStyleRow = -1;
+        glassModeRow = -1;
+        glassSettingsBarRow = -1;
+        glassSearchBarsRow = -1;
+        glassBottomBarRow = -1;
+        glassChatBarsRow = -1;
         disableTitleMarqueeRow = -1;
         themeInfoRow = -1;
 
@@ -415,6 +425,11 @@ public class KronoSettingsActivity extends BaseFragment {
             openThemesRow = rowCount++;
             monetThemeRow = rowCount++;
             uiStyleRow = rowCount++;
+            glassModeRow = rowCount++;
+            glassSettingsBarRow = rowCount++;
+            glassSearchBarsRow = rowCount++;
+            glassBottomBarRow = rowCount++;
+            glassChatBarsRow = rowCount++;
             disableTitleMarqueeRow = rowCount++;
             themeInfoRow = rowCount++;
         } else if (currentSection == SECTION_CHATS) {
@@ -687,6 +702,32 @@ public class KronoSettingsActivity extends BaseFragment {
                 showMonetThemeSelectorDialog();
             } else if (position == uiStyleRow) {
                 showUiStyleSelectorDialog();
+            } else if (position == glassModeRow) {
+                showGlassModeSelectorDialog();
+            } else if (position == glassSettingsBarRow) {
+                if (KronoConfig.isGlassOff()) {
+                    return;
+                }
+                KronoConfig.setGlassOnSettingsBar(!KronoConfig.glassOnSettingsBar);
+                applyGlassSettingsChange(view instanceof TextCheckCell ? (TextCheckCell) view : null, KronoConfig.glassOnSettingsBar);
+            } else if (position == glassSearchBarsRow) {
+                if (KronoConfig.isGlassOff()) {
+                    return;
+                }
+                KronoConfig.setGlassOnSearchBars(!KronoConfig.glassOnSearchBars);
+                applyGlassSettingsChange(view instanceof TextCheckCell ? (TextCheckCell) view : null, KronoConfig.glassOnSearchBars);
+            } else if (position == glassBottomBarRow) {
+                if (KronoConfig.isGlassOff()) {
+                    return;
+                }
+                KronoConfig.setGlassOnBottomBar(!KronoConfig.glassOnBottomBar);
+                applyGlassSettingsChange(view instanceof TextCheckCell ? (TextCheckCell) view : null, KronoConfig.glassOnBottomBar);
+            } else if (position == glassChatBarsRow) {
+                if (KronoConfig.isGlassOff()) {
+                    return;
+                }
+                KronoConfig.setGlassOnChatBars(!KronoConfig.glassOnChatBars);
+                applyGlassSettingsChange(view instanceof TextCheckCell ? (TextCheckCell) view : null, KronoConfig.glassOnChatBars);
             } else if (position == disableTitleMarqueeRow) {
                 KronoConfig.setDisableTitleMarquee(!KronoConfig.disableTitleMarquee);
                 if (view instanceof TextCheckCell) {
@@ -959,6 +1000,49 @@ public class KronoSettingsActivity extends BaseFragment {
             }
             dialog.dismiss();
             BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, "Estilo aplicado: " + KronoConfig.getUiStyleName()).show();
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        showDialog(builder.create());
+    }
+
+    private void applyGlassSettingsChange(TextCheckCell cell, boolean checked) {
+        if (cell != null) {
+            cell.setChecked(checked);
+        }
+        Theme.refreshThemeColors();
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.didSetNewTheme, false, true);
+        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.reloadInterface);
+        if (simpleActionBar != null) {
+            simpleActionBar.updateColors();
+        }
+        if (listView != null) {
+            listView.refreshSectionsStyle();
+        }
+        if (parentLayout != null) {
+            parentLayout.rebuildAllFragmentViews(true, true);
+        }
+    }
+
+    private void showGlassModeSelectorDialog() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        final CharSequence[] items = new CharSequence[]{
+                (KronoConfig.glassMode == KronoConfig.GLASS_MODE_LIQUID ? "✓ " : "")
+                        + (Build.VERSION.SDK_INT >= 33 ? "Liquid Glass (Refracción y brillo)" : "Liquid Glass (Specular)"),
+                (KronoConfig.glassMode == KronoConfig.GLASS_MODE_FROSTED ? "✓ " : "") + "Frosted Glass (Esmerilado)",
+                (KronoConfig.glassMode == KronoConfig.GLASS_MODE_OFF ? "✓ " : "") + "Desactivado (Sólido)"
+        };
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle("Efecto de cristal (Glass)");
+        builder.setItems(items, (dialog, which) -> {
+            KronoConfig.setGlassMode(which);
+            applyGlassSettingsChange(null, false);
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+            dialog.dismiss();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, "Modo Glass: " + KronoConfig.getGlassModeName()).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1467,6 +1551,10 @@ public class KronoSettingsActivity extends BaseFragment {
             if (position == backgroundPushConnectionRow && KronoConfig.isPersistentForegroundService()) {
                 return false;
             }
+            if ((position == glassSettingsBarRow || position == glassSearchBarsRow
+                    || position == glassBottomBarRow || position == glassChatBarsRow) && KronoConfig.isGlassOff()) {
+                return false;
+            }
             int type = holder.getItemViewType();
             return type == 1 || type == 2 || type == 3;
         }
@@ -1500,10 +1588,14 @@ public class KronoSettingsActivity extends BaseFragment {
                        position == longClickMediaMenuRow || disablePullToNextChannelRow == position ||
                        position == showFavoritesFolderRow || position == hideAllChatsTabRow || position == spoilerWordsToggleRow ||
                        position == keepOriginalFilenameRow || position == freeVoiceTranscriptionRow || position == freeChatTranslationRow ||
-                       position == persistentForegroundServiceRow || position == backgroundPushConnectionRow || position == disableTitleMarqueeRow) {
+                       position == persistentForegroundServiceRow || position == backgroundPushConnectionRow ||
+                       position == glassSettingsBarRow || position == glassSearchBarsRow ||
+                       position == glassBottomBarRow || position == glassChatBarsRow ||
+                       position == disableTitleMarqueeRow) {
                 return 2; // TextCheckCell
             } else if (position == hiddenVaultOpenRow || position == hiddenVaultLockMethodRow ||
                        position == openThemesRow || position == monetThemeRow || position == uiStyleRow ||
+                       position == glassModeRow ||
                        position == tabModeRow || position == tabStyleRow ||
                        position == messageSwipeActionRow ||
                        position == spoilerWordsEditRow || position == clearCacheNowRow ||
@@ -1703,6 +1795,22 @@ public class KronoSettingsActivity extends BaseFragment {
                     boolean bgConn = persistent || MessagesController.getGlobalNotificationsSettings().getBoolean("pushConnection", false);
                     checkCell.setTextAndValueAndCheck("Conexión TCP en segundo plano", "Mantiene el socket MTProto activo si FCM falla o está desactivado", bgConn, true, false);
                     checkCell.setEnabled(!persistent, null);
+                } else if (position == glassSettingsBarRow) {
+                    final boolean glassMasterOn = !KronoConfig.isGlassOff();
+                    checkCell.setTextAndValueAndCheck("Cristal en barra de ajustes", "Botones y barra superior en Ajustes, Perfil y listas", glassMasterOn && KronoConfig.glassOnSettingsBar, true, true);
+                    checkCell.setEnabled(glassMasterOn, null);
+                } else if (position == glassSearchBarsRow) {
+                    final boolean glassMasterOn = !KronoConfig.isGlassOff();
+                    checkCell.setTextAndValueAndCheck("Cristal en barras de búsqueda", "Buscador principal, dentro de chats y filtros", glassMasterOn && KronoConfig.glassOnSearchBars, true, true);
+                    checkCell.setEnabled(glassMasterOn, null);
+                } else if (position == glassBottomBarRow) {
+                    final boolean glassMasterOn = !KronoConfig.isGlassOff();
+                    checkCell.setTextAndValueAndCheck("Cristal en barra inferior y pestañas", "Barra de navegación inferior y pestañas de carpetas", glassMasterOn && KronoConfig.glassOnBottomBar, true, true);
+                    checkCell.setEnabled(glassMasterOn, null);
+                } else if (position == glassChatBarsRow) {
+                    final boolean glassMasterOn = !KronoConfig.isGlassOff();
+                    checkCell.setTextAndValueAndCheck("Cristal en chat y menús", "Barra superior de chats, campo de mensaje y menús flotantes", glassMasterOn && KronoConfig.glassOnChatBars, true, true);
+                    checkCell.setEnabled(glassMasterOn, null);
                 } else if (position == disableTitleMarqueeRow) {
                     checkCell.setTextAndValueAndCheck("Quitar efecto marquee en los títulos", "Evita el desplazamiento lateral continuo en títulos largos", KronoConfig.disableTitleMarquee, true, false);
                 }
@@ -1725,6 +1833,8 @@ public class KronoSettingsActivity extends BaseFragment {
                     settingsCell.setTextAndValue("Tema Monet (Material You)", curName, true);
                 } else if (position == uiStyleRow) {
                     settingsCell.setTextAndValue("Estilo visual de interfaz", KronoConfig.getUiStyleName(), true);
+                } else if (position == glassModeRow) {
+                    settingsCell.setTextAndValue("Efecto de cristal (Glass)", KronoConfig.getGlassModeName(), true);
                 } else if (position == tabModeRow) {
                     settingsCell.setTextAndValue("Contenido de las pestañas", KronoConfig.getTabModeName(), true);
                 } else if (position == tabStyleRow) {
@@ -1806,7 +1916,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 } else if (position == telemetryInfoRow) {
                     infoCell.setText("Todas las opciones de telemetría vienen desactivadas por defecto para que elijas libremente. Nota: si activas «Desactivar Push de Google (FCM)», las notificaciones dependerán del servicio en segundo plano de Telegram y podrían llegar con ligero retraso o consumir más batería.");
                 } else if (position == themeInfoRow) {
-                    infoCell.setText("Elige directamente entre Monet Light, Monet Dark o Monet AMOLED y cambia al instante el estilo visual entre Material You (tarjetas redondeadas e interruptores M3), Estilo iOS (títulos centrados y cápsulas Cupertino) o Estilo Clásico (lista plana sin bordes).");
+                    infoCell.setText("Elige entre Monet Light, Monet Dark o Monet AMOLED y cambia al instante el estilo visual entre Material You, Estilo iOS o Estilo Clásico. También puedes elegir el modo Glass (Liquid Glass, Frosted Glass o Desactivado) y activar o desactivar el cristal de forma independiente por componente.");
                 } else if (position == storageInfoRow) {
                     infoCell.setText("También puedes añadir o quitar cualquier chat de una carpeta manteniendo pulsado el chat en la lista principal y tocando el icono de carpetas.");
                 } else if (position == aiInfoRow) {

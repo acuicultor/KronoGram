@@ -4629,9 +4629,11 @@ public class ChatActivity extends BaseFragment implements
         chatInputViewsContainer.setClipChildren(false);
         chatInputViewsContainer.setWindowInsetsProvider(windowInsetsStateHolder);
         chatInputViewsContainer.setInputIslandBubbleDrawable(
-            glassBackgroundDrawableFactory.create(chatInputViewsContainer, blurredBackgroundColorProvider));
+            glassBackgroundDrawableFactory.create(chatInputViewsContainer, blurredBackgroundColorProvider)
+                .setComponentScope(BlurredBackgroundDrawable.SCOPE_CHAT_BAR));
         chatInputViewsContainer.setUnderKeyboardBackgroundDrawable(
-            glassBackgroundDrawableFactoryFrosted.create(chatInputViewsContainer, blurredBackgroundColorProvider));
+            glassBackgroundDrawableFactoryFrosted.create(chatInputViewsContainer, blurredBackgroundColorProvider)
+                .setComponentScope(BlurredBackgroundDrawable.SCOPE_CHAT_BAR));
 
 
         chatInputBubbleContainer = chatInputViewsContainer.getInputIslandBubbleContainer();
@@ -7795,7 +7797,8 @@ public class ChatActivity extends BaseFragment implements
         messagesSearchListContainer.setVisibility(View.GONE);
         messagesSearchListContainer.setBackground(navbarContentDrawableFactory
             .create(messagesSearchListContainer)
-            .setColorProvider(BlurredBackgroundProviderImpl.topPanelChatActivitySearchListBg(themeDelegate)));
+            .setColorProvider(BlurredBackgroundProviderImpl.topPanelChatActivitySearchListBg(themeDelegate))
+            .setComponentScope(BlurredBackgroundDrawable.SCOPE_SEARCH_BAR));
         contentView.addView(messagesSearchListContainer, LayoutHelper.createFrameMatchParent());
 
         messagesSearchListView = new RecyclerListView(context, themeDelegate) {
@@ -8084,7 +8087,8 @@ public class ChatActivity extends BaseFragment implements
             hashtagSearchTabs.setPadding(0, dp(7.66f), 0, dp(7.66f));
             hashtagSearchTabs.setBackground(glassBackgroundDrawableFactory.create(hashtagSearchTabs)
                 .setColorProvider(BlurredBackgroundProviderImpl.topPanelChatActivity(resourceProvider))
-                .setRadius(dp(18)).setPadding(dp(7f)));
+                .setRadius(dp(18)).setPadding(dp(7f))
+                .setComponentScope(BlurredBackgroundDrawable.SCOPE_CHAT_BAR));
 
             contentView.addView(hashtagSearchTabs, LayoutHelper.createFrameMarginPx(LayoutHelper.MATCH_PARENT, 50, Gravity.FILL_HORIZONTAL | Gravity.TOP, 0, -dp(5), 0, 0));
         }
@@ -9286,7 +9290,8 @@ public class ChatActivity extends BaseFragment implements
         topPanelLayout.setBlurredBackground(glassBackgroundDrawableFactory.create(topPanelLayout)
             .setColorProvider(BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate))
             .setRadius(dp(18))
-            .setPadding(dp(7)));
+            .setPadding(dp(7))
+            .setComponentScope(BlurredBackgroundDrawable.SCOPE_CHAT_BAR));
 
         if (chatMode == MODE_SEARCH) {
             animatorSearchResultAsListVisibility.setValue(true, false);
@@ -10729,8 +10734,10 @@ public class ChatActivity extends BaseFragment implements
             checkUi_topFade();
         });
 
-        topicsTabs.setSideMenuBackgroundDrawable(glassBackgroundDrawableFactory.create(topicsTabs, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate)));
-        topicsTabs.setTopMenuBackgroundDrawable(glassBackgroundDrawableFactory.create(topicsTabs, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate)));
+        topicsTabs.setSideMenuBackgroundDrawable(glassBackgroundDrawableFactory.create(topicsTabs, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate))
+            .setComponentScope(BlurredBackgroundDrawable.SCOPE_CHAT_BAR));
+        topicsTabs.setTopMenuBackgroundDrawable(glassBackgroundDrawableFactory.create(topicsTabs, BlurredBackgroundProviderImpl.topPanelChatActivity(themeDelegate))
+            .setComponentScope(BlurredBackgroundDrawable.SCOPE_CHAT_BAR));
 
         int index = 8;
         topicsTabs.setCurrentTopic(getTopicId());

@@ -222,6 +222,29 @@ public class LiteMode {
 
     public static void toggleFlag(int flag, boolean enabled) {
         setAllFlags(enabled ? getValue(true) | flag : getValue(true) & ~flag);
+        if (flag == FLAG_CHAT_BLUR || flag == FLAG_LIQUID_GLASS) {
+            KronoConfig.syncGlassModeFromLiteMode();
+        }
+    }
+
+    public static void setGlassFlagsFromKrono(boolean blurEnabled, boolean liquidGlassEnabled) {
+        int current = getValue(true);
+        if (blurEnabled) {
+            current |= FLAG_CHAT_BLUR;
+        } else {
+            current &= ~FLAG_CHAT_BLUR;
+        }
+        if (liquidGlassEnabled) {
+            current |= FLAG_LIQUID_GLASS;
+        } else {
+            current &= ~FLAG_LIQUID_GLASS;
+        }
+        if (value != current) {
+            int old = value;
+            value = current;
+            savePreference();
+            onFlagsUpdate(old, value);
+        }
     }
 
     public static void setAllFlags(int flags) {
@@ -388,6 +411,7 @@ public class LiteMode {
 
     private static void onFlagsUpdate(int oldValue, int newValue) {
         int changedFlags = ~oldValue & newValue;
+        int toggledFlags = oldValue ^ newValue;
         if ((changedFlags & FLAGS_ANIMATED_EMOJI) > 0) {
             AnimatedEmojiDrawable.updateAll();
         }
@@ -397,8 +421,8 @@ public class LiteMode {
         if ((changedFlags & FLAG_CHAT_BACKGROUND) > 0) {
             Theme.reloadWallpaper(true);
         }
-        if (BitwiseUtils.hasFlag(changedFlags, FLAG_CHAT_BLUR) || BitwiseUtils.hasFlag(changedFlags, FLAG_LIQUID_GLASS)) {
-            GlassEngine.getCurrentGlassSettings();
+        if (BitwiseUtils.hasFlag(toggledFlags, FLAG_CHAT_BLUR) || BitwiseUtils.hasFlag(toggledFlags, FLAG_LIQUID_GLASS)) {
+            GlassEngine.refreshFromSettings();
         }
     }
 

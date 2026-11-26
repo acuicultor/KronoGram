@@ -8,6 +8,7 @@ import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
@@ -22,9 +23,12 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider mainTabs(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
-                final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTabs, r);
+                if (!KronoConfig.isGlassEnabledForBottomBar() || !checkBlurEnabled(r)) {
+                    return ColorUtils.setAlphaComponent(colorTarget, 255);
+                }
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.78f : 0.88f;
+                final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 return solveSrcColor(colorBg, colorTarget, alpha);
             })
             .setStrokeColorTop(0x11000000, 0x06FFFFFF)
@@ -38,9 +42,12 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider topPanel(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
-                final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final int colorTarget = Theme.getColor(Theme.key_glass_targetMainTopPanel, r);
+                if (!KronoConfig.isGlassEnabledForBottomBar() || !checkBlurEnabled(r)) {
+                    return ColorUtils.setAlphaComponent(colorTarget, 255);
+                }
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.89f;
+                final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 return solveSrcColor(colorBg, colorTarget, alpha);
             })
             .setStrokeColorTop(0x11000000, 0x06FFFFFF)
@@ -51,10 +58,38 @@ public class BlurredBackgroundProviderImpl {
             .build();
     }
 
+    public static BlurredBackgroundProvider searchField(Theme.ResourcesProvider resourcesProvider) {
+        return new BlurredBackgroundProviderBuilder(resourcesProvider)
+            .setBackgroundColor((r, isDark) -> {
+                final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                int colorTarget = Theme.getColor(Theme.key_glass_targetMainTopPanel, r);
+                final boolean darkTheme = isDark || AndroidUtilities.computePerceivedBrightness(colorBg) < 0.5f;
+                if (darkTheme && AndroidUtilities.computePerceivedBrightness(colorTarget) < 0.04f) {
+                    colorTarget = ColorUtils.blendARGB(colorTarget, 0xFF22222A, 0.85f);
+                }
+                if (!KronoConfig.isGlassEnabledForSearchBars() || !checkBlurEnabled(r)) {
+                    return ColorUtils.setAlphaComponent(colorTarget, 255);
+                }
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.79f : 0.88f;
+                return solveSrcColor(colorBg, colorTarget, alpha);
+            })
+            .setStrokeColorTop(0x11000000, 0x12FFFFFF)
+            .setStrokeColorBottom(0x20000000, 0x16FFFFFF)
+            .setShadowColor(0x20000000, 0x04FFFFFF)
+            .setShadowLayer(dpf2(2.667f), 0, dpf2(0.85f))
+            .setStrokeWidth(dpf2(0.45f), dpf2(0.45f))
+            .build();
+    }
+
     public static BlurredBackgroundProvider tabsPanelNoShadow(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
-            .setBackgroundColor((r, isDark) ->
-                Theme.multAlpha(Theme.getColor(Theme.key_windowBackgroundWhite, r), 0.88f))
+            .setBackgroundColor((r, isDark) -> {
+                final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                if (!KronoConfig.isGlassEnabledForBottomBar() || !checkBlurEnabled(r)) {
+                    return ColorUtils.setAlphaComponent(colorBg, 255);
+                }
+                return Theme.multAlpha(colorBg, 0.88f);
+            })
             .setStrokeColorTop(0, 0)
             .setStrokeColorBottom(0, 0)
             .setShadowColor(0, 0)
@@ -64,8 +99,11 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider emojiViewButton(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
-                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
                     final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                    if (!KronoConfig.isGlassEnabledForChatBars() || !checkBlurEnabled(r)) {
+                        return ColorUtils.setAlphaComponent(colorBg, 255);
+                    }
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.89f;
                     return Theme.multAlpha(colorBg, alpha);
                 })
                 .setStrokeColorTop(0xFFFFFFFF, 0x28FFFFFF)
@@ -98,10 +136,14 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider messageMenuBackground(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
-                    if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR)) {
-                        return Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground);
+                    final int bg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
+                    if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR) || !KronoConfig.isGlassEnabledForChatBars()) {
+                        return ColorUtils.setAlphaComponent(bg, 255);
                     }
-                    return Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground), isDark ? 0.85f : 0.825f);
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)
+                            ? (isDark ? 0.80f : 0.78f)
+                            : (isDark ? 0.90f : 0.88f);
+                    return Theme.multAlpha(bg, alpha);
                 })
                 .setStrokeColorTop(0x44FFFFFF, 0)
                 .setStrokeColorBottom(0x22FFFFFF, 0)
@@ -113,8 +155,16 @@ public class BlurredBackgroundProviderImpl {
 
     public static BlurredBackgroundProvider scrimMenuBackground(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
-            .setBackgroundColor((r, isDark) ->
-                Theme.multAlpha(Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r), isDark ? 0.85f : 0.825f))
+            .setBackgroundColor((r, isDark) -> {
+                final int bg = Theme.getColor(Theme.key_actionBarDefaultSubmenuBackground, r);
+                if (!LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR) || !KronoConfig.isGlassEnabledForChatBars()) {
+                    return ColorUtils.setAlphaComponent(bg, 255);
+                }
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS)
+                        ? (isDark ? 0.80f : 0.78f)
+                        : (isDark ? 0.90f : 0.88f);
+                return Theme.multAlpha(bg, alpha);
+            })
             .setStrokeColorTop(0x44FFFFFF, 0)
             .setStrokeColorBottom(0x22FFFFFF, 0)
             .setShadowColor(0x26000000, 0)
@@ -126,8 +176,11 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider attachMenuSearch(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
-                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
                     final int colorBg = Theme.getColor(Theme.key_windowBackgroundWhite, r);
+                    if (!KronoConfig.isGlassEnabledForSearchBars() || !checkBlurEnabled(r)) {
+                        return ColorUtils.setAlphaComponent(colorBg, 255);
+                    }
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.89f;
                     return Theme.multAlpha(colorBg, alpha);
                 })
                 .setStrokeColorTop(0x17000000, 0x17FFFFFF)
@@ -151,12 +204,12 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider bottomPanelChatActivity(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
                 .setBackgroundColor((r, isDark) -> {
-                    if (!checkBlurEnabled(resourcesProvider)) {
-                        return ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_chat_messagePanelBackground, r), 255);
+                    final int colorBg = Theme.getColor(Theme.key_chat_messagePanelBackground, r);
+                    if (!checkBlurEnabled(r) || !KronoConfig.isGlassEnabledForChatBars()) {
+                        return ColorUtils.setAlphaComponent(colorBg, 255);
                     }
 
-                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
-                    final int colorBg = Theme.getColor(Theme.key_chat_messagePanelBackground, r);
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.89f;
                     return Theme.multAlpha(colorBg, alpha);
                 })
                 .setStrokeColorTop(0xFFFFFFFF, 0x28FFFFFF)
@@ -211,12 +264,12 @@ public class BlurredBackgroundProviderImpl {
                 }
             }
                 .setBackgroundColor((r, isDark) -> {
-                    if (!checkBlurEnabled(resourcesProvider)) {
+                    if (!checkBlurEnabled(r) || !KronoConfig.isGlassEnabledForChatBars()) {
                         return ColorUtils.setAlphaComponent(Theme.getColor(isDark ?
                             Theme.key_actionBarDefault : Theme.key_chat_topPanelBackground, r), 255);
                     }
 
-                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                    final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.89f;
                     final int colorBg = Theme.getColor(Theme.key_chat_topPanelBackground, r);
                     return Theme.multAlpha(colorBg, alpha);
                 })
@@ -237,7 +290,6 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider simpleActionBar(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.80f;
                 final int colorBg = Theme.getColor(Theme.key_windowBackgroundGray, r);
                 int colorTarget = Theme.getColor(Theme.key_windowBackgroundWhite, r);
                 final boolean darkTheme = isDark || AndroidUtilities.computePerceivedBrightness(colorTarget) < 0.5f;
@@ -248,8 +300,15 @@ public class BlurredBackgroundProviderImpl {
                     } else if (targetBrightness < 0.04f) {
                         colorTarget = ColorUtils.blendARGB(colorTarget, 0xFF24242C, 0.85f);
                     }
-                    return Theme.multAlpha(colorTarget, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.82f : 0.90f);
+                    if (!KronoConfig.isGlassEnabledForSettingsBar() || !checkBlurEnabled(r)) {
+                        return ColorUtils.setAlphaComponent(colorTarget, 255);
+                    }
+                    return Theme.multAlpha(colorTarget, LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.78f : 0.90f);
                 }
+                if (!KronoConfig.isGlassEnabledForSettingsBar() || !checkBlurEnabled(r)) {
+                    return ColorUtils.setAlphaComponent(colorTarget, 255);
+                }
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.82f : 0.89f;
                 return solveSrcColor(colorBg, colorTarget, alpha);
             })
             .setStrokeColorTop(0xFFFFFFFF, 0x20FFFFFF)
@@ -275,12 +334,12 @@ public class BlurredBackgroundProviderImpl {
     public static BlurredBackgroundProvider topPanelChatActivityTags(Theme.ResourcesProvider resourcesProvider) {
         return new BlurredBackgroundProviderBuilder(resourcesProvider)
             .setBackgroundColor((r, isDark) -> {
-                if (!checkBlurEnabled(resourcesProvider)) {
+                if (!checkBlurEnabled(r) || !KronoConfig.isGlassEnabledForSearchBars()) {
                     return ColorUtils.setAlphaComponent(Theme.getColor(isDark ?
                             Theme.key_actionBarDefault : Theme.key_chat_topPanelBackground, r), 255);
                 }
 
-                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.85f : 0.76f;
+                final float alpha = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS) ? 0.80f : 0.88f;
                 final int colorBg = Theme.getColor(Theme.key_chat_topPanelBackground, r);
                 return Theme.multAlpha(colorBg, alpha);
             })

@@ -6,11 +6,13 @@ import static org.telegram.messenger.AndroidUtilities.lerp;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import androidx.core.graphics.ColorUtils;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -149,11 +151,15 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         if (factory == null) {
             return;
         }
+        final float radius = dp(KronoConfig.getActionBarGlassRadiusDp());
         final BlurredBackgroundColorProvider buttonsColors = buttonsGlassColorProvider != null ? buttonsGlassColorProvider : glassColorProvider;
-        glassBack = factory.create(this).setColorProvider(buttonsColors).setRadius(dp(23)).setPadding(dp(6));
-        glassMenu = factory.create(this).setColorProvider(buttonsColors).setRadius(dp(23)).setPadding(dp(6));
-        glassDone = factory.create(this).setColorProvider(buttonsColors).setRadius(dp(23)).setPadding(dp(6));
-        glassMenuRadius = dp(23);
+        glassBack = factory.create(this).setColorProvider(buttonsColors).setRadius(radius).setPadding(dp(6));
+        glassBack.setComponentScope(BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
+        glassMenu = factory.create(this).setColorProvider(buttonsColors).setRadius(radius).setPadding(dp(6));
+        glassMenu.setComponentScope(searchFieldVisible ? BlurredBackgroundDrawable.SCOPE_SEARCH_BAR : BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
+        glassDone = factory.create(this).setColorProvider(buttonsColors).setRadius(radius).setPadding(dp(6));
+        glassDone.setComponentScope(BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
+        glassMenuRadius = radius;
         invalidate();
     }
 
@@ -256,7 +262,11 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         if (factory == null) {
             return null;
         }
-        return factory.create(owner).setColorProvider(glassColorProvider).setRadius(dp(23)).setPadding(dp(6));
+        return factory.create(owner)
+                .setColorProvider(glassColorProvider)
+                .setRadius(dp(KronoConfig.getActionBarGlassRadiusDp()))
+                .setPadding(dp(6))
+                .setComponentScope(BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
     }
 
     /* Menu overlay */
@@ -358,7 +368,8 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             // a menu growing out of the pill takes over its glass
             final boolean pillInOverlay = isMenuPillInOverlay();
             if (alpha > 0 && menuPillRect.width() > 0 && !pillInOverlay) {
-                final float radius = menuPillRect.height() / 2f;
+                final float maxStyleRadius = dp(searchFieldVisible ? KronoConfig.getSearchFieldGlassRadiusDp() : KronoConfig.getActionBarGlassRadiusDp());
+                final float radius = Math.min(menuPillRect.height() / 2f, maxStyleRadius);
                 if (Math.abs(radius - glassMenuRadius) > 0.5f) {
                     glassMenuRadius = radius;
                     glassMenu.setRadius(radius);
@@ -638,12 +649,17 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             updateSearchColors();
         }
         if (glassBack != null) {
+            glassBack.setRadius(dp(KronoConfig.getActionBarGlassRadiusDp()));
             glassBack.updateColors();
         }
         if (glassMenu != null) {
+            glassMenuRadius = -1;
+            glassMenu.setComponentScope(searchFieldVisible ? BlurredBackgroundDrawable.SCOPE_SEARCH_BAR : BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
+            glassMenu.setRadius(dp(searchFieldVisible ? KronoConfig.getSearchFieldGlassRadiusDp() : KronoConfig.getActionBarGlassRadiusDp()));
             glassMenu.updateColors();
         }
         if (glassDone != null) {
+            glassDone.setRadius(dp(KronoConfig.getActionBarGlassRadiusDp()));
             glassDone.updateColors();
         }
         invalidate();
@@ -696,6 +712,7 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         super.onAttachedToWindow();
         attached = true;
         NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.didSetNewTheme);
+        NotificationCenter.getGlobalInstance().addWeakObserver(this, NotificationCenter.reloadInterface);
     }
 
     @Override
@@ -704,11 +721,12 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         attached = false;
         animationsAllowed = false;
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.didSetNewTheme);
+        NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.reloadInterface);
     }
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.didSetNewTheme) {
+        if (id == NotificationCenter.didSetNewTheme || id == NotificationCenter.reloadInterface) {
             updateColors();
         }
     }
@@ -1080,6 +1098,11 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
         }
         createSearchLayout();
         searchFieldVisible = true;
+        if (glassMenu != null) {
+            glassMenu.setComponentScope(BlurredBackgroundDrawable.SCOPE_SEARCH_BAR);
+            glassMenu.invalidateDisplayList();
+        }
+        updateSearchColors();
         if (menu != null) {
             menu.hideAllPopupMenus();
         }
@@ -1110,6 +1133,10 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
             return;
         }
         searchFieldVisible = false;
+        if (glassMenu != null) {
+            glassMenu.setComponentScope(BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
+            glassMenu.invalidateDisplayList();
+        }
         searchField.clearFocus();
         if (closeKeyboard) {
             AndroidUtilities.hideKeyboard(searchField);
@@ -1237,13 +1264,32 @@ public class SimpleActionBar extends FrameLayout implements FactorAnimator.Targe
     }
 
     private void updateSearchColors() {
-        searchField.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
-        searchCaptionView.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
-        searchField.setHintTextColor(getThemedColor(Theme.key_windowBackgroundWhiteHintText));
-        searchField.setCursorColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
+        int textColor = getThemedColor(Theme.key_windowBackgroundWhiteBlackText);
+        int hintColor = getThemedColor(Theme.key_windowBackgroundWhiteHintText);
+        int iconColor = getThemedColor(Theme.key_windowBackgroundWhiteGrayIcon);
+
+        final BlurredBackgroundColorProvider bgProvider = buttonsGlassColorProvider != null ? buttonsGlassColorProvider : glassColorProvider;
+        if (bgProvider != null) {
+            final int pillBg = bgProvider.getBackgroundColor();
+            if (Color.alpha(pillBg) > 0) {
+                final int windowBg = ColorUtils.setAlphaComponent(getThemedColor(Theme.key_windowBackgroundWhite), 255);
+                final int effectiveSurface = Color.alpha(pillBg) >= 245 ? ColorUtils.setAlphaComponent(pillBg, 255) : ColorUtils.compositeColors(pillBg, windowBg);
+                final boolean lightSurface = AndroidUtilities.computePerceivedBrightness(effectiveSurface) > 0.5f;
+                if (ColorUtils.calculateContrast(ColorUtils.setAlphaComponent(textColor, 255), effectiveSurface) < 4.5) {
+                    textColor = lightSurface ? 0xFF1A1A1A : Color.WHITE;
+                    hintColor = ColorUtils.setAlphaComponent(textColor, 150);
+                    iconColor = ColorUtils.setAlphaComponent(textColor, 190);
+                }
+            }
+        }
+
+        searchField.setTextColor(textColor);
+        searchCaptionView.setTextColor(textColor);
+        searchField.setHintTextColor(hintColor);
+        searchField.setCursorColor(textColor);
         searchField.setHighlightColor(getThemedColor(Theme.key_chat_inTextSelectionHighlight));
         searchField.setHandlesColor(getThemedColor(Theme.key_chat_TextSelectionCursor));
-        final PorterDuffColorFilter filter = new PorterDuffColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteGrayIcon), PorterDuff.Mode.SRC_IN);
+        final PorterDuffColorFilter filter = new PorterDuffColorFilter(iconColor, PorterDuff.Mode.SRC_IN);
         searchClearButton.setColorFilter(filter);
         searchClearButton.setBackground(Theme.createSelectorDrawable(itemsBackgroundColor, 1));
     }

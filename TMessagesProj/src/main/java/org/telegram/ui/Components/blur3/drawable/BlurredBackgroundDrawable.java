@@ -28,6 +28,7 @@ import androidx.annotation.RequiresApi;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.math.MathUtils;
 
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.utils.RadiiUtils;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.blur3.Blur3HashImpl;
@@ -399,11 +400,20 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
     }
 
     private void drawRim(Canvas canvas, float alpha) {
+        final float rimFactor;
+        if (!isBlurAllowedForScope()) {
+            rimFactor = 0.35f;
+        } else if (getGlassSettings().isLiquidGlassEnabled) {
+            rimFactor = Build.VERSION.SDK_INT >= 33 ? 1.0f : 1.15f;
+        } else {
+            rimFactor = 0.60f;
+        }
+        final float effectiveAlpha = Math.min(1f, alpha * rimFactor);
         final Rect r = boundProps.boundsWithPadding;
         if (boundProps.hasArrow()) {
-            rimRenderer.drawPath(canvas, boundProps.path, boundProps.shapeKey, r.left, r.top, r.right, r.bottom, getRim(), alpha);
+            rimRenderer.drawPath(canvas, boundProps.path, boundProps.shapeKey, r.left, r.top, r.right, r.bottom, getRim(), effectiveAlpha);
         } else {
-            rimRenderer.draw(canvas, r.left, r.top, r.right, r.bottom, boundProps.radii, getRim(), alpha);
+            rimRenderer.draw(canvas, r.left, r.top, r.right, r.bottom, boundProps.radii, getRim(), effectiveAlpha);
         }
     }
 
@@ -726,8 +736,48 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
 
     /* Liquid glass and the glass settings */
 
+    public static final int SCOPE_GLOBAL = 0;
+    public static final int SCOPE_SETTINGS_BAR = 1;
+    public static final int SCOPE_SEARCH_BAR = 2;
+    public static final int SCOPE_BOTTOM_BAR = 3;
+    public static final int SCOPE_CHAT_BAR = 4;
+
+    private int componentScope = SCOPE_GLOBAL;
     private boolean liquidGlassEffectAllowed;
     private int glassSettingsGeneration = GlassEngine.getGlassSettingsGenerationId();
+
+    public BlurredBackgroundDrawable setComponentScope(int scope) {
+        if (this.componentScope != scope) {
+            this.componentScope = scope;
+            implInvalidated = true;
+            updateColors();
+            invalidateSelf();
+        }
+        return this;
+    }
+
+    public int getComponentScope() {
+        return componentScope;
+    }
+
+    public boolean isBlurAllowedForScope() {
+        if (!getGlassSettings().isBlurEnabled) {
+            return false;
+        }
+        switch (componentScope) {
+            case SCOPE_SETTINGS_BAR:
+                return KronoConfig.isGlassEnabledForSettingsBar();
+            case SCOPE_SEARCH_BAR:
+                return KronoConfig.isGlassEnabledForSearchBars();
+            case SCOPE_BOTTOM_BAR:
+                return KronoConfig.isGlassEnabledForBottomBar();
+            case SCOPE_CHAT_BAR:
+                return KronoConfig.isGlassEnabledForChatBars();
+            case SCOPE_GLOBAL:
+            default:
+                return true;
+        }
+    }
 
     /** The screen wants the liquid glass here: it is drawn while the glass settings have it on (Android 13+). */
     public void setLiquidGlassEffectAllowed() {
@@ -738,11 +788,11 @@ public class BlurredBackgroundDrawable extends GlassDrawable implements Theme.Co
     }
 
     private boolean isLiquidGlassEffectEnabled() {
-        return liquidGlassEffectAllowed && getGlassSettings().isLiquidGlassEnabled && Build.VERSION.SDK_INT >= 33;
+        return liquidGlassEffectAllowed && isBlurAllowedForScope() && getGlassSettings().isLiquidGlassEnabled && Build.VERSION.SDK_INT >= 33;
     }
 
     private GlassSource pickSource() {
-        if (!getGlassSettings().isBlurEnabled) {
+        if (!isBlurAllowedForScope()) {
             return staticSource;
         }
         return isLiquidGlassEffectEnabled() ? glassSource : frostedSource;

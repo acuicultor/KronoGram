@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
 
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.postdrawcompat.OnPostDrawListener;
 import org.telegram.messenger.postdrawcompat.ViewOnPostDrawListener;
@@ -602,17 +603,23 @@ public class GlassEngine {
     private static int glassSettingsGenerationId;
 
     private static void checkGlassSettings() {
-        final boolean isBlurEnabled = LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
-        final boolean isLiquidGlassEnabled = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        final boolean isBlurEnabled = !KronoConfig.isGlassOff() && LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
+        final boolean isLiquidGlassEnabled = isBlurEnabled && (KronoConfig.isLiquidGlassSelected() || LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS));
+        final int togglesMask = KronoConfig.getGlassTogglesMask();
 
         final boolean glassSettingsInvalidated = glassSettings == null
             || glassSettings.isBlurEnabled != isBlurEnabled
-            || glassSettings.isLiquidGlassEnabled != isLiquidGlassEnabled;
+            || glassSettings.isLiquidGlassEnabled != isLiquidGlassEnabled
+            || glassSettings.togglesMask != togglesMask;
 
         if (glassSettingsInvalidated) {
-            glassSettings = new GlassSettings(isBlurEnabled, isLiquidGlassEnabled);
+            glassSettings = new GlassSettings(isBlurEnabled, isLiquidGlassEnabled, togglesMask);
             glassSettingsGenerationId++;
         }
+    }
+
+    public static void refreshFromSettings() {
+        checkGlassSettings();
     }
 
     public static GlassSettings getCurrentGlassSettings() {

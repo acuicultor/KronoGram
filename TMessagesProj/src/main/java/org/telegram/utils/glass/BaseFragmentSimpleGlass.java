@@ -24,6 +24,7 @@ import org.telegram.ui.Components.ViewPagerFixed;
 import org.telegram.ui.Components.blur3.BlurredBackgroundDrawableViewFactory;
 import org.telegram.ui.Components.blur3.BlurredBackgroundWithFadeDrawable;
 import org.telegram.ui.Components.blur3.capture.IBlur3Capture;
+import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.ui.Components.blur3.drawable.color.impl.BlurredBackgroundProviderImpl;
 import org.telegram.utils.glass.source.GlassSourceColor;
 import org.telegram.utils.glass.source.GlassSourceCrossfade;
@@ -176,6 +177,7 @@ public class BaseFragmentSimpleGlass {
         glassBlurredFadeDrawable.setOverlayOnlyAlpha(210);
         glassBlurredFadeDrawable.setOverlayOnlyRange(gradientRangeFallback);
 
+        glassBlurredFadeDrawable.setComponentScope(BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
         glassEngine.registerDrawable(view, glassBlurredFadeDrawable);
         return glassBlurredFadeDrawable;
     }
@@ -201,6 +203,7 @@ public class BaseFragmentSimpleGlass {
         glassBlurredFadeDrawable.setOverlayOnlyAlpha(210);
         glassBlurredFadeDrawable.setOverlayOnlyRange(gradientRangeFallback);
 
+        glassBlurredFadeDrawable.setComponentScope(BlurredBackgroundDrawable.SCOPE_BOTTOM_BAR);
         glassEngine.registerDrawable(view, glassBlurredFadeDrawable);
         return glassBlurredFadeDrawable;
     }
@@ -270,6 +273,7 @@ public class BaseFragmentSimpleGlass {
             actionBar.setCenterTitleAndGlass(true);
             actionBar.setExtraHeight(dp(6));
             actionBar.doNotDrawCenterGlass = true;
+            actionBar.setGlassComponentScope(BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR);
             actionBar.setupGlass(factory, BlurredBackgroundProviderImpl.simpleActionBar(resourceProvider));
         }
     }

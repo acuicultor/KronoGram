@@ -35,6 +35,7 @@ import androidx.annotation.NonNull;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBarMenuItem;
@@ -210,8 +211,9 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
     }
 
     public void setupBlurredBackground(BlurredBackgroundDrawable drawable) {
-        drawable.setRadius(dp(20));
+        drawable.setRadius(dp(KronoConfig.getSearchFieldGlassRadiusDp()));
         drawable.setPadding(dp(4));
+        drawable.setComponentScope(BlurredBackgroundDrawable.SCOPE_SEARCH_BAR);
         blurredBackgroundDrawable = drawable;
     }
 
@@ -275,9 +277,10 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
     @Override
     public void updateColors() {
         final boolean isDark = resourcesProvider != null ? resourcesProvider.isDark() : Theme.isCurrentThemeDark();
+        final int radiusDp = KronoConfig.getSearchFieldGlassRadiusDp();
         bg = isSectionBackground ?
-            Theme.createRoundRectDrawableShadowed(dp(20), getThemedColor(Theme.key_windowBackgroundWhite)) :
-            Theme.createRoundRectDrawable(dp(20), isWhiteBackground ? getThemedColor(Theme.key_windowBackgroundWhite) : getThemedColor(Theme.key_windowBackgroundWhiteBlackText, isDark ? 0.14f : 0.06f));
+            Theme.createRoundRectDrawableShadowed(dp(radiusDp), getThemedColor(Theme.key_windowBackgroundWhite)) :
+            Theme.createRoundRectDrawable(dp(radiusDp), isWhiteBackground ? getThemedColor(Theme.key_windowBackgroundWhite) : getThemedColor(Theme.key_windowBackgroundWhiteBlackText, isDark ? 0.14f : 0.06f));
         searchIcon.setColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteBlackText, 0.6f), PorterDuff.Mode.MULTIPLY);
         closeIcon.setColorFilter(getThemedColor(Theme.key_windowBackgroundWhiteBlackText, 0.6f), PorterDuff.Mode.MULTIPLY);
         closeIcon.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector), 1, dp(17)));
@@ -285,6 +288,7 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
         editText.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
         editText.setCursorColor(getThemedColor(Theme.key_groupcreate_cursor));
         if (blurredBackgroundDrawable != null) {
+            blurredBackgroundDrawable.setRadius(dp(radiusDp));
             blurredBackgroundDrawable.updateColors();
         }
 

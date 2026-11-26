@@ -99,6 +99,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private BlurredBackgroundDrawable glassDrawable;
     private BlurredBackgroundDrawable glassDrawableBack;
     private BlurredBackgroundDrawable glassDrawableMenu;
+    private int glassComponentScope = BlurredBackgroundDrawable.SCOPE_CHAT_BAR;
     private INavigationLayout.BackButtonState backButtonState = INavigationLayout.BackButtonState.BACK;
     public ImageView backButtonImageView;
     private BackupImageView avatarSearchImageView;
@@ -242,6 +243,16 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         setupGlass(factory, colorProvider, false);
     }
 
+    public void setGlassComponentScope(int scope) {
+        if (glassComponentScope != scope) {
+            glassComponentScope = scope;
+            if (glassDrawable != null) glassDrawable.setComponentScope(scope);
+            if (glassDrawableBack != null) glassDrawableBack.setComponentScope(scope);
+            if (glassDrawableMenu != null && !isSearchFieldVisible) glassDrawableMenu.setComponentScope(scope);
+            if (glassDrawableRightAvatar != null) glassDrawableRightAvatar.setComponentScope(scope);
+        }
+    }
+
     public void setupGlass(BlurredBackgroundDrawableViewFactory factory,
                            BlurredBackgroundColorProvider colorProvider,
                            boolean isForum) {
@@ -252,10 +263,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         glassFactory = factory;
         glassColorProvider = colorProvider;
 
-        final float glassRadius = KronoConfig.isIosStyle() ? dp(19) : (KronoConfig.isTelegramXStyle() ? dp(14) : dp(23));
+        final float glassRadius = dp(KronoConfig.getActionBarGlassRadiusDp());
         glassDrawable = factory.create(this)
                 .setColorProvider(colorProvider)
-                .setPadding(dp(6));
+                .setPadding(dp(6))
+                .setComponentScope(glassComponentScope);
         if (isForum) {
             glassDrawable.setRadius(dp(18.33f), glassRadius, glassRadius, dp(18.33f));
         } else {
@@ -266,17 +278,20 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         glassDrawableBack = factory.create(this)
                 .setColorProvider(colorProvider)
                 .setRadius(glassRadius)
-                .setPadding(dp(6));
+                .setPadding(dp(6))
+                .setComponentScope(glassComponentScope);
 
         glassDrawableMenu = factory.create(this)
                 .setColorProvider(colorProvider)
                 .setRadius(glassRadius)
-                .setPadding(dp(6));
+                .setPadding(dp(6))
+                .setComponentScope(isSearchFieldVisible ? BlurredBackgroundDrawable.SCOPE_SEARCH_BAR : glassComponentScope);
 
         glassDrawableRightAvatar = factory.create(this)
                 .setColorProvider(colorProvider)
                 .setRadius(glassRadius)
-                .setPadding(dp(6));
+                .setPadding(dp(6))
+                .setComponentScope(glassComponentScope);
 
         if (menu != null) {
             menu.setTranslationX(-dp(10));
@@ -326,7 +341,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
         if (factory == null) {
             return null;
         }
-        return factory.create(owner).setColorProvider(glassColorProvider).setRadius(dp(23)).setPadding(dp(6));
+        return factory.create(owner)
+                .setColorProvider(glassColorProvider)
+                .setRadius(dp(KronoConfig.getActionBarGlassRadiusDp()))
+                .setPadding(dp(6))
+                .setComponentScope(glassComponentScope);
     }
 
     @Override
@@ -1414,6 +1433,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public void onSearchFieldVisibilityChanged(boolean visible) {
         isSearchFieldVisible = visible;
+        if (glassDrawableMenu != null) {
+            glassDrawableMenu.setComponentScope(visible ? BlurredBackgroundDrawable.SCOPE_SEARCH_BAR : glassComponentScope);
+            glassDrawableMenu.setRadius(dp(visible ? KronoConfig.getSearchFieldGlassRadiusDp() : KronoConfig.getActionBarGlassRadiusDp()));
+            glassDrawableMenu.invalidateDisplayList();
+        }
         if (visible && menu != null) {
             menu.refreshSearchFieldColors();
         }
@@ -2718,14 +2742,26 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     @Override
     public void updateColors() {
         adaptive_updateColor();
+        final float glassRadius = dp(KronoConfig.getActionBarGlassRadiusDp());
         if (glassDrawable != null) {
+            if (glassModeIsForum) {
+                glassDrawable.setRadius(dp(18.33f), glassRadius, glassRadius, dp(18.33f));
+            } else {
+                glassDrawable.setRadius(glassRadius);
+            }
             glassDrawable.updateColors();
         }
         if (glassDrawableMenu != null) {
+            glassDrawableMenu.setRadius(dp(isSearchFieldVisible ? KronoConfig.getSearchFieldGlassRadiusDp() : KronoConfig.getActionBarGlassRadiusDp()));
             glassDrawableMenu.updateColors();
         }
         if (glassDrawableBack != null) {
+            glassDrawableBack.setRadius(glassRadius);
             glassDrawableBack.updateColors();
+        }
+        if (glassDrawableRightAvatar != null) {
+            glassDrawableRightAvatar.setRadius(glassRadius);
+            glassDrawableRightAvatar.updateColors();
         }
         if (additionalSubTitleOverlayContainer != null) {
             additionalSubTitleOverlayContainer.updateColors();

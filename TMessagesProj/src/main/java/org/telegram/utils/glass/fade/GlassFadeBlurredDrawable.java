@@ -25,8 +25,10 @@ import androidx.annotation.RequiresApi;
 
 import org.intellij.lang.annotations.Language;
 import org.telegram.messenger.BuildConfig;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.utils.GradientProtectionDrawable;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Components.blur3.drawable.BlurredBackgroundDrawable;
 import org.telegram.utils.glass.source.GlassSourceColor;
 import org.telegram.utils.glass.GlassDrawable;
 import org.telegram.utils.glass.GlassSettings;
@@ -60,6 +62,7 @@ public class GlassFadeBlurredDrawable extends GlassDrawable {
     private final Impl blurredImpl;
     private final Impl overlayOnlyImpl;
     private Impl impl;
+    private int componentScope = BlurredBackgroundDrawable.SCOPE_GLOBAL;
 
     private boolean shaderDirty = true;
     private boolean overlayOnlyDirty = true;
@@ -99,6 +102,32 @@ public class GlassFadeBlurredDrawable extends GlassDrawable {
             return SourceType.OVERLAY_ONLY;
         }
         return SourceType.DEFAULT;
+    }
+
+    public void setComponentScope(int scope) {
+        if (componentScope != scope) {
+            componentScope = scope;
+            onGlassSettingsChanged(getGlassSettings());
+        }
+    }
+
+    private boolean isBlurAllowedForScope(GlassSettings glassSettings) {
+        if (!glassSettings.isBlurEnabled) {
+            return false;
+        }
+        switch (componentScope) {
+            case BlurredBackgroundDrawable.SCOPE_SETTINGS_BAR:
+                return KronoConfig.isGlassEnabledForSettingsBar();
+            case BlurredBackgroundDrawable.SCOPE_SEARCH_BAR:
+                return KronoConfig.isGlassEnabledForSearchBars();
+            case BlurredBackgroundDrawable.SCOPE_BOTTOM_BAR:
+                return KronoConfig.isGlassEnabledForBottomBar();
+            case BlurredBackgroundDrawable.SCOPE_CHAT_BAR:
+                return KronoConfig.isGlassEnabledForChatBars();
+            case BlurredBackgroundDrawable.SCOPE_GLOBAL:
+            default:
+                return true;
+        }
     }
 
     public void setInefficientRenderPathsAllowed(boolean allowed) {
@@ -194,7 +223,7 @@ public class GlassFadeBlurredDrawable extends GlassDrawable {
 
     @Override
     protected void onGlassSettingsChanged(GlassSettings glassSettings) {
-        final Impl newImpl = glassSettings.isBlurEnabled ? blurredImpl : overlayOnlyImpl;
+        final Impl newImpl = isBlurAllowedForScope(glassSettings) ? blurredImpl : overlayOnlyImpl;
         if (impl != newImpl) {
             if (impl != null) {
                 impl.discard();

@@ -125,6 +125,16 @@ public class KronoConfig {
     public static int uiStyle = UI_STYLE_MATERIAL_YOU;
     public static boolean disableTitleMarquee = false;
 
+    // 3b. Glass / Blur Mode & Per-Component Toggles
+    public static final int GLASS_MODE_LIQUID = 0;
+    public static final int GLASS_MODE_FROSTED = 1;
+    public static final int GLASS_MODE_OFF = 2;
+    public static int glassMode = GLASS_MODE_LIQUID;
+    public static boolean glassOnSettingsBar = true;
+    public static boolean glassOnSearchBars = true;
+    public static boolean glassOnBottomBar = true;
+    public static boolean glassOnChatBars = true;
+
     // 4. AI, Voice & Translation
     public static boolean freeVoiceTranscription = true;
     public static boolean freeChatTranslation = true;
@@ -226,6 +236,20 @@ public class KronoConfig {
 
         uiStyle = preferences.getInt("uiStyle", UI_STYLE_MATERIAL_YOU);
         disableTitleMarquee = preferences.getBoolean("disableTitleMarquee", false);
+        if (preferences.contains("glassMode")) {
+            glassMode = preferences.getInt("glassMode", GLASS_MODE_LIQUID);
+        } else {
+            boolean hasBlur = LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
+            boolean hasLiquid = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+            glassMode = !hasBlur ? GLASS_MODE_OFF : (hasLiquid ? GLASS_MODE_LIQUID : GLASS_MODE_FROSTED);
+        }
+        if (glassMode < GLASS_MODE_LIQUID || glassMode > GLASS_MODE_OFF) {
+            glassMode = GLASS_MODE_LIQUID;
+        }
+        glassOnSettingsBar = preferences.getBoolean("glassOnSettingsBar", true);
+        glassOnSearchBars = preferences.getBoolean("glassOnSearchBars", true);
+        glassOnBottomBar = preferences.getBoolean("glassOnBottomBar", true);
+        glassOnChatBars = preferences.getBoolean("glassOnChatBars", true);
         freeVoiceTranscription = preferences.getBoolean("freeVoiceTranscription", true);
         freeChatTranslation = preferences.getBoolean("freeChatTranslation", true);
         voiceTranscriptionMode = preferences.getInt("voiceTranscriptionMode", VOICE_TRANSCRIBE_MODE_AUTO);
@@ -481,6 +505,11 @@ public class KronoConfig {
                 .putString("favoriteDialogs", favBuilder.toString())
                 .putInt("uiStyle", uiStyle)
                 .putBoolean("disableTitleMarquee", disableTitleMarquee)
+                .putInt("glassMode", glassMode)
+                .putBoolean("glassOnSettingsBar", glassOnSettingsBar)
+                .putBoolean("glassOnSearchBars", glassOnSearchBars)
+                .putBoolean("glassOnBottomBar", glassOnBottomBar)
+                .putBoolean("glassOnChatBars", glassOnChatBars)
                 .putBoolean("freeVoiceTranscription", freeVoiceTranscription)
                 .putBoolean("freeChatTranslation", freeChatTranslation)
                 .putInt("voiceTranscriptionMode", voiceTranscriptionMode)
@@ -694,12 +723,64 @@ public class KronoConfig {
         loadConfig();
         uiStyle = style;
         saveConfig();
+        org.telegram.utils.glass.GlassEngine.refreshFromSettings();
     }
 
     public static synchronized void setDisableTitleMarquee(boolean value) {
         loadConfig();
         disableTitleMarquee = value;
         saveConfig();
+    }
+
+    public static synchronized void setGlassMode(int mode) {
+        loadConfig();
+        if (mode < GLASS_MODE_LIQUID || mode > GLASS_MODE_OFF) {
+            mode = GLASS_MODE_LIQUID;
+        }
+        glassMode = mode;
+        saveConfig();
+        LiteMode.setGlassFlagsFromKrono(mode != GLASS_MODE_OFF, mode == GLASS_MODE_LIQUID);
+        org.telegram.utils.glass.GlassEngine.refreshFromSettings();
+    }
+
+    public static synchronized void syncGlassModeFromLiteMode() {
+        loadConfig();
+        boolean blur = LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
+        boolean liquid = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        int derived = !blur ? GLASS_MODE_OFF : (liquid ? GLASS_MODE_LIQUID : GLASS_MODE_FROSTED);
+        if (glassMode != derived) {
+            glassMode = derived;
+            saveConfig();
+        }
+        org.telegram.utils.glass.GlassEngine.refreshFromSettings();
+    }
+
+    public static synchronized void setGlassOnSettingsBar(boolean value) {
+        loadConfig();
+        glassOnSettingsBar = value;
+        saveConfig();
+        org.telegram.utils.glass.GlassEngine.refreshFromSettings();
+    }
+
+    public static synchronized void setGlassOnSearchBars(boolean value) {
+        loadConfig();
+        glassOnSearchBars = value;
+        saveConfig();
+        org.telegram.utils.glass.GlassEngine.refreshFromSettings();
+    }
+
+    public static synchronized void setGlassOnBottomBar(boolean value) {
+        loadConfig();
+        glassOnBottomBar = value;
+        saveConfig();
+        org.telegram.utils.glass.GlassEngine.refreshFromSettings();
+    }
+
+    public static synchronized void setGlassOnChatBars(boolean value) {
+        loadConfig();
+        glassOnChatBars = value;
+        saveConfig();
+        org.telegram.utils.glass.GlassEngine.refreshFromSettings();
     }
 
     public static synchronized void setTabMode(int mode) {
@@ -1593,6 +1674,94 @@ public class KronoConfig {
             case UI_STYLE_MATERIAL_YOU:
             default:
                 return 18;
+        }
+    }
+
+    public static boolean isLiquidGlassSelected() {
+        loadConfig();
+        return glassMode == GLASS_MODE_LIQUID;
+    }
+
+    public static boolean isFrostedGlassSelected() {
+        loadConfig();
+        return glassMode == GLASS_MODE_FROSTED;
+    }
+
+    public static boolean isGlassOff() {
+        loadConfig();
+        return glassMode == GLASS_MODE_OFF;
+    }
+
+    public static boolean isGlassEnabledForSettingsBar() {
+        loadConfig();
+        return glassMode != GLASS_MODE_OFF && glassOnSettingsBar;
+    }
+
+    public static boolean isGlassEnabledForSearchBars() {
+        loadConfig();
+        return glassMode != GLASS_MODE_OFF && glassOnSearchBars;
+    }
+
+    public static boolean isGlassEnabledForBottomBar() {
+        loadConfig();
+        return glassMode != GLASS_MODE_OFF && glassOnBottomBar;
+    }
+
+    public static boolean isGlassEnabledForChatBars() {
+        loadConfig();
+        return glassMode != GLASS_MODE_OFF && glassOnChatBars;
+    }
+
+    public static int getGlassTogglesMask() {
+        loadConfig();
+        int mask = (glassMode & 0x3);
+        if (glassOnSettingsBar) mask |= (1 << 2);
+        if (glassOnSearchBars) mask |= (1 << 3);
+        if (glassOnBottomBar) mask |= (1 << 4);
+        if (glassOnChatBars) mask |= (1 << 5);
+        mask |= ((uiStyle & 0x3) << 6);
+        return mask;
+    }
+
+    public static int getActionBarGlassRadiusDp() {
+        loadConfig();
+        switch (uiStyle) {
+            case UI_STYLE_IOS:
+                return 19;
+            case UI_STYLE_TELEGRAM_X:
+                return 14;
+            case UI_STYLE_MATERIAL_YOU:
+            default:
+                return 23;
+        }
+    }
+
+    public static int getSearchFieldGlassRadiusDp() {
+        loadConfig();
+        switch (uiStyle) {
+            case UI_STYLE_IOS:
+                return 16;
+            case UI_STYLE_TELEGRAM_X:
+                return 12;
+            case UI_STYLE_MATERIAL_YOU:
+            default:
+                return 22;
+        }
+    }
+
+    public static String getGlassModeName() {
+        loadConfig();
+        switch (glassMode) {
+            case GLASS_MODE_FROSTED:
+                return "Frosted Glass";
+            case GLASS_MODE_OFF:
+                return "Desactivado (Sólido)";
+            case GLASS_MODE_LIQUID:
+            default:
+                if (android.os.Build.VERSION.SDK_INT < 33) {
+                    return "Liquid Glass (Specular)";
+                }
+                return "Liquid Glass";
         }
     }
 

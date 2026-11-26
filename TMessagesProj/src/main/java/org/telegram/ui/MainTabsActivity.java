@@ -384,6 +384,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsViewBackground = iBlur3FactoryGlass.create(tabsView, BlurredBackgroundProviderImpl.mainTabs(resourceProvider));
         tabsViewBackground.setRadius(dp(DialogsActivity.MAIN_TABS_HEIGHT / 2f));
         tabsViewBackground.setPadding(dp(DialogsActivity.MAIN_TABS_MARGIN - 0.334f));
+        tabsViewBackground.setComponentScope(BlurredBackgroundDrawable.SCOPE_BOTTOM_BAR);
         tabsView.setBackground(tabsViewBackground);
 
         BlurredBackgroundDrawableViewFactory iBlur3FactoryFade = new BlurredBackgroundDrawableViewFactory(iBlur3SourceColor);
@@ -1236,7 +1237,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     @Nullable
     private GlassSourceRenderNode getActiveTabSource() {
         final GlassSettings settings = GlassEngine.getCurrentGlassSettings();
-        if (!settings.isBlurEnabled) {
+        if (!settings.isBlurEnabled || !org.telegram.messenger.KronoConfig.isGlassEnabledForBottomBar()) {
             return null;
         }
         return settings.isLiquidGlassEnabled && Build.VERSION.SDK_INT >= 33 ? iBlur3SourceTabGlass : iBlur3SourceTabFrosted;
