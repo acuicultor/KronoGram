@@ -11686,4 +11686,6 @@
     <string name="KronoLongClickMediaMenuDesc">Long-press search or shared media items for quick options like Go to message, Select and Forward</string>
     <string name="KronoPhoneHidden">Hidden number</string>
     <string name="KronoHiddenChat">Hidden chat</string>
+    <string name="KronoSmoothSplashAnimation">Smooth launch animation</string>
+    <string name="KronoSmoothSplashAnimationDesc">Let the KronoGram splash icon finish and fade smoothly without delaying app loading (Android 12+)</string>
 </resources>

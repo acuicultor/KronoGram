@@ -127,6 +127,7 @@ public class KronoConfig {
     public static final int UI_STYLE_TELEGRAM_X = 2;
     public static int uiStyle = UI_STYLE_MATERIAL_YOU;
     public static boolean disableTitleMarquee = false;
+    public static boolean smoothSplashAnimation = true;
 
     // 3b. Glass / Blur Mode & Per-Component Toggles
     public static final int GLASS_MODE_LIQUID = 0;
@@ -220,6 +221,7 @@ public class KronoConfig {
 
         uiStyle = preferences.getInt("uiStyle", UI_STYLE_MATERIAL_YOU);
         disableTitleMarquee = preferences.getBoolean("disableTitleMarquee", false);
+        smoothSplashAnimation = preferences.getBoolean("smoothSplashAnimation", true);
         if (preferences.contains("glassMode")) {
             glassMode = preferences.getInt("glassMode", GLASS_MODE_LIQUID);
             pendingGlassModeMigrationFromLiteMode = false;
@@ -483,6 +485,7 @@ public class KronoConfig {
                 .putBoolean("infiniteFolderScroll", infiniteFolderScroll)
                 .putInt("uiStyle", uiStyle)
                 .putBoolean("disableTitleMarquee", disableTitleMarquee)
+                .putBoolean("smoothSplashAnimation", smoothSplashAnimation)
                 .putInt("glassMode", glassMode)
                 .putBoolean("glassOnSettingsBar", glassOnSettingsBar)
                 .putBoolean("glassOnSearchBars", glassOnSearchBars)
@@ -707,6 +710,12 @@ public class KronoConfig {
     public static synchronized void setDisableTitleMarquee(boolean value) {
         loadConfig();
         disableTitleMarquee = value;
+        saveConfig();
+    }
+
+    public static synchronized void setSmoothSplashAnimation(boolean value) {
+        loadConfig();
+        smoothSplashAnimation = value;
         saveConfig();
     }
 

@@ -16,6 +16,7 @@ import static org.telegram.ui.Components.Premium.LimitReachedBottomSheet.TYPE_BO
 import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.animation.AnimatorSet;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -77,6 +78,7 @@ import android.window.BackEvent;
 import android.window.OnBackAnimationCallback;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
+import android.window.SplashScreenView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -118,6 +120,7 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FingerprintController;
 import org.telegram.messenger.FlagSecureReason;
+import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.GenericProvider;
 import org.telegram.messenger.GiftAuctionController;
 import org.telegram.messenger.LiteMode;
@@ -389,6 +392,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     private BroadcastReceiver debugThemeReceiver;
     private boolean debugInstantThemeSwitch;
     private WindowAnimatedInsetsProvider rootAnimatedInsetsListener;
+    private Animator splashExitAnimator;
+    private Runnable splashExitRunnable;
+    private Runnable splashSafetyRunnable;
+    private View activeSplashScreenView;
 
     public static LaunchActivity instance;
 
@@ -455,6 +462,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         flagSecureReason.attach();
 
         super.onCreate(savedInstanceState);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            setupSplashScreenExitAnimation(savedInstanceState);
+        }
         if (Build.VERSION.SDK_INT >= 24) {
             AndroidUtilities.isInMultiwindow = isInMultiWindowMode();
         }
@@ -6965,6 +6975,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     protected void onStop() {
         super.onStop();
+        dismissActiveSplashScreen();
         GramWalletStorageAuth.onActivityStopped(this);
         isStarted = false;
         PipCoordinator.getInstance().onActivityStop(this);
@@ -7089,8 +7100,171 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private void setupSplashScreenExitAnimation(Bundle savedInstanceState) {
+        KronoConfig.loadConfig();
+        try {
+            getSplashScreen().setOnExitAnimationListener(splashScreenView -> {
+                if (splashScreenView == null) {
+                    return;
+                }
+                if (isFinishing() || isDestroyed() || shouldBypassSplashExitAnimation(savedInstanceState)) {
+                    removeSplashScreenView(splashScreenView);
+                    return;
+                }
+                dismissActiveSplashScreen();
+                activeSplashScreenView = splashScreenView;
+
+                long remainingMs = 0L;
+                try {
+                    java.time.Instant animStart = splashScreenView.getIconAnimationStart();
+                    java.time.Duration animDuration = splashScreenView.getIconAnimationDuration();
+                    if (animStart != null && animDuration != null) {
+                        long durationMs = animDuration.toMillis();
+                        if (durationMs > 0L) {
+                            long elapsedMs = java.time.Duration.between(animStart, java.time.Instant.now()).toMillis();
+                            if (elapsedMs >= 0L) {
+                                remainingMs = Math.max(0L, durationMs - elapsedMs);
+                            } else {
+                                remainingMs = 160L;
+                            }
+                        }
+                    }
+                } catch (Throwable ignore) {
+                    remainingMs = 0L;
+                }
+                if (remainingMs > 280L) {
+                    remainingMs = 280L;
+                }
+
+                splashScreenView.setOnTouchListener((v, event) -> {
+                    dismissActiveSplashScreen();
+                    return false;
+                });
+
+                splashExitRunnable = () -> {
+                    splashExitRunnable = null;
+                    if (activeSplashScreenView != splashScreenView || isFinishing() || isDestroyed()) {
+                        dismissActiveSplashScreen();
+                        return;
+                    }
+                    AnimatorSet set = new AnimatorSet();
+                    ObjectAnimator bgFade = ObjectAnimator.ofFloat(splashScreenView, View.ALPHA, splashScreenView.getAlpha(), 0f);
+                    View iconView = splashScreenView.getIconView();
+                    if (iconView != null) {
+                        ObjectAnimator iconScaleX = ObjectAnimator.ofFloat(iconView, View.SCALE_X, iconView.getScaleX(), 1.16f);
+                        ObjectAnimator iconScaleY = ObjectAnimator.ofFloat(iconView, View.SCALE_Y, iconView.getScaleY(), 1.16f);
+                        ObjectAnimator iconFade = ObjectAnimator.ofFloat(iconView, View.ALPHA, iconView.getAlpha(), 0f);
+                        set.playTogether(bgFade, iconScaleX, iconScaleY, iconFade);
+                    } else {
+                        set.play(bgFade);
+                    }
+                    set.setDuration(220L);
+                    set.setInterpolator(CubicBezierInterpolator.EASE_OUT_QUINT);
+                    set.addListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            dismissActiveSplashScreen();
+                        }
+
+                        @Override
+                        public void onAnimationCancel(Animator animation) {
+                            dismissActiveSplashScreen();
+                        }
+                    });
+                    splashExitAnimator = set;
+                    set.start();
+                };
+
+                splashSafetyRunnable = this::dismissActiveSplashScreen;
+                AndroidUtilities.runOnUIThread(splashSafetyRunnable, remainingMs + 480L);
+
+                if (remainingMs <= 0L) {
+                    splashExitRunnable.run();
+                } else {
+                    AndroidUtilities.runOnUIThread(splashExitRunnable, remainingMs);
+                }
+            });
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    private boolean shouldBypassSplashExitAnimation(Bundle savedInstanceState) {
+        if (!KronoConfig.smoothSplashAnimation) {
+            return true;
+        }
+        if (savedInstanceState != null) {
+            return true;
+        }
+        if (Build.VERSION.SDK_INT >= 24 && isInMultiWindowMode()) {
+            return true;
+        }
+        if (!SharedConfig.animationsEnabled()) {
+            return true;
+        }
+        try {
+            float animatorScale = Settings.Global.getFloat(getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+            if (animatorScale <= 0f) {
+                return true;
+            }
+        } catch (Throwable ignore) {
+        }
+        Intent intent = getIntent();
+        if (intent != null) {
+            String action = intent.getAction();
+            if (action != null && !Intent.ACTION_MAIN.equals(action)) {
+                return true;
+            }
+            if (intent.getBooleanExtra("fromNotification", false)
+                    || intent.hasExtra("chatId")
+                    || intent.hasExtra("userId")
+                    || intent.hasExtra("encId")
+                    || intent.hasExtra("shortcut_id")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void dismissActiveSplashScreen() {
+        if (splashExitRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(splashExitRunnable);
+            splashExitRunnable = null;
+        }
+        if (splashSafetyRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(splashSafetyRunnable);
+            splashSafetyRunnable = null;
+        }
+        Animator animator = splashExitAnimator;
+        splashExitAnimator = null;
+        if (animator != null) {
+            try {
+                animator.cancel();
+            } catch (Throwable ignore) {
+            }
+        }
+        View splashView = activeSplashScreenView;
+        activeSplashScreenView = null;
+        if (splashView != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            removeSplashScreenView(splashView);
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private void removeSplashScreenView(View view) {
+        try {
+            view.setOnTouchListener(null);
+            if (view instanceof SplashScreenView) {
+                ((SplashScreenView) view).remove();
+            }
+        } catch (Throwable ignore) {
+        }
+    }
+
     @Override
     protected void onDestroy() {
+        dismissActiveSplashScreen();
         GramWalletStorageAuth.onActivityDestroyed(this);
         PipCoordinator.getInstance().onActivityDestroy(this);
         isActive = false;

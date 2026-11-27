@@ -13,8 +13,8 @@
                 android:name="badge_group"
                 android:pivotX="160"
                 android:pivotY="160"
-                android:scaleX="0.6"
-                android:scaleY="0.6">
+                android:scaleX="0.65"
+                android:scaleY="0.65">
 
                 <!-- Outer soft neon cyan glow ring -->
                 <path
@@ -41,7 +41,7 @@
                         android:name="arrows_group"
                         android:pivotX="160"
                         android:pivotY="160"
-                        android:rotation="-90"
+                        android:rotation="-135"
                         android:scaleX="0.72"
                         android:scaleY="0.72">
 
@@ -107,7 +107,7 @@
                         android:translateY="80"
                         android:scaleX="0.58"
                         android:scaleY="0.58"
-                        android:rotation="-12">
+                        android:rotation="-14">
 
                         <!-- Soft translucent cyan body fill -->
                         <path
@@ -150,26 +150,26 @@
         </vector>
     </aapt:attr>
 
-    <!-- Badge scale-up expansion (matching official Telegram splash entrance) -->
+    <!-- Badge scale-up expansion staggered past launcher zoom -->
     <target android:name="badge_group">
         <aapt:attr name="android:animation">
             <set>
                 <objectAnimator
                     android:propertyName="scaleX"
-                    android:startOffset="0"
-                    android:duration="340"
-                    android:valueFrom="0.6"
+                    android:startOffset="30"
+                    android:duration="360"
+                    android:valueFrom="0.65"
                     android:valueTo="1.0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
                 <objectAnimator
                     android:propertyName="scaleY"
-                    android:startOffset="0"
-                    android:duration="340"
-                    android:valueFrom="0.6"
+                    android:startOffset="30"
+                    android:duration="360"
+                    android:valueFrom="0.65"
                     android:valueTo="1.0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
             </set>
         </aapt:attr>
     </target>
@@ -180,76 +180,76 @@
             <set>
                 <objectAnimator
                     android:propertyName="rotation"
-                    android:startOffset="20"
-                    android:duration="440"
-                    android:valueFrom="-90"
+                    android:startOffset="60"
+                    android:duration="500"
+                    android:valueFrom="-135"
                     android:valueTo="0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
                 <objectAnimator
                     android:propertyName="scaleX"
-                    android:startOffset="20"
-                    android:duration="400"
+                    android:startOffset="60"
+                    android:duration="460"
                     android:valueFrom="0.72"
                     android:valueTo="1.0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
                 <objectAnimator
                     android:propertyName="scaleY"
-                    android:startOffset="20"
-                    android:duration="400"
+                    android:startOffset="60"
+                    android:duration="460"
                     android:valueFrom="0.72"
                     android:valueTo="1.0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
             </set>
         </aapt:attr>
     </target>
 
-    <!-- Paper plane diagonal flight from bottom-left into center (official Telegram motion) -->
+    <!-- Paper plane diagonal flight from bottom-left into center -->
     <target android:name="plane_group">
         <aapt:attr name="android:animation">
             <set>
                 <objectAnimator
                     android:propertyName="translateX"
-                    android:startOffset="40"
-                    android:duration="430"
+                    android:startOffset="100"
+                    android:duration="480"
                     android:valueFrom="-120"
                     android:valueTo="0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
                 <objectAnimator
                     android:propertyName="translateY"
-                    android:startOffset="40"
-                    android:duration="430"
+                    android:startOffset="100"
+                    android:duration="480"
                     android:valueFrom="80"
                     android:valueTo="0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
                 <objectAnimator
                     android:propertyName="scaleX"
-                    android:startOffset="40"
-                    android:duration="400"
+                    android:startOffset="100"
+                    android:duration="440"
                     android:valueFrom="0.58"
                     android:valueTo="1.0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
                 <objectAnimator
                     android:propertyName="scaleY"
-                    android:startOffset="40"
-                    android:duration="400"
+                    android:startOffset="100"
+                    android:duration="440"
                     android:valueFrom="0.58"
                     android:valueTo="1.0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
                 <objectAnimator
                     android:propertyName="rotation"
-                    android:startOffset="40"
-                    android:duration="430"
-                    android:valueFrom="-12"
+                    android:startOffset="100"
+                    android:duration="480"
+                    android:valueFrom="-14"
                     android:valueTo="0"
                     android:valueType="floatType"
-                    android:interpolator="@android:interpolator/fast_out_extra_slow_in" />
+                    android:interpolator="@interpolator/krono_splash_ease" />
             </set>
         </aapt:attr>
     </target>

@@ -1326,4 +1326,6 @@
     <string name="NoCarMusic">No hay música en tus chats</string>
     <string name="KronoPhoneHidden">Número oculto</string>
     <string name="KronoHiddenChat">Chat oculto</string>
+    <string name="KronoSmoothSplashAnimation">Animación de apertura suave</string>
+    <string name="KronoSmoothSplashAnimationDesc">Permite apreciar el icono animado de KronoGram con salida fluida sin retrasar la carga (Android 12+)</string>
 </resources>

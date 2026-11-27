@@ -134,6 +134,7 @@ public class KronoSettingsActivity extends BaseFragment {
     private int glassBottomBarRow = -1;
     private int glassChatBarsRow = -1;
     private int disableTitleMarqueeRow = -1;
+    private int smoothSplashAnimationRow = -1;
     private int themeInfoRow = -1;
 
     // Chats, Folders & Storage section rows
@@ -317,6 +318,7 @@ public class KronoSettingsActivity extends BaseFragment {
         glassBottomBarRow = -1;
         glassChatBarsRow = -1;
         disableTitleMarqueeRow = -1;
+        smoothSplashAnimationRow = -1;
         themeInfoRow = -1;
 
         tabsHeaderRow = -1;
@@ -431,6 +433,7 @@ public class KronoSettingsActivity extends BaseFragment {
             glassBottomBarRow = rowCount++;
             glassChatBarsRow = rowCount++;
             disableTitleMarqueeRow = rowCount++;
+            smoothSplashAnimationRow = rowCount++;
             themeInfoRow = rowCount++;
         } else if (currentSection == SECTION_CHATS) {
             tabsHeaderRow = rowCount++;
@@ -734,6 +737,14 @@ public class KronoSettingsActivity extends BaseFragment {
                     ((TextCheckCell) view).setChecked(KronoConfig.disableTitleMarquee);
                 }
                 NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.reloadInterface);
+            } else if (position == smoothSplashAnimationRow) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    return;
+                }
+                KronoConfig.setSmoothSplashAnimation(!KronoConfig.smoothSplashAnimation);
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(KronoConfig.smoothSplashAnimation);
+                }
             } else if (position == messageSwipeActionRow) {
                 showMessageSwipeActionDialog();
             } else if (position == swipeToEditOwnRow) {
@@ -1564,6 +1575,9 @@ public class KronoSettingsActivity extends BaseFragment {
                     || position == glassBottomBarRow || position == glassChatBarsRow) && KronoConfig.isGlassOff()) {
                 return false;
             }
+            if (position == smoothSplashAnimationRow && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                return false;
+            }
             int type = holder.getItemViewType();
             return type == 1 || type == 2 || type == 3;
         }
@@ -1600,7 +1614,7 @@ public class KronoSettingsActivity extends BaseFragment {
                        position == persistentForegroundServiceRow || position == backgroundPushConnectionRow ||
                        position == glassSettingsBarRow || position == glassSearchBarsRow ||
                        position == glassBottomBarRow || position == glassChatBarsRow ||
-                       position == disableTitleMarqueeRow) {
+                       position == disableTitleMarqueeRow || position == smoothSplashAnimationRow) {
                 return 2; // TextCheckCell
             } else if (position == hiddenVaultOpenRow || position == hiddenVaultLockMethodRow ||
                        position == openThemesRow || position == monetThemeRow || position == uiStyleRow ||
@@ -1821,7 +1835,17 @@ public class KronoSettingsActivity extends BaseFragment {
                     checkCell.setTextAndValueAndCheck("Cristal en chat y menús", "Barra superior de chats, campo de mensaje y menús flotantes", glassMasterOn && KronoConfig.glassOnChatBars, true, true);
                     checkCell.setEnabled(glassMasterOn, null);
                 } else if (position == disableTitleMarqueeRow) {
-                    checkCell.setTextAndValueAndCheck("Quitar efecto marquee en los títulos", "Evita el desplazamiento lateral continuo en títulos largos", KronoConfig.disableTitleMarquee, true, false);
+                    checkCell.setTextAndValueAndCheck("Quitar efecto marquee en los títulos", "Evita el desplazamiento lateral continuo en títulos largos", KronoConfig.disableTitleMarquee, true, true);
+                } else if (position == smoothSplashAnimationRow) {
+                    final boolean splashSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
+                    checkCell.setTextAndValueAndCheck(
+                            LocaleController.getString(R.string.KronoSmoothSplashAnimation),
+                            LocaleController.getString(R.string.KronoSmoothSplashAnimationDesc),
+                            splashSupported && KronoConfig.smoothSplashAnimation,
+                            true,
+                            false
+                    );
+                    checkCell.setEnabled(splashSupported, null);
                 }
             } else if (type == 3) {
                 TextSettingsCell settingsCell = (TextSettingsCell) holder.itemView;
