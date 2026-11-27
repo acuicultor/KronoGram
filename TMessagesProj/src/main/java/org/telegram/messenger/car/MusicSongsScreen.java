@@ -1,6 +1,7 @@
 package org.telegram.messenger.car;
 
 import android.support.v4.media.session.MediaControllerCompat;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.car.app.CarContext;
@@ -16,6 +17,7 @@ import androidx.core.graphics.drawable.IconCompat;
 import androidx.lifecycle.DefaultLifecycleObserver;
 import androidx.lifecycle.LifecycleOwner;
 
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaController;
@@ -69,74 +71,93 @@ public class MusicSongsScreen extends Screen
     @NonNull
     @Override
     public Template onGetTemplate() {
-        TelegramMediaSession session = TelegramMediaSession.getInstance(getCarContext().getApplicationContext());
-        String headerTitle = title.isEmpty() ? " " : title;
+        String headerTitle = TextUtils.isEmpty(title) ? " " : title;
+        try {
+            TelegramMediaSession session = TelegramMediaSession.getInstance(getCarContext().getApplicationContext());
 
-        if (SharedConfig.isWaitingForPasscodeEnter || session.isPasscodeLocked()) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.EnterYourTelegramPasscode))
-                    .setTitle(headerTitle)
-                    .setHeaderAction(Action.BACK)
-                    .build();
-        }
-        if (KronoConfig.isDialogOrFolderHidden(session.getCurrentAccount(), dialogId)) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoCarMusic))
-                    .setTitle(headerTitle)
-                    .setHeaderAction(Action.BACK)
-                    .build();
-        }
-
-        ArrayList<MessageObject> songs = session.getMusicMessages(dialogId);
-        if (songs == null) {
-            if (!loadRequested) {
-                loadRequested = true;
-                session.ensureMusicLoadedForDialog(dialogId, this::invalidate);
+            if (SharedConfig.isWaitingForPasscodeEnter || session.isPasscodeLocked()) {
+                return new MessageTemplate.Builder(safeString(R.string.EnterYourTelegramPasscode, "Enter your passcode"))
+                        .setTitle(headerTitle)
+                        .setHeaderAction(Action.BACK)
+                        .build();
             }
+            if (KronoConfig.isDialogOrFolderHidden(session.getCurrentAccount(), dialogId)) {
+                return new MessageTemplate.Builder(safeString(R.string.NoCarMusic, "No music"))
+                        .setTitle(headerTitle)
+                        .setHeaderAction(Action.BACK)
+                        .build();
+            }
+
+            ArrayList<MessageObject> songs = session.getMusicMessages(dialogId);
+            if (songs == null) {
+                if (!loadRequested) {
+                    loadRequested = true;
+                    session.ensureMusicLoadedForDialog(dialogId, this::invalidate);
+                }
+                return new ListTemplate.Builder()
+                        .setTitle(headerTitle)
+                        .setHeaderAction(Action.BACK)
+                        .setLoading(true)
+                        .build();
+            }
+            if (songs.isEmpty()) {
+                return new MessageTemplate.Builder(safeString(R.string.NoCarMusic, "No music"))
+                        .setTitle(headerTitle)
+                        .setHeaderAction(Action.BACK)
+                        .build();
+            }
+
+            MessageObject playing = MediaController.getInstance().getPlayingMessageObject();
+            long playingId = playing != null ? playing.getId() : 0;
+            long playingDialog = playing != null ? playing.getDialogId() : 0;
+
+            ItemList.Builder list = new ItemList.Builder();
+            int limit = Math.min(songs.size(), MAX_SONGS);
+            for (int i = 0; i < limit; i++) {
+                MessageObject mo = songs.get(i);
+                if (mo == null) continue;
+                String songTitle = mo.getMusicTitle();
+                String author = mo.getMusicAuthor();
+
+                Row.Builder row = new Row.Builder()
+                        .setTitle(!TextUtils.isEmpty(songTitle) ? songTitle : " ");
+                if (!TextUtils.isEmpty(author)) {
+                    row.addText(author);
+                }
+                boolean isCurrent = playing != null
+                        && playingDialog == mo.getDialogId()
+                        && playingId == mo.getId();
+                if (isCurrent) {
+                    row.setImage(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.ic_player)).build());
+                }
+                final int index = i;
+                row.setOnClickListener(() -> playAtIndex(index));
+                list.addItem(row.build());
+            }
+
             return new ListTemplate.Builder()
                     .setTitle(headerTitle)
                     .setHeaderAction(Action.BACK)
-                    .setLoading(true)
+                    .setSingleList(list.build())
                     .build();
-        }
-        if (songs.isEmpty()) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoCarMusic))
+        } catch (Throwable t) {
+            FileLog.e("TelegramCar MusicSongsScreen.onGetTemplate failed", t);
+            return new MessageTemplate.Builder(safeString(R.string.NoCarMusic, "No music"))
                     .setTitle(headerTitle)
                     .setHeaderAction(Action.BACK)
                     .build();
         }
+    }
 
-        MessageObject playing = MediaController.getInstance().getPlayingMessageObject();
-        long playingId = playing != null ? playing.getId() : 0;
-        long playingDialog = playing != null ? playing.getDialogId() : 0;
-
-        ItemList.Builder list = new ItemList.Builder();
-        int limit = Math.min(songs.size(), MAX_SONGS);
-        for (int i = 0; i < limit; i++) {
-            MessageObject mo = songs.get(i);
-            if (mo == null) continue;
-            String songTitle = mo.getMusicTitle();
-            String author = mo.getMusicAuthor();
-
-            Row.Builder row = new Row.Builder()
-                    .setTitle(songTitle != null ? songTitle : " ");
-            if (author != null && !author.isEmpty()) {
-                row.addText(author);
+    private static String safeString(int resId, String fallback) {
+        try {
+            String s = LocaleController.getString(resId);
+            if (!TextUtils.isEmpty(s)) {
+                return s;
             }
-            boolean isCurrent = playing != null
-                    && playingDialog == mo.getDialogId()
-                    && playingId == mo.getId();
-            if (isCurrent) {
-                row.setImage(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.ic_player)).build());
-            }
-            final int index = i;
-            row.setOnClickListener(() -> playAtIndex(index));
-            list.addItem(row.build());
+        } catch (Throwable ignored) {
         }
-
-        return new ListTemplate.Builder()
-                .setTitle(headerTitle)
-                .setHeaderAction(Action.BACK)
-                .setSingleList(list.build())
-                .build();
+        return fallback;
     }
 
     private void playAtIndex(int index) {

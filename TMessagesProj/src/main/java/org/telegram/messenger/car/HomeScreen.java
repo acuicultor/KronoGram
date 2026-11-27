@@ -42,6 +42,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
@@ -113,39 +114,46 @@ public class HomeScreen extends Screen
     @NonNull
     @Override
     public Template onGetTemplate() {
-        TabTemplate.Builder builder = new TabTemplate.Builder(new TabTemplate.TabCallback() {
-            @Override
-            public void onTabSelected(@NonNull String tabContentId) {
-                activeTabId = tabContentId;
-                invalidate();
-            }
-        });
-        builder.setHeaderAction(Action.APP_ICON);
+        try {
+            TabTemplate.Builder builder = new TabTemplate.Builder(new TabTemplate.TabCallback() {
+                @Override
+                public void onTabSelected(@NonNull String tabContentId) {
+                    activeTabId = tabContentId;
+                    invalidate();
+                }
+            });
+            builder.setHeaderAction(Action.APP_ICON);
 
-        builder.addTab(new Tab.Builder()
-                .setContentId(TAB_NOTIFICATIONS)
-                .setIcon(iconResource(R.drawable.msg_notifications))
-                .setTitle(LocaleController.getString(R.string.Notifications))
-                .build());
-        builder.addTab(new Tab.Builder()
-                .setContentId(TAB_MUSIC)
-                .setIcon(iconResource(R.drawable.filled_widget_music))
-                .setTitle(LocaleController.getString(R.string.Music))
-                .build());
+            builder.addTab(new Tab.Builder()
+                    .setContentId(TAB_NOTIFICATIONS)
+                    .setIcon(iconResource(R.drawable.msg_notifications))
+                    .setTitle(safeString(R.string.Notifications, "Notifications"))
+                    .build());
+            builder.addTab(new Tab.Builder()
+                    .setContentId(TAB_MUSIC)
+                    .setIcon(iconResource(R.drawable.filled_widget_music))
+                    .setTitle(safeString(R.string.Music, "Music"))
+                    .build());
 
-        builder.setActiveTabContentId(activeTabId);
-        builder.setTabContents(new TabContents.Builder(buildTabContent(activeTabId)).build());
-        return builder.build();
+            builder.setActiveTabContentId(activeTabId);
+            builder.setTabContents(new TabContents.Builder(buildTabContent(activeTabId)).build());
+            return builder.build();
+        } catch (Throwable t) {
+            FileLog.e("TelegramCar HomeScreen.onGetTemplate failed", t);
+            return new MessageTemplate.Builder(safeString(R.string.NoNewCarMessages, "No new messages"))
+                    .setHeaderAction(Action.APP_ICON)
+                    .build();
+        }
     }
 
     private Template buildTabContent(String tabId) {
         if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoNewCarMessages))
+            return new MessageTemplate.Builder(safeString(R.string.NoNewCarMessages, "No new messages"))
                     .build();
         }
         TelegramMediaSession mediaSession = TelegramMediaSession.getInstance(getCarContext().getApplicationContext());
         if (SharedConfig.isWaitingForPasscodeEnter || mediaSession.isPasscodeLocked()) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.EnterYourTelegramPasscode))
+            return new MessageTemplate.Builder(safeString(R.string.EnterYourTelegramPasscode, "Enter your passcode"))
                     .build();
         }
         switch (tabId) {
@@ -162,7 +170,7 @@ public class HomeScreen extends Screen
     private Template buildNotificationsTemplate() {
         Map<Long, ArrayList<MessageObject>> grouped = collectUnreadMessages();
         if (grouped.isEmpty()) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoNewCarMessages))
+            return new MessageTemplate.Builder(safeString(R.string.NoNewCarMessages, "No new messages"))
                     .build();
         }
         ItemList.Builder list = new ItemList.Builder();
@@ -176,7 +184,7 @@ public class HomeScreen extends Screen
             }
         }
         if (count == 0) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoNewCarMessages))
+            return new MessageTemplate.Builder(safeString(R.string.NoNewCarMessages, "No new messages"))
                     .build();
         }
         return new ListTemplate.Builder()
@@ -225,6 +233,10 @@ public class HomeScreen extends Screen
             isGroup = !ChatObject.isChannel(chat) || ChatObject.isMegagroup(chat);
         }
 
+        if (TextUtils.isEmpty(title)) {
+            title = safeString(R.string.HiddenName, "Chat");
+        }
+
         Person.Builder convPersonBuilder = new Person.Builder()
                 .setName(title)
                 .setKey(String.valueOf(dialogId));
@@ -233,7 +245,7 @@ public class HomeScreen extends Screen
 
         TLRPC.User self = UserConfig.getInstance(currentAccount).getCurrentUser();
         Person.Builder selfBuilder = new Person.Builder()
-                .setName(LocaleController.getString(R.string.FromYou))
+                .setName(safeString(R.string.FromYou, "You"))
                 .setKey("self_" + UserConfig.getInstance(currentAccount).clientUserId);
         if (self != null) {
             IconCompat selfIcon = loadUserAvatarIcon(self);
@@ -278,23 +290,25 @@ public class HomeScreen extends Screen
         if (body == null) return null;
 
         Person.Builder senderBuilder = new Person.Builder();
-        if (senderName[0] != null) {
+        if (!TextUtils.isEmpty(senderName[0])) {
             senderBuilder.setName(senderName[0]).setKey("u" + mo.getSenderId());
         } else if (DialogObject.isUserDialog(dialogId) && user != null) {
-            senderBuilder.setName(ContactsController.formatName(user.first_name, user.last_name))
+            String uName = ContactsController.formatName(user.first_name, user.last_name);
+            senderBuilder.setName(!TextUtils.isEmpty(uName) ? uName : safeString(R.string.HiddenName, "User"))
                     .setKey("u" + user.id);
         } else if (chat != null) {
-            senderBuilder.setName(chat.title != null ? chat.title : "").setKey("c" + chat.id);
+            String cName = !TextUtils.isEmpty(chat.title) ? chat.title : safeString(R.string.HiddenName, "Chat");
+            senderBuilder.setName(cName).setKey("c" + chat.id);
         } else {
-            senderBuilder.setName("");
+            senderBuilder.setName(safeString(R.string.HiddenName, "User")).setKey("d" + dialogId);
         }
 
         CarMessage.Builder msgBuilder = new CarMessage.Builder()
-                .setBody(CarText.create(body))
                 .setReceivedTimeEpochMillis(((long) mo.messageOwner.date) * 1000L)
                 .setSender(senderBuilder.build())
                 .setRead(false);
 
+        boolean hasMultimedia = false;
         if (preview[0] && mo.isVoice()) {
             try {
                 File voiceFile = FileLoader.getInstance(currentAccount).getPathToMessage(mo.messageOwner);
@@ -310,10 +324,16 @@ public class HomeScreen extends Screen
                                 Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         msgBuilder.setMultimediaMimeType("audio/ogg");
                         msgBuilder.setMultimediaUri(uri);
+                        hasMultimedia = true;
                     }
                 }
             } catch (Throwable ignored) {
             }
+        }
+        if (!TextUtils.isEmpty(body)) {
+            msgBuilder.setBody(CarText.create(body));
+        } else if (!hasMultimedia) {
+            return null;
         }
         return msgBuilder.build();
     }
@@ -331,7 +351,7 @@ public class HomeScreen extends Screen
         }
         ArrayList<Long> dialogs = session.getMusicDialogsSortedByVisibleOrder();
         if (dialogs == null || dialogs.isEmpty()) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoCarMusic))
+            return new MessageTemplate.Builder(safeString(R.string.NoCarMusic, "No music"))
                     .build();
         }
         ItemList.Builder list = new ItemList.Builder();
@@ -347,7 +367,7 @@ public class HomeScreen extends Screen
                 TLRPC.User u = session.getMusicUser(dialogId);
                 if (u == null) continue;
                 if (UserObject.isUserSelf(u)) {
-                    title = LocaleController.getString(R.string.SavedMessages);
+                    title = safeString(R.string.SavedMessages, "Saved Messages");
                 } else {
                     title = ContactsController.formatName(u.first_name, u.last_name);
                     if (u.photo != null && !(u.photo.photo_small instanceof TLRPC.TL_fileLocationUnavailable)) {
@@ -380,7 +400,7 @@ public class HomeScreen extends Screen
             added++;
         }
         if (added == 0) {
-            return new MessageTemplate.Builder(LocaleController.getString(R.string.NoCarMusic))
+            return new MessageTemplate.Builder(safeString(R.string.NoCarMusic, "No music"))
                     .build();
         }
         return new ListTemplate.Builder()
@@ -388,7 +408,18 @@ public class HomeScreen extends Screen
                 .build();
     }
 
-    // ===== Icon helpers =====
+    // ===== Icon & text helpers =====
+
+    private static String safeString(int resId, String fallback) {
+        try {
+            String s = LocaleController.getString(resId);
+            if (!TextUtils.isEmpty(s)) {
+                return s;
+            }
+        } catch (Throwable ignored) {
+        }
+        return fallback;
+    }
 
     private CarIcon iconResource(int resId) {
         return new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), resId)).build();

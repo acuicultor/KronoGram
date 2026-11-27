@@ -17,10 +17,12 @@ android {
     packagingOptions {
         resources {
             excludes += [
-                '**',
                 'META-INF/**',
                 '**.kotlin_module',
                 '**.version',
+                '**.proto',
+                'google/protobuf/**',
+                'kotlin/**',
                 'DebugProbesKt.bin',
                 'build-data.properties'
             ]
