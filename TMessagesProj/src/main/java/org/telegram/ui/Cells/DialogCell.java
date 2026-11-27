@@ -3368,7 +3368,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                             MessagesController.DialogFilter filter = MessagesController.getInstance(currentAccount).selectedDialogFilter[dialogsType == 8 ? 1 : 0];
                             drawPin = filter != null && filter.pinnedDialogs.indexOfKey(dialog.id) >= 0;
                         } else {
-                            drawPin = currentDialogFolderId == 0 && (dialog.pinned || org.telegram.messenger.KronoConfig.isLocallyPinned(dialog.id));
+                            drawPin = currentDialogFolderId == 0 && (dialog.pinned || org.telegram.messenger.KronoConfig.isLocallyPinned(currentAccount, dialog.id));
                         }
                         if (message != null) {
                             lastSendState = message.messageOwner.send_state;

@@ -773,6 +773,7 @@ public class FiltersSetupActivity extends BaseFragment implements NotificationCe
                 }
             }
         }
+        org.telegram.messenger.KronoConfig.saveLastRemoteFilterOrder(currentAccount, req.order);
         getConnectionsManager().sendRequest(req, (response, error) -> {
             if (done != null) {
                 AndroidUtilities.runOnUIThread(done);

@@ -125,7 +125,17 @@ public class FilterTabsView extends FrameLayout {
 
         void onPageReorder(int fromId, int toId);
 
+        default void onPageMoveToStart(int fromId, int toId) {
+            onPageReorder(fromId, toId);
+        }
+
         boolean canPerformActions();
+    }
+
+    private int currentAccount = UserConfig.selectedAccount;
+
+    public void setCurrentAccount(int account) {
+        currentAccount = account;
     }
 
     public class Tab {
@@ -1411,6 +1421,7 @@ public class FilterTabsView extends FrameLayout {
         positionToWidth.clear();
         positionToCount.clear();
         positionToX.clear();
+        positionToStableId.clear();
         allTabsWidth = 0;
     }
 
@@ -1941,7 +1952,7 @@ public class FilterTabsView extends FrameLayout {
         adapter.notifyDataSetChanged();
         invalidate();
         if (!isEditing && orderChanged) {
-            int account = UserConfig.selectedAccount;
+            int account = currentAccount;
             ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(account).getDialogFilters();
             ArrayList<Integer> localOrder = new ArrayList<>(filters.size());
             for (int a = 0, N = filters.size(); a < N; a++) {
@@ -1983,6 +1994,7 @@ public class FilterTabsView extends FrameLayout {
                     }
                 }
             }
+            KronoConfig.saveLastRemoteFilterOrder(account, req.order);
             MessagesController.getInstance(account).lockFiltersInternal();
             ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
             });
@@ -2111,7 +2123,7 @@ public class FilterTabsView extends FrameLayout {
             Tab tab2 = tabs.get(toIndex);
             int idx1 = tab1.id;
             int idx2 = tab2.id;
-            ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(UserConfig.selectedAccount).getDialogFilters();
+            ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(currentAccount).getDialogFilters();
             if (idx1 < 0 || idx2 < 0 || idx1 >= filters.size() || idx2 >= filters.size()) {
                 return;
             }
@@ -2171,7 +2183,7 @@ public class FilterTabsView extends FrameLayout {
             if (theIndex <= 0 || theIndex >= count) {
                 return;
             }
-            ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(UserConfig.selectedAccount).getDialogFilters();
+            ArrayList<MessagesController.DialogFilter> filters = MessagesController.getInstance(currentAccount).getDialogFilters();
             Tab movedTab = tabs.get(theIndex);
             int filterIdx = movedTab.id;
             if (filterIdx < 0 || filterIdx >= filters.size()) {
@@ -2196,6 +2208,8 @@ public class FilterTabsView extends FrameLayout {
             positionToStableId.put(0, temp);
             tabs.add(0, tabs.remove(theIndex));
 
+            positionToId.clear();
+            idToPosition.clear();
             for (int i = 0; i < count; ++i) {
                 Tab tab = tabs.get(i);
                 int newTabId = tab.id;
@@ -2233,7 +2247,7 @@ public class FilterTabsView extends FrameLayout {
             notifyItemMoved(theIndex, 0);
 
             if (oldSelectedTabId != selectedTabId || oldId != tabs.get(0).id) {
-                delegate.onPageReorder(oldId, tabs.get(0).id);
+                delegate.onPageMoveToStart(oldId, minTargetFilterIdx);
             }
 
             updateTabsWidths();

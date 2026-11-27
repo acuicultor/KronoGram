@@ -380,7 +380,7 @@ public class FiltersListBottomSheet extends BottomSheet implements NotificationC
                 }
             }
             if (filter != null && filter.isLocalFavorites()) {
-                if (always && org.telegram.messenger.KronoConfig.isFavoriteDialog(did)) {
+                if (always && org.telegram.messenger.KronoConfig.isFavoriteDialog(fragment.getCurrentAccount(), did)) {
                     continue;
                 }
             } else if (filter != null && (always && filter.alwaysShow.contains(did) || !always && filter.neverShow.contains(did))) {

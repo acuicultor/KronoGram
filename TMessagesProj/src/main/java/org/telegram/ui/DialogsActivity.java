@@ -3512,6 +3512,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
                 }
             };
+            filterTabsView.setCurrentAccount(currentAccount);
             filterTabsView.setVisibility(View.GONE);
             canShowFilterTabsView = false;
             animatorFilterTabsVisible.setValue(false, false);
@@ -3573,6 +3574,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             viewPages[a].selectedType = toId;
                         } else if (viewPages[a].selectedType == toId) {
                             viewPages[a].selectedType = fromId;
+                        }
+                    }
+                }
+
+                @Override
+                public void onPageMoveToStart(int fromId, int toId) {
+                    for (int a = 0; a < viewPages.length; a++) {
+                        if (viewPages[a].selectedType == fromId) {
+                            viewPages[a].selectedType = toId;
+                        } else if (viewPages[a].selectedType >= toId && viewPages[a].selectedType < fromId) {
+                            viewPages[a].selectedType++;
                         }
                     }
                 }
@@ -3916,7 +3928,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                             if (checked) {
                                 for (int a = 0; a < selectedDialogs.size(); a++) {
                                     long did = selectedDialogs.get(a);
-                                    org.telegram.messenger.KronoConfig.setFavoriteDialog(did, false);
+                                    org.telegram.messenger.KronoConfig.setFavoriteDialog(currentAccount, did, false);
                                     filter.pinnedDialogs.delete(did);
                                 }
                                 getMessagesController().syncLocalFavoritesFilter(true);
@@ -3927,7 +3939,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                                 }
                             } else {
                                 for (int a = 0; a < alwaysShow.size(); a++) {
-                                    org.telegram.messenger.KronoConfig.setFavoriteDialog(alwaysShow.get(a), true);
+                                    org.telegram.messenger.KronoConfig.setFavoriteDialog(currentAccount, alwaysShow.get(a), true);
                                 }
                                 getMessagesController().syncLocalFavoritesFilter(true);
                                 long did = alwaysShow.size() == 1 ? alwaysShow.get(0) : 0;
@@ -4003,7 +4015,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (filter.isLocalFavorites()) {
                         for (int a = 0; a < selectedDialogs.size(); a++) {
                             long did = selectedDialogs.get(a);
-                            org.telegram.messenger.KronoConfig.setFavoriteDialog(did, false);
+                            org.telegram.messenger.KronoConfig.setFavoriteDialog(currentAccount, did, false);
                             filter.pinnedDialogs.delete(did);
                         }
                         getMessagesController().syncLocalFavoritesFilter(true);
@@ -4053,13 +4065,13 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 } else if (id == toggle_favorite) {
                     boolean allFavorites = !selectedDialogs.isEmpty();
                     for (int a = 0; a < selectedDialogs.size(); a++) {
-                        if (!org.telegram.messenger.KronoConfig.isFavoriteDialog(selectedDialogs.get(a))) {
+                        if (!org.telegram.messenger.KronoConfig.isFavoriteDialog(currentAccount, selectedDialogs.get(a))) {
                             allFavorites = false;
                             break;
                         }
                     }
                     for (int a = 0; a < selectedDialogs.size(); a++) {
-                        org.telegram.messenger.KronoConfig.setFavoriteDialog(selectedDialogs.get(a), !allFavorites);
+                        org.telegram.messenger.KronoConfig.setFavoriteDialog(currentAccount, selectedDialogs.get(a), !allFavorites);
                     }
                     getMessagesController().syncLocalFavoritesFilter(true);
                     BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
@@ -6947,7 +6959,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             filterOptions = null;
         }
         final ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
-        if (filters.size() > 1) {
+        boolean hasVisibleCustomFilter = false;
+        for (int a = 0, N = filters.size(); a < N; a++) {
+            MessagesController.DialogFilter f = filters.get(a);
+            if (f != null && !f.isDefault() && !org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, f.id)) {
+                hasVisibleCustomFilter = true;
+                break;
+            }
+        }
+        if (filters.size() > 1 && hasVisibleCustomFilter) {
             if (force || filterTabsView.getVisibility() != View.VISIBLE) {
                 boolean animatedUpdateItems = animated;
                 if (filterTabsView.getVisibility() != View.VISIBLE) {
@@ -6965,14 +6985,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 if (id != filterTabsView.getDefaultTabId() && id >= filters.size()) {
                     filterTabsView.resetTabId();
                     selectWithStableId = true;
-                }
-                boolean hasVisibleCustomFilter = false;
-                for (int a = 0, N = filters.size(); a < N; a++) {
-                    MessagesController.DialogFilter f = filters.get(a);
-                    if (f != null && !f.isDefault() && !org.telegram.messenger.KronoConfig.isFilterHidden(currentAccount, f.id)) {
-                        hasVisibleCustomFilter = true;
-                        break;
-                    }
                 }
                 filterTabsView.removeTabs();
                 for (int a = 0, N = filters.size(); a < N; a++) {
@@ -8026,9 +8038,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             }
             if (filter != null) {
-                if (!filter.isLocalFavorites() && currentDialogsCount < filter.alwaysShow.size() + filter.pinnedDialogs.size()) {
+                if (filter.isLocalFavorites()) {
                     getMessagesController().ensureFilterPeersLoaded(filter);
-                } else if (!filter.isLocalFavorites() && (!filter.alwaysShow.isEmpty() || filter.pinnedDialogs.size() > 0)) {
+                } else if (currentDialogsCount < filter.alwaysShow.size() + filter.pinnedDialogs.size()
+                        || !filter.alwaysShow.isEmpty() || filter.pinnedDialogs.size() > 0) {
                     getMessagesController().ensureFilterPeersLoaded(filter);
                 }
                 if (!filter.isLocalFavorites() && (filter.flags & MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) == 0) {
@@ -8764,7 +8777,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 folderItem.setMinimumWidth(160);
                 folderItem.setOnClickListener(e -> {
                     if (folder.isLocalFavorites()) {
-                        org.telegram.messenger.KronoConfig.setFavoriteDialog(dialogId, !contains);
+                        org.telegram.messenger.KronoConfig.setFavoriteDialog(currentAccount, dialogId, !contains);
                         getMessagesController().syncLocalFavoritesFilter(true);
                         getUndoView().showWithAction(dialogId, contains ? UndoView.ACTION_REMOVED_FROM_FOLDER : UndoView.ACTION_ADDED_TO_FOLDER, 1, folder, null, null);
                     } else if (!contains) {
@@ -8846,12 +8859,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         boolean addedQuickFavorite = false;
         if (!isCommunityCell && org.telegram.messenger.KronoConfig.showFavoritesFolder && communityId == 0) {
-            final boolean isFav = org.telegram.messenger.KronoConfig.isFavoriteDialog(dialogId);
+            final boolean isFav = org.telegram.messenger.KronoConfig.isFavoriteDialog(currentAccount, dialogId);
             ActionBarMenuSubItem favSubItem = new ActionBarMenuSubItem(getParentActivity(), !hasFolders, false);
             favSubItem.setTextAndIcon(isFav ? "Quitar de Favoritos" : "Añadir a Favoritos", isFav ? R.drawable.msg_unfave : R.drawable.msg_fave);
             favSubItem.setMinimumWidth(160);
             favSubItem.setOnClickListener(e -> {
-                boolean nowFav = org.telegram.messenger.KronoConfig.toggleFavoriteDialog(dialogId);
+                boolean nowFav = org.telegram.messenger.KronoConfig.toggleFavoriteDialog(currentAccount, dialogId);
                 getMessagesController().syncLocalFavoritesFilter(true);
                 BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
                     nowFav ? R.drawable.msg_fave : R.drawable.msg_unfave,
@@ -9399,7 +9412,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (filter != null) {
             return filter.pinnedDialogs.indexOfKey(dialog.id) >= 0;
         }
-        return dialog.pinned || org.telegram.messenger.KronoConfig.isLocallyPinned(dialog.id);
+        return dialog.pinned || org.telegram.messenger.KronoConfig.isLocallyPinned(currentAccount, dialog.id);
     }
 
     private void performSelectedDialogsAction(ArrayList<Long> selectedDialogs, int action, boolean alert, boolean longPress) {
@@ -10213,7 +10226,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (folderId == 0 && communityId == 0 && org.telegram.messenger.KronoConfig.showFavoritesFolder && !selectedDialogs.isEmpty()) {
                 boolean allFavorites = true;
                 for (int a = 0; a < selectedDialogs.size(); a++) {
-                    if (!org.telegram.messenger.KronoConfig.isFavoriteDialog(selectedDialogs.get(a))) {
+                    if (!org.telegram.messenger.KronoConfig.isFavoriteDialog(currentAccount, selectedDialogs.get(a))) {
                         allFavorites = false;
                         break;
                     }
@@ -11322,12 +11335,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         } else if (dialogsType == 7 || dialogsType == 8) {
             MessagesController.DialogFilter dialogFilter = messagesController.selectedDialogFilter[dialogsType == 7 ? 0 : 1];
             if (dialogFilter == null) {
-                return filterHiddenDialogs(currentAccount, messagesController.getDialogs(folderId));
+                return filterHiddenDialogs(currentAccount, messagesController.getDialogs(folderId), null);
             } else {
                 if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
-                    return filterHiddenDialogs(currentAccount, dialogFilter.dialogsForward);
+                    return filterHiddenDialogs(currentAccount, dialogFilter.dialogsForward, dialogFilter);
                 }
-                return filterHiddenDialogs(currentAccount, dialogFilter.dialogs);
+                return filterHiddenDialogs(currentAccount, dialogFilter.dialogs, dialogFilter);
             }
         } else if (dialogsType == DIALOGS_TYPE_BLOCK) {
             return messagesController.dialogsForBlock;
@@ -11420,6 +11433,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private ArrayList<TLRPC.Dialog> filterHiddenDialogs(int currentAccount, ArrayList<TLRPC.Dialog> source) {
+        return filterHiddenDialogs(currentAccount, source, null);
+    }
+
+    private ArrayList<TLRPC.Dialog> filterHiddenDialogs(int currentAccount, ArrayList<TLRPC.Dialog> source, MessagesController.DialogFilter activeFilter) {
         if (source == null || source.isEmpty() || !org.telegram.messenger.KronoConfig.hasAnyHiddenItems(currentAccount)) {
             return source;
         }
@@ -11427,7 +11444,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         for (int i = 0, N = source.size(); i < N; i++) {
             TLRPC.Dialog dialog = source.get(i);
             if (dialog != null && !(dialog instanceof TLRPC.TL_dialogFolder)
-                    && org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, dialog.id)) {
+                    && org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, dialog.id, activeFilter)) {
                 if (filtered == null) {
                     filtered = new ArrayList<>(N);
                     for (int j = 0; j < i; j++) {

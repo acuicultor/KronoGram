@@ -2032,7 +2032,7 @@ public class ChatObject {
             return false;
         }
         final TLRPC.Chat community = chats.get(chat.linked_community_id);
-        return community != null && community.collapsed_in_dialogs;
+        return isCommunity(community) && community.collapsed_in_dialogs;
     }
 
     public static boolean isChatCollapsedInCommunity(int currentAccount, TLRPC.Chat chat) {
@@ -2041,7 +2041,7 @@ public class ChatObject {
         }
 
         final TLRPC.Chat community = MessagesController.getInstance(currentAccount).getChat(chat.linked_community_id);
-        return community != null && community.collapsed_in_dialogs;
+        return isCommunity(community) && community.collapsed_in_dialogs;
     }
 
     public static boolean isUserCollapsedInCommunity(LongSparseArray<TLRPC.Chat> chats, TLRPC.User user) {

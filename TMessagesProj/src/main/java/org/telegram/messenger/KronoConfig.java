@@ -72,8 +72,8 @@ public class KronoConfig {
     public static boolean quickGoToMessageInSearch = true;
     public static boolean longClickMediaShowsMenu = true;
     public static boolean disablePullToNextChannel = false;
-    private static final Set<Long> localPinnedDialogs = new HashSet<>();
-    private static final Set<Long> favoriteDialogs = new HashSet<>();
+    private static final SparseArray<Set<Long>> localPinnedDialogsByAccount = new SparseArray<>();
+    private static final SparseArray<Set<Long>> favoriteDialogsByAccount = new SparseArray<>();
 
     // Hidden Chats & Folders Vault
     public static final int HIDDEN_LOCK_NONE = 0;
@@ -88,6 +88,7 @@ public class KronoConfig {
     private static final SparseArray<Set<Long>> hiddenDialogsByAccount = new SparseArray<>();
     private static final SparseArray<Set<Integer>> hiddenFiltersByAccount = new SparseArray<>();
     private static final SparseArray<ArrayList<Integer>> customFilterOrderByAccount = new SparseArray<>();
+    private static final SparseArray<ArrayList<Integer>> lastRemoteFilterOrderByAccount = new SparseArray<>();
     private static volatile boolean hiddenVaultUnlocked = false;
 
     // Chat Folder Tabs customization
@@ -214,27 +215,8 @@ public class KronoConfig {
         disableTabsSwipe = preferences.getBoolean("disableTabsSwipe", false);
         infiniteFolderScroll = preferences.getBoolean("infiniteFolderScroll", true);
 
-        localPinnedDialogs.clear();
-        String pinnedRaw = preferences.getString("localPinnedDialogs", "");
-        if (!TextUtils.isEmpty(pinnedRaw)) {
-            String[] parts = pinnedRaw.split(",");
-            for (String p : parts) {
-                try {
-                    localPinnedDialogs.add(Long.parseLong(p.trim()));
-                } catch (Exception ignore) {}
-            }
-        }
-
-        favoriteDialogs.clear();
-        String favRaw = preferences.getString("favoriteDialogs", "");
-        if (!TextUtils.isEmpty(favRaw)) {
-            String[] parts = favRaw.split(",");
-            for (String p : parts) {
-                try {
-                    favoriteDialogs.add(Long.parseLong(p.trim()));
-                } catch (Exception ignore) {}
-            }
-        }
+        localPinnedDialogsByAccount.clear();
+        favoriteDialogsByAccount.clear();
 
         uiStyle = preferences.getInt("uiStyle", UI_STYLE_MATERIAL_YOU);
         disableTitleMarquee = preferences.getBoolean("disableTitleMarquee", false);
@@ -279,6 +261,7 @@ public class KronoConfig {
         hiddenDialogsByAccount.clear();
         hiddenFiltersByAccount.clear();
         customFilterOrderByAccount.clear();
+        lastRemoteFilterOrderByAccount.clear();
 
         cloudBackupMode = preferences.getInt("cloudBackupMode", CLOUD_BACKUP_ON_CHANGE);
         if (cloudBackupMode != CLOUD_BACKUP_MANUAL
@@ -457,20 +440,6 @@ public class KronoConfig {
         if (preferences == null) {
             return;
         }
-        StringBuilder pinnedBuilder = new StringBuilder();
-        for (Long did : localPinnedDialogs) {
-            if (pinnedBuilder.length() > 0) {
-                pinnedBuilder.append(",");
-            }
-            pinnedBuilder.append(did);
-        }
-        StringBuilder favBuilder = new StringBuilder();
-        for (Long did : favoriteDialogs) {
-            if (favBuilder.length() > 0) {
-                favBuilder.append(",");
-            }
-            favBuilder.append(did);
-        }
         preferences.edit()
                 .putBoolean("ghostMode", ghostMode)
                 .putBoolean("dontReadMessages", dontReadMessages)
@@ -510,8 +479,6 @@ public class KronoConfig {
                 .putBoolean("folderNameInHeader", folderNameInHeader)
                 .putBoolean("disableTabsSwipe", disableTabsSwipe)
                 .putBoolean("infiniteFolderScroll", infiniteFolderScroll)
-                .putString("localPinnedDialogs", pinnedBuilder.toString())
-                .putString("favoriteDialogs", favBuilder.toString())
                 .putInt("uiStyle", uiStyle)
                 .putBoolean("disableTitleMarquee", disableTitleMarquee)
                 .putInt("glassMode", glassMode)
@@ -961,34 +928,91 @@ public class KronoConfig {
         saveConfig();
     }
 
-    public static synchronized boolean isFavoriteDialog(long dialogId) {
+    private static Set<Long> getOrLoadFavoriteDialogsLocked(int account) {
         loadConfig();
-        return favoriteDialogs.contains(dialogId);
+        Set<Long> set = favoriteDialogsByAccount.get(account);
+        if (set != null) {
+            return set;
+        }
+        set = new HashSet<>();
+        if (preferences != null) {
+            String key = "favoriteDialogs_" + account;
+            String raw;
+            if (preferences.contains(key)) {
+                raw = preferences.getString(key, "");
+            } else if (account == 0) {
+                raw = preferences.getString("favoriteDialogs", "");
+            } else {
+                raw = "";
+            }
+            if (!TextUtils.isEmpty(raw)) {
+                String[] parts = raw.split(",");
+                for (String p : parts) {
+                    try {
+                        set.add(Long.parseLong(p.trim()));
+                    } catch (Exception ignore) {}
+                }
+            }
+        }
+        favoriteDialogsByAccount.put(account, set);
+        return set;
+    }
+
+    private static void saveFavoriteDialogsLocked(int account, Set<Long> set) {
+        if (preferences == null) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Long did : set) {
+            if (sb.length() > 0) {
+                sb.append(",");
+            }
+            sb.append(did);
+        }
+        SharedPreferences.Editor editor = preferences.edit().putString("favoriteDialogs_" + account, sb.toString());
+        if (account == 0) {
+            editor.putString("favoriteDialogs", sb.toString());
+        }
+        editor.apply();
+    }
+
+    public static synchronized boolean isFavoriteDialog(int account, long dialogId) {
+        return getOrLoadFavoriteDialogsLocked(account).contains(dialogId);
+    }
+
+    public static synchronized boolean isFavoriteDialog(long dialogId) {
+        return isFavoriteDialog(UserConfig.selectedAccount, dialogId);
+    }
+
+    public static synchronized void setFavoriteDialog(int account, long dialogId, boolean favorite) {
+        Set<Long> set = getOrLoadFavoriteDialogsLocked(account);
+        boolean changed = favorite ? set.add(dialogId) : set.remove(dialogId);
+        if (changed) {
+            saveFavoriteDialogsLocked(account, set);
+        }
     }
 
     public static synchronized void setFavoriteDialog(long dialogId, boolean favorite) {
-        loadConfig();
-        boolean changed;
-        if (favorite) {
-            changed = favoriteDialogs.add(dialogId);
-        } else {
-            changed = favoriteDialogs.remove(dialogId);
-        }
-        if (changed) {
-            saveConfig();
-        }
+        setFavoriteDialog(UserConfig.selectedAccount, dialogId, favorite);
     }
 
-    public static synchronized boolean toggleFavoriteDialog(long dialogId) {
-        loadConfig();
-        boolean nowFavorite = !favoriteDialogs.contains(dialogId);
-        setFavoriteDialog(dialogId, nowFavorite);
+    public static synchronized boolean toggleFavoriteDialog(int account, long dialogId) {
+        Set<Long> set = getOrLoadFavoriteDialogsLocked(account);
+        boolean nowFavorite = !set.contains(dialogId);
+        setFavoriteDialog(account, dialogId, nowFavorite);
         return nowFavorite;
     }
 
+    public static synchronized boolean toggleFavoriteDialog(long dialogId) {
+        return toggleFavoriteDialog(UserConfig.selectedAccount, dialogId);
+    }
+
+    public static synchronized Set<Long> getFavoriteDialogs(int account) {
+        return new HashSet<>(getOrLoadFavoriteDialogsLocked(account));
+    }
+
     public static synchronized Set<Long> getFavoriteDialogs() {
-        loadConfig();
-        return new HashSet<>(favoriteDialogs);
+        return getFavoriteDialogs(UserConfig.selectedAccount);
     }
 
     // ==================== Hidden Chats & Folders Vault ====================
@@ -1248,6 +1272,66 @@ public class KronoConfig {
         }
     }
 
+    public static synchronized void clearCustomFilterOrder(int account) {
+        loadConfig();
+        customFilterOrderByAccount.put(account, new ArrayList<>());
+        if (preferences != null) {
+            preferences.edit().remove("customFilterOrder_" + account).apply();
+        }
+    }
+
+    private static ArrayList<Integer> getOrLoadLastRemoteFilterOrderLocked(int account) {
+        loadConfig();
+        ArrayList<Integer> list = lastRemoteFilterOrderByAccount.get(account);
+        if (list != null) {
+            return list;
+        }
+        list = new ArrayList<>();
+        if (preferences != null) {
+            String raw = preferences.getString("lastRemoteFilterOrder_" + account, "");
+            if (!TextUtils.isEmpty(raw)) {
+                String[] parts = raw.split(",");
+                for (String p : parts) {
+                    try {
+                        int id = Integer.parseInt(p.trim());
+                        if (!list.contains(id)) {
+                            list.add(id);
+                        }
+                    } catch (Exception ignore) {}
+                }
+            }
+        }
+        lastRemoteFilterOrderByAccount.put(account, list);
+        return list;
+    }
+
+    public static synchronized ArrayList<Integer> getLastRemoteFilterOrder(int account) {
+        return new ArrayList<>(getOrLoadLastRemoteFilterOrderLocked(account));
+    }
+
+    public static synchronized void saveLastRemoteFilterOrder(int account, List<Integer> orderIds) {
+        loadConfig();
+        ArrayList<Integer> list = new ArrayList<>();
+        if (orderIds != null) {
+            for (Integer id : orderIds) {
+                if (id != null && !list.contains(id)) {
+                    list.add(id);
+                }
+            }
+        }
+        lastRemoteFilterOrderByAccount.put(account, list);
+        if (preferences != null) {
+            StringBuilder sb = new StringBuilder();
+            for (Integer id : list) {
+                if (sb.length() > 0) {
+                    sb.append(",");
+                }
+                sb.append(id);
+            }
+            preferences.edit().putString("lastRemoteFilterOrder_" + account, sb.toString()).apply();
+        }
+    }
+
     public static boolean isDialogHiddenInHiddenFolder(int account, long dialogId) {
         if (dialogId == 0 || !hiddenHideFolderChatsEverywhere) {
             return false;
@@ -1295,10 +1379,22 @@ public class KronoConfig {
     }
 
     public static boolean isDialogOrFolderHidden(int account, long dialogId) {
+        return isDialogOrFolderHidden(account, dialogId, null);
+    }
+
+    public static boolean isDialogOrFolderHidden(int account, long dialogId, MessagesController.DialogFilter activeFilter) {
         if (dialogId == 0) {
             return false;
         }
-        return isDialogHiddenDirectly(account, dialogId) || isDialogHiddenInHiddenFolder(account, dialogId);
+        if (isDialogHiddenDirectly(account, dialogId)) {
+            return true;
+        }
+        if (activeFilter != null && !activeFilter.isDefault() && !isFilterHidden(account, activeFilter.id)) {
+            if (activeFilter.alwaysShow.contains(dialogId) || activeFilter.pinnedDialogs.indexOfKey(dialogId) >= 0) {
+                return false;
+            }
+        }
+        return isDialogHiddenInHiddenFolder(account, dialogId);
     }
 
     public static synchronized void syncGhostMasterState() {
@@ -1464,19 +1560,73 @@ public class KronoConfig {
         }
     }
 
-    public static synchronized boolean isLocallyPinned(long dialogId) {
+    private static Set<Long> getOrLoadLocalPinnedLocked(int account) {
         loadConfig();
-        return unlimitedPinnedChats && localPinnedDialogs.contains(dialogId);
+        Set<Long> set = localPinnedDialogsByAccount.get(account);
+        if (set != null) {
+            return set;
+        }
+        set = new HashSet<>();
+        if (preferences != null) {
+            String key = "localPinnedDialogs_" + account;
+            String raw;
+            if (preferences.contains(key)) {
+                raw = preferences.getString(key, "");
+            } else if (account == 0) {
+                raw = preferences.getString("localPinnedDialogs", "");
+            } else {
+                raw = "";
+            }
+            if (!TextUtils.isEmpty(raw)) {
+                String[] parts = raw.split(",");
+                for (String p : parts) {
+                    try {
+                        set.add(Long.parseLong(p.trim()));
+                    } catch (Exception ignore) {}
+                }
+            }
+        }
+        localPinnedDialogsByAccount.put(account, set);
+        return set;
+    }
+
+    private static void saveLocalPinnedLocked(int account, Set<Long> set) {
+        if (preferences == null) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Long did : set) {
+            if (sb.length() > 0) {
+                sb.append(",");
+            }
+            sb.append(did);
+        }
+        SharedPreferences.Editor editor = preferences.edit().putString("localPinnedDialogs_" + account, sb.toString());
+        if (account == 0) {
+            editor.putString("localPinnedDialogs", sb.toString());
+        }
+        editor.apply();
+    }
+
+    public static synchronized boolean isLocallyPinned(int account, long dialogId) {
+        loadConfig();
+        return unlimitedPinnedChats && getOrLoadLocalPinnedLocked(account).contains(dialogId);
+    }
+
+    public static synchronized boolean isLocallyPinned(long dialogId) {
+        return isLocallyPinned(UserConfig.selectedAccount, dialogId);
+    }
+
+    public static synchronized void setLocallyPinned(int account, long dialogId, boolean pinned) {
+        Set<Long> set = getOrLoadLocalPinnedLocked(account);
+        boolean changed = pinned ? set.add(dialogId) : set.remove(dialogId);
+        if (changed) {
+            saveLocalPinnedLocked(account, set);
+        }
     }
 
     public static synchronized void setLocallyPinned(long dialogId, boolean pinned) {
-        loadConfig();
-        if (pinned) {
-            localPinnedDialogs.add(dialogId);
-        } else {
-            localPinnedDialogs.remove(dialogId);
-        }
-        saveConfig();
+        setLocallyPinned(UserConfig.selectedAccount, dialogId, pinned);
     }
 
     public static ArrayList<String> getSpoilerWordsList() {

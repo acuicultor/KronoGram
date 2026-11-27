@@ -2870,10 +2870,33 @@ public class MessagesStorage extends BaseController {
                         favoritesFilter.emoticon = "⭐";
                         favoritesFilter.locked = false;
                         favoritesFilter.alwaysShow.clear();
-                        favoritesFilter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs());
+                        favoritesFilter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs(currentAccount));
                         favoritesFilter.neverShow.clear();
                         favoritesFilter.pendingUnreadCount = -1;
                         updateCounters = true;
+                    }
+                    for (int i = 0, N = favoritesFilter.alwaysShow.size(); i < N; i++) {
+                        long did = favoritesFilter.alwaysShow.get(i);
+                        if (did == 0) {
+                            continue;
+                        }
+                        if (!dialogsToLoad.contains(did)) {
+                            dialogsToLoad.add(did);
+                        }
+                        if (DialogObject.isEncryptedDialog(did)) {
+                            int encryptedChatId = DialogObject.getEncryptedChatId(did);
+                            if (!encryptedToLoad.contains(encryptedChatId)) {
+                                encryptedToLoad.add(encryptedChatId);
+                            }
+                        } else if (DialogObject.isChatDialog(did)) {
+                            if (!chatsToLoad.contains(-did)) {
+                                chatsToLoad.add(-did);
+                            }
+                        } else if (DialogObject.isUserDialog(did)) {
+                            if (!usersToLoad.contains(did)) {
+                                usersToLoad.add(did);
+                            }
+                        }
                     }
                 } else if (favoritesFilter != null) {
                     deleteDialogFilterInternal(favoritesFilter);
@@ -3805,7 +3828,7 @@ public class MessagesStorage extends BaseController {
                                     if (!filter.alwaysShow.contains(id)) {
                                         filter.alwaysShow.add(id);
                                     }
-                                    filter.pinnedDialogs.put(id, filter.pinnedDialogs.size() + 1);
+                                    filter.pinnedDialogs.put(id, filter.pinnedDialogs.size());
                                     collectFilterPeerToLoad(peer, true, usersToLoad, usersToLoadMap, chatsToLoad, chatsToLoadMap, dialogsToLoad, dialogsToLoadMap);
                                 }
                             }
@@ -3863,7 +3886,17 @@ public class MessagesStorage extends BaseController {
                     getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
                     for (int a = 0, N = chats.size(); a < N; a++) {
                         TLRPC.Chat chat = chats.get(a);
-                        chatsToLoadMap.remove(chat.id);
+                        if (chat == null) {
+                            continue;
+                        }
+                        if (chat instanceof TLRPC.TL_channelForbidden || chat.left || ChatObject.isNotInChat(chat)) {
+                            TLRPC.InputPeer stalePeer = chatsToLoadMap.get(chat.id);
+                            if (stalePeer != null && dialogsToLoad.contains(-chat.id) && !dialogsToLoadMap.containsKey(-chat.id)) {
+                                dialogsToLoadMap.put(-chat.id, stalePeer);
+                            }
+                        } else {
+                            chatsToLoadMap.remove(chat.id);
+                        }
                     }
                 }
 
@@ -3915,26 +3948,51 @@ public class MessagesStorage extends BaseController {
         }
         KronoConfig.loadConfig();
         boolean orderChanged = false;
+        boolean remoteHasDefault = filtersOrder.contains(0);
+        ArrayList<Integer> remoteCanonicalOrder = new ArrayList<>(filtersOrder.size());
+        for (int i = 0; i < filtersOrder.size(); i++) {
+            Integer fid = filtersOrder.get(i);
+            if (fid != null && fid != MessagesController.DIALOG_FILTER_FAVORITES_ID && !remoteCanonicalOrder.contains(fid)) {
+                remoteCanonicalOrder.add(fid);
+            }
+        }
+        ArrayList<Integer> prevRemoteOrder = KronoConfig.getLastRemoteFilterOrder(currentAccount);
+        boolean remoteOrderChangedFromLastSync = !prevRemoteOrder.isEmpty() && !prevRemoteOrder.equals(remoteCanonicalOrder);
+        KronoConfig.saveLastRemoteFilterOrder(currentAccount, remoteCanonicalOrder);
+
         MessagesController.DialogFilter favoritesFilter = null;
+        int prevFavoritesIndex = -1;
+        ArrayList<Integer> currentCustomOrder = KronoConfig.getCustomFilterOrder(currentAccount);
+        if (!currentCustomOrder.isEmpty()) {
+            prevFavoritesIndex = currentCustomOrder.indexOf(MessagesController.DIALOG_FILTER_FAVORITES_ID);
+        }
         for (int a = 0, N = dialogFilters.size(); a < N; a++) {
             MessagesController.DialogFilter filter = dialogFilters.get(a);
             if (filter.isLocalFavorites()) {
                 favoritesFilter = filter;
-                int preservedOrder = Math.max(0, filter.order);
-                if (filter.order != preservedOrder) {
-                    filter.order = preservedOrder;
-                    orderChanged = true;
+                if (prevFavoritesIndex < 0) {
+                    prevFavoritesIndex = Math.max(1, filter.order);
                 }
                 filter.name = "Favoritos";
                 filter.emoticon = "⭐";
                 filter.locked = false;
                 filter.alwaysShow.clear();
-                filter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs());
+                filter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs(currentAccount));
                 filter.neverShow.clear();
                 filter.pendingUnreadCount = -1;
                 continue;
             }
-            int order = filtersOrder.indexOf(filter.id);
+            int order;
+            if (filter.isDefault()) {
+                order = remoteHasDefault ? filtersOrder.indexOf(0) : 0;
+            } else {
+                int idx = filtersOrder.indexOf(filter.id);
+                if (idx >= 0) {
+                    order = remoteHasDefault ? idx : (idx + 1);
+                } else {
+                    order = dialogFilters.size() + 1;
+                }
+            }
             if (filter.order != order) {
                 filter.order = order;
                 anythingChanged = true;
@@ -3950,16 +4008,15 @@ public class MessagesStorage extends BaseController {
             }
         } else if (favoritesFilter != null) {
             deleteDialogFilterInternal(favoritesFilter);
+            favoritesFilter = null;
             anythingChanged = true;
             orderChanged = true;
         }
-        if (KronoConfig.hasCustomFilterOrder(currentAccount)) {
-            if (applyCustomFilterOrderInternal() || orderChanged) {
-                saveDialogFiltersOrderInternal();
-                anythingChanged = true;
-            }
-        } else if (orderChanged) {
+        if (remoteOrderChangedFromLastSync) {
             Collections.sort(dialogFilters, (o1, o2) -> {
+                if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
+                    return o1.isLocalFavorites() ? 1 : -1;
+                }
                 if (o1.order > o2.order) {
                     return 1;
                 } else if (o1.order < o2.order) {
@@ -3968,11 +4025,52 @@ public class MessagesStorage extends BaseController {
                 if (o1.isDefault() != o2.isDefault()) {
                     return o1.isDefault() ? -1 : 1;
                 }
+                return 0;
+            });
+            if (favoritesFilter != null) {
+                dialogFilters.remove(favoritesFilter);
+                int targetIndex = prevFavoritesIndex >= 0 ? Math.min(prevFavoritesIndex, dialogFilters.size()) : Math.min(1, dialogFilters.size());
+                dialogFilters.add(targetIndex, favoritesFilter);
+            }
+            ArrayList<Integer> normalizedIds = new ArrayList<>(dialogFilters.size());
+            for (int i = 0; i < dialogFilters.size(); i++) {
+                MessagesController.DialogFilter f = dialogFilters.get(i);
+                f.order = i;
+                normalizedIds.add(f.id);
+            }
+            if (KronoConfig.hasCustomFilterOrder(currentAccount)) {
+                KronoConfig.saveCustomFilterOrder(currentAccount, normalizedIds);
+            }
+            saveDialogFiltersOrderInternal();
+            anythingChanged = true;
+        } else if (KronoConfig.hasCustomFilterOrder(currentAccount)) {
+            if (applyCustomFilterOrderInternal() || orderChanged) {
+                saveDialogFiltersOrderInternal();
+                anythingChanged = true;
+            }
+        } else if (orderChanged) {
+            Collections.sort(dialogFilters, (o1, o2) -> {
                 if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
-                    return o1.isLocalFavorites() ? -1 : 1;
+                    return o1.isLocalFavorites() ? 1 : -1;
+                }
+                if (o1.order > o2.order) {
+                    return 1;
+                } else if (o1.order < o2.order) {
+                    return -1;
+                }
+                if (o1.isDefault() != o2.isDefault()) {
+                    return o1.isDefault() ? -1 : 1;
                 }
                 return 0;
             });
+            if (favoritesFilter != null) {
+                dialogFilters.remove(favoritesFilter);
+                int targetIndex = prevFavoritesIndex >= 0 ? Math.min(prevFavoritesIndex, dialogFilters.size()) : Math.min(1, dialogFilters.size());
+                dialogFilters.add(targetIndex, favoritesFilter);
+            }
+            for (int i = 0; i < dialogFilters.size(); i++) {
+                dialogFilters.get(i).order = i;
+            }
             saveDialogFiltersOrderInternal();
         }
         if (!users.isEmpty() || !chats.isEmpty() || (encryptedChats != null && !encryptedChats.isEmpty()) || (pinnedDialogs != null && !pinnedDialogs.dialogs.isEmpty()) || (pinnedRemoteDialogs != null && !pinnedRemoteDialogs.dialogs.isEmpty())) {
@@ -17831,6 +17929,14 @@ public class MessagesStorage extends BaseController {
                     }
                     cursor.dispose();
                     cursor = null;
+
+                    if (a == 0 && folderId == 0 && offset == 0 && !foldersToLoad.contains(1)) {
+                        SQLiteCursor archiveCheckCursor = database.queryFinalized("SELECT 1 FROM dialogs WHERE folder_id = 1 LIMIT 1");
+                        if (archiveCheckCursor.next()) {
+                            foldersToLoad.add(1);
+                        }
+                        archiveCheckCursor.dispose();
+                    }
 
                     if (!dialogsToLoadGroupMessages.isEmpty()) {
                         StringBuilder whereClause = new StringBuilder();
