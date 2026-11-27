@@ -7974,7 +7974,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void getChannelParticipants(boolean reload) {
-        if (loadingUsers || participantsMap == null || chatInfo == null) {
+        if (loadingUsers || participantsMap == null || chatInfo == null || ChatObject.isCommunity(currentChat)) {
             return;
         }
         loadingUsers = true;

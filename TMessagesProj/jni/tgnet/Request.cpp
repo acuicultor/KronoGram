@@ -35,7 +35,7 @@ Request::~Request() {
 }
 
 void Request::addRespondMessageId(int64_t id) {
-    respondsToMessageIds.push_back(messageId);
+    respondsToMessageIds.push_back(id);
 }
 
 bool Request::respondsToMessageId(int64_t id) {

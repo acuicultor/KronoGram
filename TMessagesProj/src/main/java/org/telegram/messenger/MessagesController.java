@@ -8121,6 +8121,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void loadChannelAdmins(long chatId, boolean cache) {
+        if (ChatObject.isCommunity(getChat(chatId))) {
+            return;
+        }
         int loadTime = loadingChannelAdmins.get(chatId);
         if ((SystemClock.elapsedRealtime() / 1000) - loadTime < 60) {
             return;
@@ -8178,7 +8181,9 @@ public class MessagesController extends BaseController implements NotificationCe
             TLRPC.TL_channels_getFullChannel req = new TLRPC.TL_channels_getFullChannel();
             req.channel = getInputChannel(chat);
             request = req;
-            loadChannelAdmins(chatId, !loaded);
+            if (!ChatObject.isCommunity(chat)) {
+                loadChannelAdmins(chatId, !loaded);
+            }
         } else {
             TLRPC.TL_messages_getFullChat req = new TLRPC.TL_messages_getFullChat();
             req.chat_id = chatId;
@@ -10974,6 +10979,12 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void loadChannelParticipants(Long chatId, Utilities.Callback<TLRPC.TL_channels_channelParticipants> whenDone, int count) {
+        if (chatId == null || ChatObject.isCommunity(getChat(chatId))) {
+            if (whenDone != null) {
+                whenDone.run(null);
+            }
+            return;
+        }
         if (whenDone == null && (loadingFullParticipants.contains(chatId) || loadedFullParticipants.contains(chatId))) {
             return;
         }
@@ -13076,16 +13087,48 @@ public class MessagesController extends BaseController implements NotificationCe
                     req.offset_peer = new TLRPC.TL_inputPeerEmpty();
                 } else {
                     if (dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetChannelId] != 0) {
-                        req.offset_peer = new TLRPC.TL_inputPeerChannel();
-                        req.offset_peer.channel_id = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetChannelId];
+                        long channelId = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetChannelId];
+                        long accessHash = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetAccess];
+                        if (accessHash == 0) {
+                            TLRPC.Chat chat = getChat(channelId);
+                            if (chat != null && chat.access_hash != 0) {
+                                accessHash = chat.access_hash;
+                            }
+                        }
+                        if (accessHash != 0) {
+                            req.offset_peer = new TLRPC.TL_inputPeerChannel();
+                            req.offset_peer.channel_id = channelId;
+                            req.offset_peer.access_hash = accessHash;
+                        } else {
+                            req.offset_id = 0;
+                            req.offset_peer = new TLRPC.TL_inputPeerEmpty();
+                        }
                     } else if (dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetUserId] != 0) {
-                        req.offset_peer = new TLRPC.TL_inputPeerUser();
-                        req.offset_peer.user_id = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetUserId];
-                    } else {
+                        long userId = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetUserId];
+                        long accessHash = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetAccess];
+                        if (accessHash == 0) {
+                            TLRPC.User user = getUser(userId);
+                            if (user != null && user.access_hash != 0) {
+                                accessHash = user.access_hash;
+                            }
+                        }
+                        if (userId == getUserConfig().getClientUserId()) {
+                            req.offset_peer = new TLRPC.TL_inputPeerSelf();
+                        } else if (accessHash != 0) {
+                            req.offset_peer = new TLRPC.TL_inputPeerUser();
+                            req.offset_peer.user_id = userId;
+                            req.offset_peer.access_hash = accessHash;
+                        } else {
+                            req.offset_id = 0;
+                            req.offset_peer = new TLRPC.TL_inputPeerEmpty();
+                        }
+                    } else if (dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetChatId] != 0) {
                         req.offset_peer = new TLRPC.TL_inputPeerChat();
                         req.offset_peer.chat_id = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetChatId];
+                    } else {
+                        req.offset_id = 0;
+                        req.offset_peer = new TLRPC.TL_inputPeerEmpty();
                     }
-                    req.offset_peer.access_hash = dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetAccess];
                 }
             } else {
                 boolean found = false;
@@ -13107,8 +13150,6 @@ public class MessagesController extends BaseController implements NotificationCe
                             }
                         }
                         if (lastMessage != null && lastMessage.getId() > 0) {
-                            req.offset_date = lastMessage.messageOwner.date;
-                            req.offset_id = lastMessage.messageOwner.id;
                             long id;
                             if (lastMessage.messageOwner.peer_id.channel_id != 0) {
                                 id = -lastMessage.messageOwner.peer_id.channel_id;
@@ -13117,7 +13158,14 @@ public class MessagesController extends BaseController implements NotificationCe
                             } else {
                                 id = lastMessage.messageOwner.peer_id.user_id;
                             }
-                            req.offset_peer = getInputPeer(id);
+                            TLRPC.InputPeer offsetPeer = getInputPeer(id);
+                            if (offsetPeer == null || offsetPeer instanceof TLRPC.TL_inputPeerEmpty ||
+                                    ((offsetPeer instanceof TLRPC.TL_inputPeerChannel || offsetPeer instanceof TLRPC.TL_inputPeerUser) && offsetPeer.access_hash == 0)) {
+                                continue;
+                            }
+                            req.offset_date = lastMessage.messageOwner.date;
+                            req.offset_id = lastMessage.messageOwner.id;
+                            req.offset_peer = offsetPeer;
                             found = true;
                             break;
                         }
@@ -13127,6 +13175,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     req.offset_peer = new TLRPC.TL_inputPeerEmpty();
                 }
             }
+            final boolean hadNonEmptyOffsetPeer = !(req.offset_peer instanceof TLRPC.TL_inputPeerEmpty);
             getConnectionsManager().sendRequest(req, (response, error) -> {
                 if (error == null) {
                     TLRPC.messages_Dialogs dialogsRes = (TLRPC.messages_Dialogs) response;
@@ -13135,9 +13184,18 @@ public class MessagesController extends BaseController implements NotificationCe
                         AndroidUtilities.runOnUIThread(onEmptyCallback);
                     }
                 } else {
+                    final boolean peerInvalid = "PEER_ID_INVALID".equals(error.text);
                     AndroidUtilities.runOnUIThread(() -> {
+                        if (peerInvalid) {
+                            getUserConfig().setDialogsLoadOffset(folderId, 0, 0, 0, 0, 0, 0);
+                            getUserConfig().saveConfig(false);
+                        }
                         loadingDialogs.put(folderId, false);
-                        getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
+                        if (peerInvalid && hadNonEmptyOffsetPeer) {
+                            loadDialogs(folderId, offset, count, false, onEmptyCallback);
+                        } else {
+                            getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
+                        }
                     });
                 }
             });
