@@ -15302,12 +15302,24 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         set.setExpanded(LiteMode.FLAGS_CHAT, true);
                         set.scrollToFlags(LiteMode.FLAG_CHAT_BLUR);
                     }) : null,
+                    Build.VERSION.SDK_INT >= 31 ? new SearchResult(915, getString(R.string.LiteOptionsLiquidGlass), null, getString(R.string.PowerUsage), getString(R.string.LiteOptionsChat), R.drawable.msg2_battery, () -> {
+                        LiteModeSettingsActivity set = new LiteModeSettingsActivity();
+                        f.presentFragment(set);
+                        set.setExpanded(LiteMode.FLAGS_CHAT, true);
+                        set.scrollToFlags(LiteMode.FLAG_LIQUID_GLASS);
+                    }).withKeywords("liquid glass frosted cristal transparencia desenfoque") : null,
                     new SearchResult(912, getString(R.string.LiteOptionsScale), null, getString(R.string.PowerUsage), getString(R.string.LiteOptionsChat), R.drawable.msg2_battery, () -> {
                         LiteModeSettingsActivity set = new LiteModeSettingsActivity();
                         f.presentFragment(set);
                         set.setExpanded(LiteMode.FLAGS_CHAT, true);
                         set.scrollToFlags(LiteMode.FLAG_CHAT_SCALE);
                     }),
+                    org.telegram.ui.Components.ThanosEffect.supports() ? new SearchResult(916, getString(R.string.LiteOptionsThanos), null, getString(R.string.PowerUsage), getString(R.string.LiteOptionsChat), R.drawable.msg2_battery, () -> {
+                        LiteModeSettingsActivity set = new LiteModeSettingsActivity();
+                        f.presentFragment(set);
+                        set.setExpanded(LiteMode.FLAGS_CHAT, true);
+                        set.scrollToFlags(LiteMode.FLAG_CHAT_THANOS);
+                    }) : null,
                     new SearchResult(913, getString(R.string.LiteOptionsCalls), getString(R.string.PowerUsage), R.drawable.msg2_battery, () -> {
                         LiteModeSettingsActivity set = new LiteModeSettingsActivity();
                         f.presentFragment(set);
@@ -15323,6 +15335,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         f.presentFragment(set);
                         set.scrollToFlags(LiteMode.FLAG_AUTOPLAY_GIFS);
                     }).withLink("tg://settings/power-saving/gifs"),
+                    new SearchResult(917, getString(R.string.LiteOptionsParticles), getString(R.string.PowerUsage), R.drawable.msg2_battery, () -> {
+                        LiteModeSettingsActivity set = new LiteModeSettingsActivity();
+                        f.presentFragment(set);
+                        set.scrollToFlags(LiteMode.FLAG_PARTICLES);
+                    }),
                     new SearchResult(914, getString(R.string.LiteSmoothTransitions), getString(R.string.PowerUsage), R.drawable.msg2_battery, () -> {
                         LiteModeSettingsActivity set = new LiteModeSettingsActivity();
                         f.presentFragment(set);
@@ -15339,7 +15356,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
                     new SearchResult(1000, "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_MAIN))).withKeywords("kronogram configuracion mod opciones"),
                     new SearchResult(1001, "Privacidad y seguridad", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_PRIVACY))).withKeywords("kronogram modo fantasma ghost boveda oculta anti-borrado 1 vista telemetria"),
-                    new SearchResult(1002, "Apariencia", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram temas material you monet estilo interfaz ios clasico"),
+                    new SearchResult(1002, "Apariencia", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram temas material you monet estilo interfaz ios clasico liquid glass frosted cristal"),
                     new SearchResult(1003, "Chats", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas pestanas gestos anclados ilimitados cache almacenamiento"),
                     new SearchResult(1004, "Voz y Traducción", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_AI))).withKeywords("kronogram transcripcion vosk ia motores traduccion"),
                     new SearchResult(1005, "Notificaciones y Diagnóstico", "Ajustes de KronoGram", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_NOTIFICATIONS))).withKeywords("kronogram servicio anti-cierre estado fcm push bateria pruebas"),
@@ -15373,6 +15390,11 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     new SearchResult(1040, "Temas", "openThemesRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia colores"),
                     new SearchResult(1041, "Tema Monet (Material You)", "monetThemeRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia monet light dark amoled colores"),
                     new SearchResult(1042, "Estilo visual de interfaz", "uiStyleRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia material you ios cupertino clasico tarjetas"),
+                    new SearchResult(1044, "Efecto de cristal (Glass)", "glassModeRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia liquid glass frosted cristal desactivado transparencia"),
+                    new SearchResult(1045, "Cristal en barra de ajustes", "glassSettingsBarRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia liquid glass frosted cristal barra ajustes perfil listas"),
+                    new SearchResult(1046, "Cristal en barras de búsqueda", "glassSearchBarsRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia liquid glass frosted cristal buscador filtros"),
+                    new SearchResult(1047, "Cristal en barra inferior y pestañas", "glassBottomBarRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia liquid glass frosted cristal navegacion carpetas"),
+                    new SearchResult(1048, "Cristal en chat y menús", "glassChatBarsRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia liquid glass frosted cristal chat menus flotantes"),
                     new SearchResult(1043, "Quitar efecto marquee en los títulos", "disableTitleMarqueeRow", "Ajustes de KronoGram", "Apariencia", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_APPEARANCE))).withKeywords("kronogram apariencia desplazamiento continuo titulos"),
 
                     new SearchResult(1050, "Contenido de las pestañas", "tabModeRow", "Ajustes de KronoGram", "Chats", R.drawable.settings_kronogram, () -> f.presentFragment(new KronoSettingsActivity(KronoSettingsActivity.SECTION_CHATS))).withKeywords("kronogram carpetas iconos texto"),

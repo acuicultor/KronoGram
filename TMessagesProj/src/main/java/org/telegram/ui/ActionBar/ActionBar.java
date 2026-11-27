@@ -2169,6 +2169,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
                 boolean contains = false;
                 contains |= glassDrawable != null && glassDrawable.getBounds().contains(x, y);
+                contains |= isSearchFieldVisible && menu != null && child == menu;
                 if (child != null && child != chatAvatarContainer) {
                     contains |= glassDrawableBack != null && glassDrawableBack.getBounds().contains(x, y);
                     contains |= glassDrawableMenu != null && glassDrawableMenu.getBounds().contains(x, y);
@@ -2626,9 +2627,11 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             } else {
                 final int menuWidthWithPadding = menuWidth + ((hasForcedMenuWidth || hasForcedMenuMinWidth) ? (menuWidth > 0 ? p : 0) : (int) (p * animatorHasMenuItems.getFloatValue()));
                 final int baseRightOffset = lerp(menuWidthWithPadding, Math.max(menuWidthWithPadding, p + s), chatAvatarContainer == null ? 0f : 1f - animatorAvatarContainerHasAvatar.getFloatValue());
-                final int rightOffset = hasRightAvatar
-                        ? lerp(Math.max(baseRightOffset, menuWidthWithPadding + p + s), menuWidthWithPadding, Math.max(searchFactor, actionModeFactor))
-                        : baseRightOffset;
+                final int rightOffset = lerp(
+                        hasRightAvatar ? Math.max(baseRightOffset, menuWidthWithPadding + p + s) : baseRightOffset,
+                        menuWidthWithPadding,
+                        Math.max(searchFactor, actionModeFactor)
+                );
 
                 final int leftDefault = lerp(hasBackButton ? s + p : 0, s + p, chatAvatarContainer == null? 0f : 1f - animatorAvatarContainerHasAvatar.getFloatValue());
                 final int rightDefault = getWidth() - rightOffset;
