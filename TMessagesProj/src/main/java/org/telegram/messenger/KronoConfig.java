@@ -35,6 +35,8 @@ public class KronoConfig {
     private static final String PREFS_NAME = "kronoconfig";
     private static SharedPreferences preferences;
     private static volatile boolean loaded = false;
+    private static volatile boolean pendingGlassModeMigrationFromLiteMode = false;
+    private static volatile boolean postInitCompleted = false;
 
     // 1. Ghost Mode & Privacy
     public static boolean ghostMode = false;
@@ -238,10 +240,10 @@ public class KronoConfig {
         disableTitleMarquee = preferences.getBoolean("disableTitleMarquee", false);
         if (preferences.contains("glassMode")) {
             glassMode = preferences.getInt("glassMode", GLASS_MODE_LIQUID);
+            pendingGlassModeMigrationFromLiteMode = false;
         } else {
-            boolean hasBlur = LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
-            boolean hasLiquid = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
-            glassMode = !hasBlur ? GLASS_MODE_OFF : (hasLiquid ? GLASS_MODE_LIQUID : GLASS_MODE_FROSTED);
+            glassMode = GLASS_MODE_LIQUID;
+            pendingGlassModeMigrationFromLiteMode = true;
         }
         if (glassMode < GLASS_MODE_LIQUID || glassMode > GLASS_MODE_OFF) {
             glassMode = GLASS_MODE_LIQUID;
@@ -296,6 +298,9 @@ public class KronoConfig {
         loaded = false;
         preferences = null;
         loadConfig();
+        if (postInitCompleted) {
+            syncInitialGlassModeIfNeeded();
+        }
     }
 
     public static synchronized void resetKronoDefaults(boolean preserveVault) {
@@ -738,13 +743,38 @@ public class KronoConfig {
             mode = GLASS_MODE_LIQUID;
         }
         glassMode = mode;
+        pendingGlassModeMigrationFromLiteMode = false;
         saveConfig();
         LiteMode.setGlassFlagsFromKrono(mode != GLASS_MODE_OFF, mode == GLASS_MODE_LIQUID);
         org.telegram.utils.glass.GlassEngine.refreshFromSettings();
     }
 
+    public static synchronized void syncInitialGlassModeIfNeeded() {
+        postInitCompleted = true;
+        loadConfig();
+        if (!pendingGlassModeMigrationFromLiteMode || preferences == null) {
+            return;
+        }
+        pendingGlassModeMigrationFromLiteMode = false;
+        if (preferences.contains("glassMode")) {
+            return;
+        }
+        int oldMode = glassMode;
+        boolean hasBlur = LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
+        boolean hasLiquid = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
+        glassMode = !hasBlur ? GLASS_MODE_OFF : (hasLiquid ? GLASS_MODE_LIQUID : GLASS_MODE_FROSTED);
+        if (glassMode < GLASS_MODE_LIQUID || glassMode > GLASS_MODE_OFF) {
+            glassMode = GLASS_MODE_LIQUID;
+        }
+        preferences.edit().putInt("glassMode", glassMode).apply();
+        if (glassMode != oldMode) {
+            org.telegram.utils.glass.GlassEngine.refreshFromSettings();
+        }
+    }
+
     public static synchronized void syncGlassModeFromLiteMode() {
         loadConfig();
+        pendingGlassModeMigrationFromLiteMode = false;
         boolean blur = LiteMode.isEnabled(LiteMode.FLAG_CHAT_BLUR);
         boolean liquid = LiteMode.isEnabled(LiteMode.FLAG_LIQUID_GLASS);
         int derived = !blur ? GLASS_MODE_OFF : (liquid ? GLASS_MODE_LIQUID : GLASS_MODE_FROSTED);
