@@ -241,8 +241,9 @@ public class SecretVoicePlayer extends Dialog {
             WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR |
             WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS |
             WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION;
+        final boolean isHiddenDialog = messageObject != null && KronoConfig.isDialogOrFolderHidden(messageObject.currentAccount, messageObject.getDialogId());
         final boolean allowSecretBypass = KronoConfig.isAllowRestrictedContentBypass() && messageObject != null && DialogObject.isEncryptedDialog(messageObject.getDialogId());
-        if (!BuildVars.DEBUG_PRIVATE_VERSION && !KronoConfig.viewOnceAllowSaveAndScreenshots && !allowSecretBypass) {
+        if (isHiddenDialog || (!BuildVars.DEBUG_PRIVATE_VERSION && !KronoConfig.viewOnceAllowSaveAndScreenshots && !allowSecretBypass)) {
             params.flags |= WindowManager.LayoutParams.FLAG_SECURE;
             AndroidUtilities.logFlagSecure();
         }

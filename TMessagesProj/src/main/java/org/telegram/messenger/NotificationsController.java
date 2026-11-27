@@ -1105,6 +1105,11 @@ public class NotificationsController extends BaseController implements Notificat
             for (int i = 0; i < messageObjects.size(); ++i) {
                 final MessageObject messageObject = messageObjects.get(i);
                 if (messageObject != null && messageObject.messageOwner != null&& !messageObject.isOutOwner() && messageObject.messageOwner.action instanceof TLRPC.TL_messageActionConferenceCall) {
+                    if (KronoConfig.hiddenMuteNotifications && KronoConfig.isDialogOrFolderHidden(currentAccount, messageObject.getDialogId())) {
+                        messageObjects.remove(i);
+                        i--;
+                        continue;
+                    }
                     final TLRPC.TL_messageActionConferenceCall action = (TLRPC.TL_messageActionConferenceCall) messageObject.messageOwner.action;
                     if (!action.active && !action.missed && (getConnectionsManager().getCurrentTime() - messageObject.messageOwner.date) < getMessagesController().callRingTimeout / 1000L) {
                         final HashSet<Long> ids = new HashSet<>();
@@ -1158,8 +1163,11 @@ public class NotificationsController extends BaseController implements Notificat
                     continue;
                 }
                 if (messageObject.isStoryPush) {
-                    long date = messageObject.messageOwner == null ? System.currentTimeMillis() : messageObject.messageOwner.date * 1000L;
                     long dialogId = messageObject.getDialogId();
+                    if (KronoConfig.hiddenMuteNotifications && KronoConfig.isDialogOrFolderHidden(currentAccount, dialogId)) {
+                        continue;
+                    }
+                    long date = messageObject.messageOwner == null ? System.currentTimeMillis() : messageObject.messageOwner.date * 1000L;
                     int id = messageObject.getId();
                     StoryNotification oldNotification = storyPushMessagesDict.get(dialogId);
                     StoryNotification notification;

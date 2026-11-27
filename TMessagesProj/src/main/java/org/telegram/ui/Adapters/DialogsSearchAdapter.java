@@ -253,7 +253,11 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             HintDialogCell cell = (HintDialogCell) holder.itemView;
 
-            TLRPC.TL_topPeer peer = MediaDataController.getInstance(currentAccount).hints.get(position);
+            ArrayList<TLRPC.TL_topPeer> visibleHints = getVisibleHints(currentAccount);
+            if (position < 0 || position >= visibleHints.size()) {
+                return;
+            }
+            TLRPC.TL_topPeer peer = visibleHints.get(position);
             TLRPC.Dialog dialog = new TLRPC.TL_dialog();
             TLRPC.Chat chat = null;
             TLRPC.User user = null;
@@ -280,8 +284,35 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
 
         @Override
         public int getItemCount() {
-            return MediaDataController.getInstance(currentAccount).hints.size();
+            return getVisibleHints(currentAccount).size();
         }
+    }
+
+    private static ArrayList<TLRPC.TL_topPeer> getVisibleHints(int currentAccount) {
+        ArrayList<TLRPC.TL_topPeer> source = MediaDataController.getInstance(currentAccount).hints;
+        if (source == null || source.isEmpty() || !KronoConfig.hasAnyHiddenItems(currentAccount)) {
+            return source != null ? source : new ArrayList<>();
+        }
+        ArrayList<TLRPC.TL_topPeer> filtered = new ArrayList<>(source.size());
+        for (int i = 0; i < source.size(); i++) {
+            TLRPC.TL_topPeer peer = source.get(i);
+            if (peer == null || peer.peer == null) {
+                continue;
+            }
+            long did = 0;
+            if (peer.peer.user_id != 0) {
+                did = peer.peer.user_id;
+            } else if (peer.peer.channel_id != 0) {
+                did = -peer.peer.channel_id;
+            } else if (peer.peer.chat_id != 0) {
+                did = -peer.peer.chat_id;
+            }
+            if (did != 0 && KronoConfig.isDialogOrFolderHidden(currentAccount, did)) {
+                continue;
+            }
+            filtered.add(peer);
+        }
+        return filtered;
     }
 
     private boolean filter(Object obj) {
@@ -1742,7 +1773,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     private boolean hasHints() {
-        return !searchWas && !MediaDataController.getInstance(currentAccount).hints.isEmpty() && (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT || dialogsActivity.allowUsers);
+        return !searchWas && !getVisibleHints(currentAccount).isEmpty() && (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT || dialogsActivity.allowUsers);
     }
 
     private int messagesSectionPosition = -1;

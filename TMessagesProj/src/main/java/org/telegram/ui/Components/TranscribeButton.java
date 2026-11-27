@@ -112,10 +112,15 @@ public class TranscribeButton {
 
         this.isOpen = false;
         this.shouldBeOpen = false;
-        premium = org.telegram.messenger.KronoConfig.freeVoiceTranscription || (parent.getMessageObject() != null && UserConfig.getInstance(parent.getMessageObject().currentAccount).isPremium());
+        premium = isTranscriptionAllowed();
 
         loadingFloat = new AnimatedFloat(parent, 250, CubicBezierInterpolator.EASE_OUT_QUINT);
         animatedDrawLock = new AnimatedFloat(parent, 250, CubicBezierInterpolator.EASE_OUT_QUINT);
+    }
+
+    private boolean isTranscriptionAllowed() {
+        return org.telegram.messenger.KronoConfig.freeVoiceTranscription
+                || (parent != null && parent.getMessageObject() != null && UserConfig.getInstance(parent.getMessageObject().currentAccount).isPremium());
     }
 
     public void setLock(boolean drawLock, boolean animated) {
@@ -206,7 +211,8 @@ public class TranscribeButton {
             return;
         }
         clickedToOpen = false;
-        boolean allowFree = premium || org.telegram.messenger.KronoConfig.freeVoiceTranscription;
+        boolean allowFree = isTranscriptionAllowed();
+        premium = allowFree;
         boolean processClick, toOpen = !shouldBeOpen;
         if (!shouldBeOpen) {
             processClick = !loading;
@@ -250,6 +256,7 @@ public class TranscribeButton {
     }
 
     public void setColor(int color, int grayColor, boolean isOut, float bgBack) {
+        premium = isTranscriptionAllowed();
         boolean disabled = !premium;
 //        if (disabled) {
 //            color = ColorUtils.blendARGB(color, grayColor, isOut ? .6f : .8f);

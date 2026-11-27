@@ -1165,6 +1165,9 @@ public class KronoSettingsActivity extends BaseFragment {
         builder.setTitle("Motor de traducción");
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setTranslationProvider(providerValues[which]);
+            getMessagesController().getTranslateController().reset();
+            getNotificationCenter().postNotificationName(NotificationCenter.updateSearchSettings);
+            getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, 0);
             if (listAdapter != null && translationProviderRow >= 0) {
                 listAdapter.notifyItemChanged(translationProviderRow);
             }
@@ -1545,6 +1548,12 @@ public class KronoSettingsActivity extends BaseFragment {
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             int position = holder.getAdapterPosition();
+            if (position == diagPlayServicesRow || position == diagServiceRunningRow || position == diagLastPushRow) {
+                return false;
+            }
+            if (position == hiddenVaultBiometricRow && !KronoHiddenLockHelper.canUseBiometrics(mContext)) {
+                return false;
+            }
             if (position == infiniteFolderScrollRow && KronoConfig.disableTabsSwipe) {
                 return false;
             }

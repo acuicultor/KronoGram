@@ -3035,7 +3035,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
     }
 
     public void playMessageAtIndex(int index) {
-        if (currentPlaylistNum < 0 || currentPlaylistNum >= playlist.size()) {
+        if (playlist == null || index < 0 || index >= playlist.size()) {
             return;
         }
         currentPlaylistNum = index;

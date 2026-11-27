@@ -50,7 +50,9 @@ public class NotificationsService extends Service {
     public void onCreate() {
         super.onCreate();
         ApplicationLoader.postInitApplication();
-        if (KronoConfig.isPersistentForegroundService()) {
+        if (KronoConfig.isPersistentForegroundService()
+                && !isInTimeoutCooldown()
+                && (!ApplicationLoader.mainInterfacePaused || Build.VERSION.SDK_INT < 31)) {
             promoteToForeground();
         }
     }
@@ -58,8 +60,14 @@ public class NotificationsService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         stoppedByTimeout = false;
-        boolean requestedForeground = (intent != null && intent.getBooleanExtra("foreground", false))
-                || KronoConfig.isPersistentForegroundService();
+        boolean canPromoteNow = !isInTimeoutCooldown()
+                && (!ApplicationLoader.mainInterfacePaused || isRunningInForeground || Build.VERSION.SDK_INT < 31);
+        boolean requestedForeground;
+        if (intent != null && intent.hasExtra("foreground")) {
+            requestedForeground = intent.getBooleanExtra("foreground", false) && !isInTimeoutCooldown();
+        } else {
+            requestedForeground = KronoConfig.isPersistentForegroundService() && canPromoteNow;
+        }
         if (requestedForeground) {
             promoteToForeground();
             for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
@@ -67,21 +75,30 @@ public class NotificationsService extends Service {
                     ConnectionsManager.getInstance(a).setPushConnectionEnabled(true);
                 }
             }
-        } else if (isRunningInForeground) {
-            try {
-                if (Build.VERSION.SDK_INT >= 24) {
-                    stopForeground(STOP_FOREGROUND_REMOVE);
-                } else {
-                    stopForeground(true);
+        } else {
+            if (isRunningInForeground) {
+                try {
+                    if (Build.VERSION.SDK_INT >= 24) {
+                        stopForeground(STOP_FOREGROUND_REMOVE);
+                    } else {
+                        stopForeground(true);
+                    }
+                } catch (Throwable ignore) {
                 }
-            } catch (Throwable ignore) {
+                isRunningInForeground = false;
             }
-            isRunningInForeground = false;
+            if (KronoConfig.isPersistentForegroundService() || KronoConfig.isDisableFirebasePush()) {
+                KeepAliveJob.startJob();
+            }
         }
         return START_STICKY;
     }
 
     private void promoteToForeground() {
+        if (isInTimeoutCooldown()) {
+            isRunningInForeground = false;
+            return;
+        }
         try {
             Notification notification = buildKeepAliveNotification();
             if (Build.VERSION.SDK_INT >= 29) {
@@ -93,6 +110,9 @@ public class NotificationsService extends Service {
         } catch (Throwable e) {
             isRunningInForeground = false;
             FileLog.e(e);
+            if (KronoConfig.isPersistentForegroundService() || KronoConfig.isDisableFirebasePush()) {
+                KeepAliveJob.startJob();
+            }
         }
     }
 

@@ -394,22 +394,26 @@ public class PushListenerController {
                     boolean canRelease = true;
                     if (dialogId != 0) {
                         if ("CONF_CALL_REQUEST".equals(loc_key) || "CONF_VIDEOCALL_REQUEST".equals(loc_key)) {
-                            final long call_id = custom.getLong("call_id");
-                            final int msg_id = custom.getInt("msg_id");
-                            String[] args;
-                            if (json.has("loc_args")) {
-                                JSONArray loc_args = json.getJSONArray("loc_args");
-                                args = new String[loc_args.length()];
-                                for (int a = 0; a < args.length; a++) {
-                                    args[a] = loc_args.getString(a);
+                            if (KronoConfig.hiddenMuteNotifications && KronoConfig.isDialogOrFolderHidden(account, dialogId)) {
+                                // Muted by hidden vault settings
+                            } else {
+                                final long call_id = custom.getLong("call_id");
+                                final int msg_id = custom.getInt("msg_id");
+                                String[] args;
+                                if (json.has("loc_args")) {
+                                    JSONArray loc_args = json.getJSONArray("loc_args");
+                                    args = new String[loc_args.length()];
+                                    for (int a = 0; a < args.length; a++) {
+                                        args[a] = loc_args.getString(a);
+                                    }
+                                } else {
+                                    args = null;
                                 }
-                            } else {
-                                args = null;
-                            }
-                            if ((System.currentTimeMillis() - time) < MessagesController.getInstance(account).callRingTimeout) {
-                                VoIPGroupNotification.request(ApplicationLoader.applicationContext, account, dialogId, args != null && args.length > 2 ? args[2] : null, call_id, msg_id, "CONF_VIDEOCALL_REQUEST".equals(loc_key));
-                            } else {
-                                VoIPGroupNotification.hide(ApplicationLoader.applicationContext, account, msg_id);
+                                if ((System.currentTimeMillis() - time) < MessagesController.getInstance(account).callRingTimeout) {
+                                    VoIPGroupNotification.request(ApplicationLoader.applicationContext, account, dialogId, args != null && args.length > 2 ? args[2] : null, call_id, msg_id, "CONF_VIDEOCALL_REQUEST".equals(loc_key));
+                                } else {
+                                    VoIPGroupNotification.hide(ApplicationLoader.applicationContext, account, msg_id);
+                                }
                             }
                         } else if ("READ_HISTORY".equals(loc_key)) {
                             int max_id = custom.getInt("max_id");

@@ -9005,6 +9005,7 @@ public class ChatActivity extends BaseFragment implements
         chatScrollHelper.setAnimationCallback(chatScrollHelperCallback);
 
         flagSecure = new FlagSecureReason(getParentActivity().getWindow(), () ->
+            org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, dialog_id) ||
             !org.telegram.messenger.KronoConfig.isAllowRestrictedContentBypass() && (
                 currentEncryptedChat != null ||
                 isPeerNoForwards()
@@ -31070,17 +31071,6 @@ public class ChatActivity extends BaseFragment implements
         super.onResume();
         if (org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, dialog_id)) {
             Activity activity = getParentActivity();
-            if (activity != null) {
-                android.view.Window window = activity.getWindow();
-                if (window != null) {
-                    int flags = window.getAttributes().flags;
-                    kronoHadFlagSecureBefore = (flags & android.view.WindowManager.LayoutParams.FLAG_SECURE) != 0;
-                    if (!kronoHadFlagSecureBefore) {
-                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
-                        kronoAddedFlagSecure = true;
-                    }
-                }
-            }
             if (!org.telegram.messenger.KronoConfig.isHiddenVaultUnlocked() && activity != null && KronoHiddenLockHelper.isProtectionConfigured(activity)) {
                 if (contentView != null) {
                     contentView.setAlpha(0f);
@@ -31249,6 +31239,7 @@ public class ChatActivity extends BaseFragment implements
         }
 
         flagSecure.attach();
+        flagSecure.invalidate();
 
         if (starReactionsOverlay != null) {
             starReactionsOverlay.bringToFront();
@@ -31319,16 +31310,6 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onPause() {
         super.onPause();
-        if (kronoAddedFlagSecure) {
-            kronoAddedFlagSecure = false;
-            Activity activity = getParentActivity();
-            if (activity != null && !kronoHadFlagSecureBefore) {
-                android.view.Window window = activity.getWindow();
-                if (window != null) {
-                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
-                }
-            }
-        }
         scrolling = false;
         if (scrimPopupWindow != null) {
             scrimPopupWindow.setPauseNotifications(false);
@@ -47391,6 +47372,12 @@ public class ChatActivity extends BaseFragment implements
                             items.add(LocaleController.getString(R.string.ShareFile));
                             options.add(OPTION_SHARE);
                             icons.add(R.drawable.msg_shareout);
+                        } else if (selectedObject.isVoiceOnce()) {
+                            if (allowBlurredSave) {
+                                items.add(LocaleController.getString(R.string.SaveToDownloads));
+                                options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
+                                icons.add(R.drawable.msg_download);
+                            }
                         } else {
                             if (!selectedObject.needDrawBluredPreview() || allowBlurredSave) {
                                 items.add(LocaleController.getString(R.string.SaveToGallery));
@@ -47629,6 +47616,10 @@ public class ChatActivity extends BaseFragment implements
                         items.add(LocaleController.getString(R.string.ShareFile));
                         options.add(OPTION_SHARE);
                         icons.add(R.drawable.msg_shareout);
+                    } else if (selectedObject.isVoiceOnce()) {
+                        items.add(LocaleController.getString(R.string.SaveToDownloads));
+                        options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
+                        icons.add(R.drawable.msg_download);
                     } else {
                         items.add(LocaleController.getString(R.string.SaveToGallery));
                         options.add(OPTION_SAVE_TO_GALLERY);

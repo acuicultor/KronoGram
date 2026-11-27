@@ -1584,8 +1584,9 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
             FileLog.e(e);
         }
 
+        final boolean isHiddenDialog = currentMessageObject != null && KronoConfig.isDialogOrFolderHidden(currentAccount, currentMessageObject.getDialogId());
         final boolean allowSecretBypass = KronoConfig.isAllowRestrictedContentBypass() && currentMessageObject != null && DialogObject.isEncryptedDialog(currentMessageObject.getDialogId());
-        if (KronoConfig.viewOnceAllowSaveAndScreenshots || allowSecretBypass) {
+        if (!isHiddenDialog && (KronoConfig.viewOnceAllowSaveAndScreenshots || allowSecretBypass)) {
             windowLayoutParams.flags &= ~WindowManager.LayoutParams.FLAG_SECURE;
         } else {
             windowLayoutParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;

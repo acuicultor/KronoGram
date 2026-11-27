@@ -416,12 +416,32 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         return contentView;
     }
 
+    private int getVisibleMainUnreadCount() {
+        int count = MessagesStorage.getInstance(currentAccount).getMainUnreadCount();
+        if (count > 0 && org.telegram.messenger.KronoConfig.hasAnyHiddenItems(currentAccount)) {
+            final MessagesController mc = getMessagesController();
+            final ArrayList<TLRPC.Dialog> all = mc.getDialogs(0);
+            int hiddenUnread = 0;
+            for (int i = 0, n = all.size(); i < n; i++) {
+                final TLRPC.Dialog d = all.get(i);
+                if (d != null && !(d instanceof TLRPC.TL_dialogFolder)
+                        && (mc.getDialogUnreadCount(d) > 0 || d.unread_mark)
+                        && !mc.isDialogMuted(d.id, d.folder_id)
+                        && org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, d.id)) {
+                    hiddenUnread++;
+                }
+            }
+            count = Math.max(0, count - hiddenUnread);
+        }
+        return count;
+    }
+
     private void checkUnreadCount(boolean animated) {
         if (tabsView == null) {
             return;
         }
 
-        final int unreadCount = MessagesStorage.getInstance(currentAccount).getMainUnreadCount();
+        final int unreadCount = getVisibleMainUnreadCount();
         if (unreadCount > 0) {
             final String unreadCountFmt = LocaleController.formatNumber(unreadCount, ',');
             tabs[INDEX_CHATS].setCounter(unreadCountFmt, false, animated);
@@ -511,7 +531,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 title = MessageObject.replaceAnimatedEmoji(title, folder.entities, folderItem.getTextView().getPaint().getFontMetricsInt());
             }
             final int unreadCount = folder.isDefault()
-                    ? MessagesStorage.getInstance(currentAccount).getMainUnreadCount()
+                    ? getVisibleMainUnreadCount()
                     : folder.unreadCount;
             if (unreadCount > 0) {
                 final SpannableStringBuilder titleWithCounter = new SpannableStringBuilder(title);
@@ -565,6 +585,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
                 : messagesController.getAllDialogs();
         for (int i = 0; i < dialogs.size(); i++) {
             final TLRPC.Dialog dialog = dialogs.get(i);
+            if (dialog == null || org.telegram.messenger.KronoConfig.isDialogOrFolderHidden(currentAccount, dialog.id)) {
+                continue;
+            }
             if (!folder.isDefault()) {
                 long dialogId = dialog.id;
                 if (DialogObject.isEncryptedDialog(dialogId)) {

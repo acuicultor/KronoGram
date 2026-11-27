@@ -727,9 +727,10 @@ public class KronoBackupManager {
         try {
             if (options.includeKrono && sections.has("krono")) {
                 SharedPreferences kronoPrefs = context.getSharedPreferences("kronoconfig", Context.MODE_PRIVATE);
+                int sourceAccount = backup.root.optInt("sourceAccount", -1);
                 JSONObject kronoObj = sections.optJSONObject("krono");
                 if (kronoObj != null) {
-                    result.appliedKeysCount += deserializeKronoPreferences(kronoPrefs, account, kronoObj, rollback);
+                    result.appliedKeysCount += deserializeKronoPreferences(kronoPrefs, account, sourceAccount, kronoObj, rollback);
                 }
                 JSONObject folderIconsObj = sections.optJSONObject("krono_folder_icons");
                 if (folderIconsObj != null) {
@@ -1428,7 +1429,7 @@ public class KronoBackupManager {
         return false;
     }
 
-    private static int deserializeKronoPreferences(SharedPreferences prefs, int targetAccount, JSONObject source, RollbackSession rollback) throws IOException {
+    private static int deserializeKronoPreferences(SharedPreferences prefs, int targetAccount, int sourceAccount, JSONObject source, RollbackSession rollback) throws IOException {
         if (prefs == null || source == null) {
             return 0;
         }
@@ -1440,16 +1441,70 @@ public class KronoBackupManager {
                 if (!TextUtils.isEmpty(existingKey)
                         && !isExcludedKronoKey(existingKey)
                         && !existingKey.startsWith("filter_icon_")
-                        && !existingKey.startsWith("customFilterOrder_")) {
+                        && !existingKey.startsWith("customFilterOrder_")
+                        && !existingKey.startsWith("localPinnedDialogs_")
+                        && !existingKey.startsWith("favoriteDialogs_")
+                        && !existingKey.equals("localPinnedDialogs")
+                        && !existingKey.equals("favoriteDialogs")) {
                     editor.remove(existingKey);
                 }
             }
         }
+        editor.remove("localPinnedDialogs_" + targetAccount);
+        editor.remove("favoriteDialogs_" + targetAccount);
+        if (targetAccount == 0) {
+            editor.remove("localPinnedDialogs");
+            editor.remove("favoriteDialogs");
+        }
+        final String preferredPinnedKey = sourceAccount >= 0 && source.has("localPinnedDialogs_" + sourceAccount)
+                ? ("localPinnedDialogs_" + sourceAccount)
+                : null;
+        final String preferredFavoriteKey = sourceAccount >= 0 && source.has("favoriteDialogs_" + sourceAccount)
+                ? ("favoriteDialogs_" + sourceAccount)
+                : null;
+        boolean appliedPinned = false;
+        boolean appliedFavorites = false;
         int count = 0;
         Iterator<String> keys = source.keys();
         while (keys.hasNext()) {
             String key = keys.next();
             if (TextUtils.isEmpty(key) || isExcludedKronoKey(key)) {
+                continue;
+            }
+            if (key.startsWith("localPinnedDialogs_") || key.equals("localPinnedDialogs")) {
+                if (preferredPinnedKey != null && !preferredPinnedKey.equals(key)) {
+                    continue;
+                }
+                if (preferredPinnedKey == null && appliedPinned) {
+                    continue;
+                }
+                JSONObject entry = source.optJSONObject(key);
+                int added = applyTypedEntry(editor, "localPinnedDialogs_" + targetAccount, entry);
+                if (added > 0) {
+                    appliedPinned = true;
+                    if (targetAccount == 0) {
+                        applyTypedEntry(editor, "localPinnedDialogs", entry);
+                    }
+                    count += added;
+                }
+                continue;
+            }
+            if (key.startsWith("favoriteDialogs_") || key.equals("favoriteDialogs")) {
+                if (preferredFavoriteKey != null && !preferredFavoriteKey.equals(key)) {
+                    continue;
+                }
+                if (preferredFavoriteKey == null && appliedFavorites) {
+                    continue;
+                }
+                JSONObject entry = source.optJSONObject(key);
+                int added = applyTypedEntry(editor, "favoriteDialogs_" + targetAccount, entry);
+                if (added > 0) {
+                    appliedFavorites = true;
+                    if (targetAccount == 0) {
+                        applyTypedEntry(editor, "favoriteDialogs", entry);
+                    }
+                    count += added;
+                }
                 continue;
             }
             String destKey = key;
@@ -1535,6 +1590,7 @@ public class KronoBackupManager {
         return key.equals("hiddenLockHash")
                 || key.equals("hiddenLockType")
                 || isVaultKronoKey(key)
+                || key.startsWith("lastRemoteFilterOrder_")
                 || key.startsWith("ghost_read_max_")
                 || key.startsWith("ghostLocalRead_")
                 || key.startsWith("ghostPrev_")

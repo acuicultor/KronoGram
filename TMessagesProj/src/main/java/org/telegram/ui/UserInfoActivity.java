@@ -357,7 +357,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
         items.add(UItem.asHeader(getString(R.string.EditAccountInfoHeader)));
         if (user != null) {
             numberRow = items.size();
-            String phoneDisplay = org.telegram.messenger.KronoConfig.hidePhoneNumber ? "Número oculto" : PhoneFormat.getInstance().format("+" + user.phone);
+            String phoneDisplay = org.telegram.messenger.KronoConfig.hidePhoneNumber ? getString(R.string.KronoPhoneHidden) : PhoneFormat.getInstance().format("+" + user.phone);
             items.add(SettingsActivity.SettingCell.Factory.of(INFO_PHONE, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_calls, phoneDisplay, getString(R.string.TapToChangePhone)));
         }
         usernameRow = items.size();

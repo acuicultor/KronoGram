@@ -260,6 +260,8 @@ public class KronoConfig {
         hiddenAutoLockOnBackground = preferences.getBoolean("hiddenAutoLockOnBackground", true);
         hiddenDialogsByAccount.clear();
         hiddenFiltersByAccount.clear();
+        favoriteDialogsByAccount.clear();
+        localPinnedDialogsByAccount.clear();
         customFilterOrderByAccount.clear();
         lastRemoteFilterOrderByAccount.clear();
 

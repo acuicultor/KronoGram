@@ -1324,4 +1324,6 @@
     <string name="KronoLongClickMediaMenuDesc">Al mantener pulsado en búsquedas o multimedia muestra opciones rápidas (Ir al mensaje, Seleccionar, Reenviar)</string>
     <string name="NoNewCarMessages">No hay mensajes nuevos</string>
     <string name="NoCarMusic">No hay música en tus chats</string>
+    <string name="KronoPhoneHidden">Número oculto</string>
+    <string name="KronoHiddenChat">Chat oculto</string>
 </resources>

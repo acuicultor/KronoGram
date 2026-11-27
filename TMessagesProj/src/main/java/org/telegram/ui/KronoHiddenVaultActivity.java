@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DialogObject;
+import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.FolderIconHelper;
 import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
@@ -49,7 +50,7 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
     private final int targetFilterId;
     private RecyclerListView listView;
     private ListAdapter listAdapter;
-    private boolean hadFlagSecureBefore = false;
+    private FlagSecureReason flagSecure;
     private boolean authPromptInFlight = false;
 
     private final ArrayList<RowItem> items = new ArrayList<>();
@@ -98,6 +99,10 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
     @Override
     public void onFragmentDestroy() {
         authPromptInFlight = false;
+        if (flagSecure != null) {
+            flagSecure.detach();
+            flagSecure = null;
+        }
         super.onFragmentDestroy();
         getNotificationCenter().removeObserver(this, NotificationCenter.dialogsNeedReload);
         getNotificationCenter().removeObserver(this, NotificationCenter.dialogFiltersUpdated);
@@ -111,11 +116,10 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
         if (activity != null) {
             Window window = activity.getWindow();
             if (window != null) {
-                int flags = window.getAttributes().flags;
-                hadFlagSecureBefore = (flags & WindowManager.LayoutParams.FLAG_SECURE) != 0;
-                if (!hadFlagSecureBefore) {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                if (flagSecure == null) {
+                    flagSecure = new FlagSecureReason(window, () -> true);
                 }
+                flagSecure.attach();
             }
         }
         if (!KronoConfig.isHiddenVaultUnlocked()) {
@@ -149,15 +153,11 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
     }
 
     @Override
-    public void onPause() {
-        super.onPause();
-        Activity activity = getParentActivity();
-        if (activity != null && !hadFlagSecureBefore) {
-            Window window = activity.getWindow();
-            if (window != null) {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-            }
+    public void onBecomeFullyHidden() {
+        if (flagSecure != null) {
+            flagSecure.detach();
         }
+        super.onBecomeFullyHidden();
     }
 
     @Override

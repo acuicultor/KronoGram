@@ -11684,4 +11684,6 @@
     <string name="KronoQuickGoToMessageDesc">Show a quick jump button on files, links and audio items in search results</string>
     <string name="KronoLongClickMediaMenu">Context menu in search &amp; media</string>
     <string name="KronoLongClickMediaMenuDesc">Long-press search or shared media items for quick options like Go to message, Select and Forward</string>
+    <string name="KronoPhoneHidden">Hidden number</string>
+    <string name="KronoHiddenChat">Hidden chat</string>
 </resources>

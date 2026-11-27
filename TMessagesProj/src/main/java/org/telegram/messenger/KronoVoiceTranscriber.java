@@ -115,6 +115,12 @@ public final class KronoVoiceTranscriber {
         return t;
     });
 
+    private static final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(2, r -> {
+        Thread t = new Thread(r, "KronoVoiceDownload");
+        t.setPriority(Thread.NORM_PRIORITY);
+        return t;
+    });
+
     private static final Object MODEL_LOCK = new Object();
     @Nullable
     private static Model cachedModel;
@@ -309,39 +315,48 @@ public final class KronoVoiceTranscriber {
             @Nullable ProgressListener progressListener,
             @NonNull TranscriptionCallback callback
     ) {
-        EXECUTOR.execute(() -> {
+        DOWNLOAD_EXECUTOR.execute(() -> {
+            notifyStatus(progressListener, null);
+
+            final File mediaFile;
             try {
-                notifyStatus(progressListener, null);
-
-                File mediaFile = ensureAudioFileDownloaded(messageObject);
-                if (mediaFile == null || !mediaFile.exists() || mediaFile.length() == 0) {
-                    postCallback(callback, false, null, "No se pudo descargar el audio del mensaje.");
-                    return;
-                }
-
-                KronoConfig.loadConfig();
-                LanguageModelSpec spec = getModelSpec(KronoConfig.voiceTranscriptionLanguage);
-                if (spec == null) {
-                    postCallback(callback, false, null, "No hay modelo de voz disponible para este idioma.");
-                    return;
-                }
-
-                boolean needDownload = !isModelDirValid(getModelDir(spec));
-                if (needDownload) {
-                    notifyStatus(progressListener, "Descargando modelo de voz (" + spec.displayName + ", " + spec.approxSize + ") por única vez...");
-                }
-
-                Model model = obtainModel(spec, progressListener);
-                String text = recognizeFile(model, mediaFile);
-                postCallback(callback, true, text, null);
+                mediaFile = ensureAudioFileDownloaded(messageObject);
             } catch (Exception e) {
                 FileLog.e(e);
-                String err = e.getMessage();
-                if (TextUtils.isEmpty(err)) {
-                    err = "No se pudo transcribir el audio.";
-                }
-                postCallback(callback, false, null, err);
+                postCallback(callback, false, null, "No se pudo descargar el audio del mensaje.");
+                return;
             }
+            if (mediaFile == null || !mediaFile.exists() || mediaFile.length() == 0) {
+                postCallback(callback, false, null, "No se pudo descargar el audio del mensaje.");
+                return;
+            }
+
+            EXECUTOR.execute(() -> {
+                try {
+                    KronoConfig.loadConfig();
+                    LanguageModelSpec spec = getModelSpec(KronoConfig.voiceTranscriptionLanguage);
+                    if (spec == null) {
+                        postCallback(callback, false, null, "No hay modelo de voz disponible para este idioma.");
+                        return;
+                    }
+
+                    boolean needDownload = !isModelDirValid(getModelDir(spec));
+                    if (needDownload) {
+                        notifyStatus(progressListener, "Descargando modelo de voz (" + spec.displayName + ", " + spec.approxSize + ") por única vez...");
+                    }
+
+                    Model model = obtainModel(spec, progressListener);
+                    String text = recognizeFile(model, mediaFile);
+                    postCallback(callback, true, text, null);
+                } catch (Exception e) {
+                    FileLog.e(e);
+                    String err = e.getMessage();
+                    if (TextUtils.isEmpty(err)) {
+                        err = "No se pudo transcribir el audio.";
+                    }
+                    postCallback(callback, false, null, err);
+                }
+            });
         });
     }
 
@@ -407,14 +422,19 @@ public final class KronoVoiceTranscriber {
             loader.loadFile(doc, messageObject, FileLoader.PRIORITY_HIGH, 0);
         });
 
+        boolean completed = false;
         try {
-            latch.await(120, TimeUnit.SECONDS);
+            completed = latch.await(120, TimeUnit.SECONDS);
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         } finally {
+            final boolean timedOut = !completed;
             AndroidUtilities.runOnUIThread(() -> {
                 NotificationCenter.getInstance(account).removeObserver(delegate, NotificationCenter.fileLoaded);
                 NotificationCenter.getInstance(account).removeObserver(delegate, NotificationCenter.fileLoadFailed);
+                if (timedOut) {
+                    loader.cancelLoadFile(doc);
+                }
             });
         }
 
@@ -610,34 +630,39 @@ public final class KronoVoiceTranscriber {
     @NonNull
     private static String recognizeFile(@NonNull Model model, @NonNull File audioFile) throws IOException {
         StringBuilder transcript = new StringBuilder();
+        boolean decodedWithMedia3 = false;
+        Exception media3Err = null;
         try (Recognizer recognizer = new Recognizer(model, TARGET_SAMPLE_RATE)) {
             byte[] feedChunk = new byte[8192];
             PcmStreamWriter pcmSink = new PcmStreamWriter(recognizer, transcript, feedChunk);
-
-            boolean decodedWithMedia3 = false;
-            Exception media3Err = null;
             try {
                 decodedWithMedia3 = decodeWithMedia3Ffmpeg(audioFile, pcmSink);
+                if (decodedWithMedia3) {
+                    pcmSink.flush();
+                    appendJsonText(transcript, recognizer.getFinalResult());
+                }
             } catch (Exception e) {
                 media3Err = e;
                 FileLog.e(e);
+                decodedWithMedia3 = false;
             }
+        }
 
-            if (!decodedWithMedia3) {
-                pcmSink.resetState();
-                try {
-                    decodeWithPlatformAudioDecoder(audioFile, pcmSink);
-                } catch (Exception platformErr) {
-                    if (media3Err != null) {
-                        FileLog.e(media3Err);
-                    }
-                    FileLog.e(platformErr);
-                    throw new IOException("No se pudo decodificar el formato de audio.");
+        if (!decodedWithMedia3) {
+            transcript.setLength(0);
+            try (Recognizer recognizer = new Recognizer(model, TARGET_SAMPLE_RATE)) {
+                byte[] feedChunk = new byte[8192];
+                PcmStreamWriter pcmSink = new PcmStreamWriter(recognizer, transcript, feedChunk);
+                decodeWithPlatformAudioDecoder(audioFile, pcmSink);
+                pcmSink.flush();
+                appendJsonText(transcript, recognizer.getFinalResult());
+            } catch (Exception platformErr) {
+                if (media3Err != null) {
+                    FileLog.e(media3Err);
                 }
+                FileLog.e(platformErr);
+                throw new IOException("No se pudo decodificar el formato de audio.");
             }
-
-            pcmSink.flush();
-            appendJsonText(transcript, recognizer.getFinalResult());
         }
 
         String raw = transcript.toString().trim();

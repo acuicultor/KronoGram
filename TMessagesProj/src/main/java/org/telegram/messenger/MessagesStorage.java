@@ -10821,7 +10821,7 @@ public class MessagesStorage extends BaseController {
                 cursor = database.queryFinalized(String.format(Locale.US, "SELECT did FROM shortcut_widget WHERE id = %d ORDER BY ord ASC", widgetId));
                 while (cursor.next()) {
                     long id = cursor.longValue(0);
-                    if (id == -1) {
+                    if (id == -1 || KronoConfig.isDialogOrFolderHidden(currentAccount, id)) {
                         continue;
                     }
                     dids.add(id);
@@ -10834,14 +10834,20 @@ public class MessagesStorage extends BaseController {
                 cursor.dispose();
                 cursor = null;
                 if (dids.isEmpty() && type == EditWidgetActivity.TYPE_CONTACTS) {
-                    cursor = getMessagesStorage().getDatabase().queryFinalized("SELECT did FROM chat_hints WHERE type = 0 ORDER BY rating DESC LIMIT 4");
+                    cursor = getMessagesStorage().getDatabase().queryFinalized("SELECT did FROM chat_hints WHERE type = 0 ORDER BY rating DESC LIMIT 20");
                     while (cursor.next()) {
                         long dialogId = cursor.longValue(0);
+                        if (KronoConfig.isDialogOrFolderHidden(currentAccount, dialogId)) {
+                            continue;
+                        }
                         dids.add(dialogId);
                         if (DialogObject.isUserDialog(dialogId)) {
                             usersToLoad.add(dialogId);
                         } else {
                             chatsToLoad.add(-dialogId);
+                        }
+                        if (dids.size() >= 4) {
+                            break;
                         }
                     }
                     cursor.dispose();
@@ -10849,16 +10855,19 @@ public class MessagesStorage extends BaseController {
                 }
                 if (dids.isEmpty()) {
                     add = true;
-                    cursor = database.queryFinalized("SELECT d.did, d.last_mid, d.unread_count, d.date, m.data, m.read_state, m.mid, m.send_state, m.date FROM dialogs as d LEFT JOIN messages_v2 as m ON d.last_mid = m.mid AND d.did = m.uid WHERE d.folder_id = 0 ORDER BY d.pinned DESC, d.date DESC LIMIT 0,10");
+                    cursor = database.queryFinalized("SELECT d.did, d.last_mid, d.unread_count, d.date, m.data, m.read_state, m.mid, m.send_state, m.date FROM dialogs as d LEFT JOIN messages_v2 as m ON d.last_mid = m.mid AND d.did = m.uid WHERE d.folder_id = 0 ORDER BY d.pinned DESC, d.date DESC LIMIT 0,30");
                 } else {
                     cursor = database.queryFinalized(String.format(Locale.US, "SELECT d.did, d.last_mid, d.unread_count, d.date, m.data, m.read_state, m.mid, m.send_state, m.date FROM dialogs as d LEFT JOIN messages_v2 as m ON d.last_mid = m.mid AND d.did = m.uid WHERE d.did IN(%s)", TextUtils.join(",", dids)));
                 }
                 while (cursor.next()) {
                     long dialogId = cursor.longValue(0);
-                    if (DialogObject.isFolderDialogId(dialogId)) {
+                    if (DialogObject.isFolderDialogId(dialogId) || KronoConfig.isDialogOrFolderHidden(currentAccount, dialogId)) {
                         continue;
                     }
                     if (add) {
+                        if (dids.size() >= 10) {
+                            break;
+                        }
                         dids.add(dialogId);
                     }
                     TLRPC.Dialog dialog = new TLRPC.TL_dialog();
@@ -15254,6 +15263,7 @@ public class MessagesStorage extends BaseController {
                     state.dispose();
                     state = null;
                 }
+                final LongSparseArray<int[]> updatedDialogCounters = new LongSparseArray<>();
                 for (int a = 0; a < dialogsToUpdate.size(); a++) {
                     long did = dialogsToUpdate.keyAt(a);
                     Integer[] counts = dialogsToUpdate.valueAt(a);
@@ -15270,10 +15280,13 @@ public class MessagesStorage extends BaseController {
                     cursor.dispose();
                     cursor = null;
                     dialogsIds.add(did);
+                    int newUnreadCount = Math.max(0, old_unread_count - counts[0]);
+                    int newMentionsCount = Math.max(0, old_mentions_count - counts[1]);
+                    updatedDialogCounters.put(did, new int[]{newUnreadCount, newMentionsCount});
                     state = database.executeFast("UPDATE dialogs SET unread_count = ?, unread_count_i = ? WHERE did = ?");
                     state.requery();
-                    state.bindInteger(1, Math.max(0, old_unread_count - counts[0]));
-                    state.bindInteger(2, Math.max(0, old_mentions_count - counts[1]));
+                    state.bindInteger(1, newUnreadCount);
+                    state.bindInteger(2, newMentionsCount);
                     state.bindLong(3, did);
                     state.step();
                     state.dispose();
@@ -15333,6 +15346,21 @@ public class MessagesStorage extends BaseController {
                 database.commitTransaction();
                 if (dialogsToUpdate.size() != 0) {
                     resetAllUnreadCounters(false);
+                }
+                if (updatedDialogCounters.size() != 0) {
+                    AndroidUtilities.runOnUIThread(() -> {
+                        MessagesController mc = getMessagesController();
+                        for (int a = 0, n = updatedDialogCounters.size(); a < n; a++) {
+                            long did = updatedDialogCounters.keyAt(a);
+                            int[] newCounts = updatedDialogCounters.valueAt(a);
+                            TLRPC.Dialog dialog = mc.dialogs_dict.get(did);
+                            if (dialog != null) {
+                                dialog.unread_count = newCounts[0];
+                                dialog.unread_mentions_count = newCounts[1];
+                            }
+                        }
+                        getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE | MessagesController.UPDATE_MASK_MESSAGE_TEXT);
+                    });
                 }
                 if (topicUpdatesInUi != null) {
                     getMessagesController().getTopicsController().processUpdate(topicUpdatesInUi);

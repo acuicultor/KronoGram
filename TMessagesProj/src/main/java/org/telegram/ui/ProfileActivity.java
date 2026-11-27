@@ -14005,11 +14005,15 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         TLRPC.User user = getMessagesController().getUser(userId);
                         String phoneNumber;
                         if (user != null && !TextUtils.isEmpty(vcardPhone)) {
-                            text = PhoneFormat.getInstance().format("+" + vcardPhone);
+                            if (org.telegram.messenger.KronoConfig.hidePhoneNumber && UserObject.isUserSelf(user)) {
+                                text = LocaleController.getString(R.string.KronoPhoneHidden);
+                            } else {
+                                text = PhoneFormat.getInstance().format("+" + vcardPhone);
+                            }
                             phoneNumber = vcardPhone;
                         } else if (user != null && !TextUtils.isEmpty(user.phone)) {
                             if (org.telegram.messenger.KronoConfig.hidePhoneNumber && UserObject.isUserSelf(user)) {
-                                text = "Número oculto";
+                                text = LocaleController.getString(R.string.KronoPhoneHidden);
                             } else {
                                 text = PhoneFormat.getInstance().format("+" + user.phone);
                             }
@@ -14106,7 +14110,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         TLRPC.User user = UserConfig.getInstance(currentAccount).getCurrentUser();
                         String value;
                         if (org.telegram.messenger.KronoConfig.hidePhoneNumber) {
-                            value = "Número oculto";
+                            value = LocaleController.getString(R.string.KronoPhoneHidden);
                         } else if (user != null && user.phone != null && user.phone.length() != 0) {
                             value = PhoneFormat.getInstance().format("+" + user.phone);
                         } else {

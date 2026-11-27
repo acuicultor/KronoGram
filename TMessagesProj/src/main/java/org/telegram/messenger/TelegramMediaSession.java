@@ -88,6 +88,8 @@ public class TelegramMediaSession {
     private final LongSparseArray<Integer> musicCounts = new LongSparseArray<>();
     private final LongSparseArray<ArrayList<MediaSessionCompat.QueueItem>> musicQueues = new LongSparseArray<>();
     private final LongSparseArray<ArrayList<Runnable>> pendingMusicLoads = new LongSparseArray<>();
+    private final SessionCallback sessionCallback;
+    private String pendingVoiceSearchQuery;
 
     private Paint roundPaint;
     private RectF bitmapRect;
@@ -99,7 +101,8 @@ public class TelegramMediaSession {
 
         session = new MediaSessionCompat(appContext, SESSION_TAG);
         session.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
-        session.setCallback(new SessionCallback());
+        sessionCallback = new SessionCallback();
+        session.setCallback(sessionCallback);
 
         Intent activityIntent = new Intent(appContext, LaunchActivity.class);
         PendingIntent pi = PendingIntent.getActivity(
@@ -137,6 +140,7 @@ public class TelegramMediaSession {
                 MessagesController.getNotificationsSettings(currentAccount), "auto_lastSelectedDialog", 0);
         chatsLoaded = false;
         loadingChats = false;
+        pendingVoiceSearchQuery = null;
         dialogs.clear();
         users.clear();
         chats.clear();
@@ -144,6 +148,14 @@ public class TelegramMediaSession {
         musicCounts.clear();
         musicQueues.clear();
         pendingMusicLoads.clear();
+        ArrayList<PendingBrowseRequest> staleRequests = new ArrayList<>(pendingBrowseRequests);
+        pendingBrowseRequests.clear();
+        for (int i = 0; i < staleRequests.size(); i++) {
+            try {
+                staleRequests.get(i).callback.onResult(Collections.emptyList());
+            } catch (Throwable ignored) {
+            }
+        }
         try {
             session.setQueue(null);
             session.setQueueTitle(null);
@@ -382,6 +394,12 @@ public class TelegramMediaSession {
                     PendingBrowseRequest request = requests.get(i);
                     loadBrowseChildren(request.parentMediaId, request.callback);
                 }
+
+                if (!TextUtils.isEmpty(pendingVoiceSearchQuery)) {
+                    String deferredQuery = pendingVoiceSearchQuery;
+                    pendingVoiceSearchQuery = null;
+                    sessionCallback.onPlayFromSearch(deferredQuery, null);
+                }
             });
         });
     }
@@ -424,15 +442,17 @@ public class TelegramMediaSession {
                     message.dialog_id = did;
                     MessageObject messageObject = new MessageObject(account, message, false, true);
                     arrayList.add(messageObject);
-                    MediaDescriptionCompat.Builder builder = new MediaDescriptionCompat.Builder()
-                            .setMediaId(did + "_" + arrayList.size())
-                            .setTitle(messageObject.getMusicTitle())
-                            .setSubtitle(messageObject.getMusicAuthor());
-                    queueList.add(new MediaSessionCompat.QueueItem(builder.build(), queueList.size()));
                 }
                 cursor.dispose();
                 Collections.reverse(arrayList);
-                Collections.reverse(queueList);
+                for (int i = 0; i < arrayList.size(); i++) {
+                    MessageObject messageObject = arrayList.get(i);
+                    MediaDescriptionCompat.Builder builder = new MediaDescriptionCompat.Builder()
+                            .setMediaId(did + "_" + i)
+                            .setTitle(messageObject.getMusicTitle())
+                            .setSubtitle(messageObject.getMusicAuthor());
+                    queueList.add(new MediaSessionCompat.QueueItem(builder.build(), i));
+                }
             } catch (Exception e) {
                 FileLog.e(e);
             }
@@ -753,6 +773,7 @@ public class TelegramMediaSession {
             if (args.length != 2) return;
             try {
                 long did = Long.parseLong(args[0]);
+                if (KronoConfig.isDialogOrFolderHidden(currentAccount, did)) return;
                 int id = Integer.parseInt(args[1]);
                 ArrayList<MessageObject> arrayList = musicObjects.get(did);
                 if (arrayList == null) {
@@ -782,10 +803,18 @@ public class TelegramMediaSession {
 
         @Override
         public void onPlayFromSearch(String query, Bundle extras) {
-            if (query == null || query.length() == 0) return;
+            if (TextUtils.isEmpty(query)) return;
+            if (!chatsLoaded) {
+                pendingVoiceSearchQuery = query;
+                loadChats();
+                return;
+            }
             String q = query.toLowerCase();
             for (int a = 0; a < dialogs.size(); a++) {
                 long did = dialogs.get(a);
+                if (KronoConfig.isDialogOrFolderHidden(currentAccount, did)) {
+                    continue;
+                }
                 if (DialogObject.isUserDialog(did)) {
                     TLRPC.User user = users.get(did);
                     if (user == null) continue;

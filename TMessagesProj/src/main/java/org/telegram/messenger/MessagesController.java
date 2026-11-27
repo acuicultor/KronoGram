@@ -18528,6 +18528,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
                     }
                     getNotificationCenter().postNotificationName(NotificationCenter.kronoMessagesMarkedDeleted, ids, channelId);
+                    getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_MESSAGE_TEXT);
                     return;
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.messagesDeleted, ids, channelId, false);
@@ -22103,6 +22104,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
             }
             if (deletedMessagesFinal != null) {
+                boolean markedKronoDeleted = false;
                 for (int a = 0, size = deletedMessagesFinal.size(); a < size; a++) {
                     long dialogId = deletedMessagesFinal.keyAt(a);
                     ArrayList<Integer> arrayList = deletedMessagesFinal.valueAt(a);
@@ -22134,6 +22136,7 @@ public class MessagesController extends BaseController implements NotificationCe
                                 }
                             }
                         }
+                        markedKronoDeleted = true;
                         getNotificationCenter().postNotificationName(NotificationCenter.kronoMessagesMarkedDeleted, arrayList, -dialogId);
                         continue;
                     }
@@ -22165,6 +22168,9 @@ public class MessagesController extends BaseController implements NotificationCe
                             }
                         }
                     }
+                }
+                if (markedKronoDeleted) {
+                    getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_MESSAGE_TEXT);
                 }
                 getNotificationsController().removeDeletedMessagesFromNotifications(deletedMessagesFinal, false);
             }

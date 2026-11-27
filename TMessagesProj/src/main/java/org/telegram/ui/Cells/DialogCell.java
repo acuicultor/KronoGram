@@ -2307,7 +2307,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                     nameString = getString(R.string.HiddenName);
                 }
                 if (isDialogCell && org.telegram.messenger.KronoConfig.hideChatListNamesAvatars) {
-                    nameString = "Chat oculto";
+                    nameString = getString(R.string.KronoHiddenChat);
                 }
             }
         }
@@ -2440,7 +2440,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 ellipsizeWidth = 0;
             }
             if (org.telegram.messenger.KronoConfig.hideChatListNamesAvatars && isDialogCell) {
-                nameString = "Chat oculto";
+                nameString = getString(R.string.KronoHiddenChat);
             }
             if (nameString instanceof String) {
                 nameString = ((String) nameString).replace('\n', ' ');

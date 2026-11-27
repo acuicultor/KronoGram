@@ -116,7 +116,7 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
                     AndroidUtilities.addToClipboard(translated);
                 }
             } else if (item.id == 2) {
-                if (!UserConfig.getInstance(currentAccount).isPremium()) {
+                if (!UserConfig.getInstance(currentAccount).isPremium() && !org.telegram.messenger.KronoConfig.isFreeChatTranslation()) {
                     final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
                     if (fragment == null) return;
                     new PremiumFeatureBottomSheet(getContext(), PremiumPreviewFragment.PREMIUM_FEATURE_TRANSLATIONS, true, resourcesProvider)
@@ -371,7 +371,29 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
     }
 
     private int requestId = -1;
+    private int kronoRequestToken = 0;
+
+    private void requestAlternativeTranslate(String rawText, int token) {
+        final String srcLang = TextUtils.isEmpty(from_lang) ? "auto" : from_lang;
+        org.telegram.messenger.KronoConfig.translateWithSelectedEngine(rawText, false, srcLang, to_lang, (resText, rateLimit) -> {
+            if (token != kronoRequestToken || !isShowing()) {
+                return;
+            }
+            button.setLoading(false);
+            if (TextUtils.isEmpty(resText)) {
+                BulletinFactory.of(topBulletinContainer, resourcesProvider).createErrorBulletin(getString(R.string.TranslationFailedAlert2)).show();
+                button.setText(getString(R.string.OK));
+                button.setOnClickListener(v -> dismiss());
+                return;
+            }
+            translated = resText;
+            translatedLoading = false;
+            adapter.update(true);
+        });
+    }
+
     private void requestTranslate() {
+        final int token = ++kronoRequestToken;
         final TLRPC.TL_textWithEntities fromText = new TLRPC.TL_textWithEntities();
         final CharSequence[] message = new CharSequence[] { text };
         fromText.entities = MediaDataController.getInstance(currentAccount).getEntities(message, true);
@@ -401,6 +423,9 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
 
             requestId = ConnectionsManager.getInstance(currentAccount).sendRequestTyped(req, AndroidUtilities::runOnUIThread, (res, err) -> {
                 requestId = -1;
+                if (token != kronoRequestToken) {
+                    return;
+                }
 
                 button.setLoading(false);
                 if (err != null) {
@@ -416,6 +441,8 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
 
                 adapter.update(true);
             });
+        } else if (org.telegram.messenger.KronoConfig.translationProvider != org.telegram.messenger.KronoConfig.TRANSLATE_PROVIDER_TELEGRAM) {
+            requestAlternativeTranslate(fromText.text, token);
         } else {
 
             final TLRPC.TL_messages_translateText req = new TLRPC.TL_messages_translateText();
@@ -437,15 +464,23 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
 
             requestId = ConnectionsManager.getInstance(currentAccount).sendRequestTyped(req, AndroidUtilities::runOnUIThread, (res, err) -> {
                 requestId = -1;
+                if (token != kronoRequestToken) {
+                    return;
+                }
 
-                button.setLoading(false);
                 if (err != null) {
+                    if ("PREMIUM_ACCOUNT_REQUIRED".equals(err.text) || "TRANSLATIONS_DISABLED_ALT".equals(err.text)) {
+                        requestAlternativeTranslate(fromText.text, token);
+                        return;
+                    }
+                    button.setLoading(false);
                     BulletinFactory.of(topBulletinContainer, resourcesProvider).showForError(err);
 
                     button.setText(getString(R.string.OK));
                     button.setOnClickListener(v -> dismiss());
                     return;
                 }
+                button.setLoading(false);
                 if (res == null || res.result.isEmpty()) {
                     button.setText(getString(R.string.OK));
                     button.setOnClickListener(v -> dismiss());
@@ -461,6 +496,7 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
         adapter.update(true);
     }
     private void cancelRequest() {
+        kronoRequestToken++;
         if (requestId >= 0) {
             ConnectionsManager.getInstance(currentAccount).cancelRequest(requestId, true);
             requestId = -1;
