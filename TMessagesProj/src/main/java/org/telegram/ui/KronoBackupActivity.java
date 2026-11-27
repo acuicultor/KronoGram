@@ -394,7 +394,7 @@ public class KronoBackupActivity extends BaseFragment {
         showCategoryPickerDialog(
                 this,
                 "Categorías para copia automática",
-                "Selecciona qué ajustes se incluirán automáticamente al detectar cambios o en copias periódicas. Los ajustes de KronoGram se incluyen siempre y la bóveda permanece desmarcada por defecto.",
+                "Por defecto se incluyen todas las categorías (100% de los ajustes de KronoGram y Telegram, incluyendo notificaciones y chats/carpetas ocultas sin PIN). Puedes desmarcar las que prefieras omitir.",
                 "Guardar selección",
                 current,
                 null,
@@ -631,7 +631,7 @@ public class KronoBackupActivity extends BaseFragment {
         defaults.includeTelegramMain = meta.hasTelegramMain;
         defaults.includeTelegramTheme = meta.hasTelegramTheme;
         defaults.includeTelegramNotifications = meta.hasTelegramNotifications;
-        defaults.includeHiddenVault = false; // Always unchecked by default even if present
+        defaults.includeHiddenVault = meta.hasHiddenVault;
 
         showCategoryPickerDialog(
                 fragment,
@@ -733,22 +733,22 @@ public class KronoBackupActivity extends BaseFragment {
 
         if (availableFilter == null || availableFilter.hasKrono) {
             if (lockKronoChecked) {
-                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Siempre incluido (Fantasma, pestañas, gestos, IA)", true, true, true, null);
+                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Siempre incluido (Fantasma, pestañas, carpetas, gestos, IA, spoilers)", true, true, true, null);
             } else {
-                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Fantasma, pestañas, gestos, IA, spoilers", opts.includeKrono, true, false, checked -> opts.includeKrono = checked);
+                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Fantasma, pestañas, carpetas, gestos, IA, spoilers", opts.includeKrono, true, false, checked -> opts.includeKrono = checked);
             }
         }
         if (availableFilter == null || availableFilter.hasTelegramMain) {
-            addCategoryCheckbox(container, ctx, "Ajustes de Telegram", "Fuente, burbujas, multimedia, cámara, caché", opts.includeTelegramMain, true, false, checked -> opts.includeTelegramMain = checked);
+            addCategoryCheckbox(container, ctx, "Ajustes de Telegram", "General, fuente, proxy, multimedia, cámara, PiP, caché, idioma y cuentas", opts.includeTelegramMain, true, false, checked -> opts.includeTelegramMain = checked);
         }
         if (availableFilter == null || availableFilter.hasTelegramTheme) {
-            addCategoryCheckbox(container, ctx, "Tema y apariencia", "Tema día/noche y modo noche automático", opts.includeTelegramTheme, true, false, checked -> opts.includeTelegramTheme = checked);
+            addCategoryCheckbox(container, ctx, "Tema y apariencia", "Tema día/noche, fondos, acentos y modo noche automático", opts.includeTelegramTheme, true, false, checked -> opts.includeTelegramTheme = checked);
         }
         if (availableFilter == null || availableFilter.hasTelegramNotifications) {
-            addCategoryCheckbox(container, ctx, "Notificaciones de Telegram", "Preferencias globales de aviso y conexión", opts.includeTelegramNotifications, true, false, checked -> opts.includeTelegramNotifications = checked);
+            addCategoryCheckbox(container, ctx, "Notificaciones de Telegram", "Preferencias globales, por cuenta y excepciones de chats", opts.includeTelegramNotifications, true, false, checked -> opts.includeTelegramNotifications = checked);
         }
         if (availableFilter == null || availableFilter.hasHiddenVault) {
-            addCategoryCheckbox(container, ctx, "Bóveda oculta (sin PIN)", "Chats y carpetas ocultas (sin exportar PIN)", opts.includeHiddenVault, false, false, checked -> opts.includeHiddenVault = checked);
+            addCategoryCheckbox(container, ctx, "Bóveda oculta (sin PIN)", "Chats y carpetas ocultas de tus cuentas (sin exportar PIN)", opts.includeHiddenVault, false, false, checked -> opts.includeHiddenVault = checked);
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx);

@@ -702,9 +702,11 @@ public class SharedConfig {
     public static void reloadConfigFromDisk() {
         synchronized (sync) {
             configLoaded = false;
+            animationsEnabled = null;
             loadConfig();
         }
         LiteMode.loadPreference();
+        reloadProxyListFromDisk();
     }
 
     public static int buildVersion() {
@@ -1445,6 +1447,11 @@ public class SharedConfig {
         editor.putInt("distanceSystemType", distanceSystemType);
         editor.apply();
         LocaleController.resetImperialSystemType();
+    }
+
+    public static void reloadProxyListFromDisk() {
+        proxyListLoaded = false;
+        loadProxyList();
     }
 
     public static void loadProxyList() {

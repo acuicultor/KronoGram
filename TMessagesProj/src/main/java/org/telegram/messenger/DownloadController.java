@@ -399,6 +399,31 @@ public class DownloadController extends BaseController implements NotificationCe
         }));
     }
 
+    public void reloadPreferencesFromDisk() {
+        try {
+            SharedPreferences preferences = MessagesController.getMainSettings(currentAccount);
+            if (preferences == null) {
+                return;
+            }
+            String defaultLow = "1_1_1_1_1048576_512000_512000_524288_0_0_1_1_50_0";
+            String defaultMedium = "13_13_13_13_1048576_10485760_1048576_524288_1_1_1_0_100_1";
+            String defaultHigh = "13_13_13_13_1048576_15728640_3145728_524288_1_1_1_0_100_1";
+            lowPreset = new Preset(preferences.getString("preset0", defaultLow), defaultLow);
+            lowPreset.preloadStories = false;
+            mediumPreset = new Preset(preferences.getString("preset1", defaultMedium), defaultMedium);
+            highPreset = new Preset(preferences.getString("preset2", defaultHigh), defaultHigh);
+            mobilePreset = new Preset(preferences.getString("mobilePreset", defaultMedium), defaultMedium);
+            wifiPreset = new Preset(preferences.getString("wifiPreset", defaultHigh), defaultHigh);
+            roamingPreset = new Preset(preferences.getString("roamingPreset", defaultLow), defaultLow);
+            currentMobilePreset = preferences.getInt("currentMobilePreset", 3);
+            currentWifiPreset = preferences.getInt("currentWifiPreset", 3);
+            currentRoamingPreset = preferences.getInt("currentRoamingPreset", 3);
+            checkAutodownloadSettings();
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
     public Preset getCurrentMobilePreset() {
         if (currentMobilePreset == 0) {
             return lowPreset;

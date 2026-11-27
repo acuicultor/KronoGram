@@ -21,8 +21,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
@@ -31,11 +31,14 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -43,22 +46,26 @@ public class KronoBackupManager {
 
     public static final String CLOUD_BACKUP_BOT_USERNAME = "KronoGramCloudBot";
     public static final String BACKUP_FORMAT_ID = "kronogram_backup";
-    public static final int BACKUP_SCHEMA_VERSION = 2;
+    public static final int BACKUP_SCHEMA_VERSION = 3;
     public static final String BACKUP_FILE_EXTENSION = ".kronogram";
 
     private static final String CLOUD_KEY_PREFIX = "kg_bkp_v1_";
     private static final String CLOUD_META_KEY = CLOUD_KEY_PREFIX + "meta";
     private static final String CLOUD_CHUNK_PREFIX = CLOUD_KEY_PREFIX + "c";
     private static final int CLOUD_CHUNK_SIZE = 3500;
-    private static final int CLOUD_MAX_CHUNKS = 256;
+    private static final int CLOUD_MAX_CHUNK_UTF8_BYTES = 4000;
+    private static final int CLOUD_MAX_CHUNKS = 512;
     private static final int CLOUD_GET_BATCH_SIZE = 20;
-    private static final int MAX_BACKUP_FILE_BYTES = 5 * 1024 * 1024;
+    private static final int CLOUD_RETRY_MAX_ATTEMPTS = 3;
+    private static final int MAX_BACKUP_FILE_BYTES = 8 * 1024 * 1024;
 
     private static final long DAILY_INTERVAL_MS = 24L * 60L * 60L * 1000L;
     private static final long WEEKLY_INTERVAL_MS = 7L * 24L * 60L * 60L * 1000L;
     private static final long AUTO_CHECK_THROTTLE_MS = 60L * 1000L;
     private static final long ON_CHANGE_DEBOUNCE_MS = 20L * 1000L;
     private static final long ON_CHANGE_MIN_COOLDOWN_MS = 2L * 60L * 1000L;
+
+    private static final Pattern FLOOD_WAIT_PATTERN = Pattern.compile("FLOOD_WAIT_(\\d+)");
 
     private static final AtomicBoolean autoBackupInProgress = new AtomicBoolean(false);
     private static final AtomicBoolean dirtyDuringUpload = new AtomicBoolean(false);
@@ -73,11 +80,16 @@ public class KronoBackupManager {
     private static volatile boolean observerInitialized = false;
     private static volatile int observedAccount = 0;
     private static SharedPreferences observedAccountMainPrefs = null;
+    private static SharedPreferences observedAccountUserPrefs = null;
     private static SharedPreferences observedAccountNotifPrefs = null;
     private static SharedPreferences.OnSharedPreferenceChangeListener kronoPrefListener;
     private static SharedPreferences.OnSharedPreferenceChangeListener mainPrefListener;
+    private static SharedPreferences.OnSharedPreferenceChangeListener userConfPrefListener;
     private static SharedPreferences.OnSharedPreferenceChangeListener themePrefListener;
     private static SharedPreferences.OnSharedPreferenceChangeListener notifPrefListener;
+    private static SharedPreferences.OnSharedPreferenceChangeListener auxPrefListener;
+    private static SharedPreferences.OnSharedPreferenceChangeListener systemPrefListener;
+    private static SharedPreferences.OnSharedPreferenceChangeListener articlesPrefListener;
     private static NotificationCenter.NotificationCenterDelegate connectionStateDelegate;
     private static final Runnable debouncedOnChangeRunnable = () -> executeOnChangeBackup(observedAccount);
 
@@ -85,8 +97,8 @@ public class KronoBackupManager {
         public boolean includeKrono = true;
         public boolean includeTelegramMain = true;
         public boolean includeTelegramTheme = true;
-        public boolean includeTelegramNotifications = false;
-        public boolean includeHiddenVault = false;
+        public boolean includeTelegramNotifications = true;
+        public boolean includeHiddenVault = true;
 
         public boolean hasAnySelected() {
             return includeKrono || includeTelegramMain || includeTelegramTheme || includeTelegramNotifications || includeHiddenVault;
@@ -153,9 +165,114 @@ public class KronoBackupManager {
         public boolean restoredVault;
     }
 
+    /**
+     * Tracks original snapshots of every SharedPreferences touched during applyBackup so
+     * that any write failure or exception triggers an automatic atomic rollback.
+     */
+    private static final class RollbackSession {
+        private static final class PrefSnapshot {
+            final SharedPreferences prefs;
+            final Map<String, ?> originalValues;
+
+            PrefSnapshot(SharedPreferences prefs, Map<String, ?> originalValues) {
+                this.prefs = prefs;
+                this.originalValues = originalValues;
+            }
+        }
+
+        private final Map<SharedPreferences, PrefSnapshot> snapshots = new LinkedHashMap<>();
+
+        void captureIfNeeded(SharedPreferences prefs) {
+            if (prefs == null || snapshots.containsKey(prefs)) {
+                return;
+            }
+            Map<String, ?> current = prefs.getAll();
+            Map<String, Object> copy = new HashMap<>();
+            if (current != null) {
+                for (Map.Entry<String, ?> entry : current.entrySet()) {
+                    Object val = entry.getValue();
+                    if (val instanceof Set<?>) {
+                        Set<String> clonedSet = new HashSet<>();
+                        for (Object item : (Set<?>) val) {
+                            if (item instanceof String) {
+                                clonedSet.add((String) item);
+                            }
+                        }
+                        copy.put(entry.getKey(), clonedSet);
+                    } else if (val != null) {
+                        copy.put(entry.getKey(), val);
+                    }
+                }
+            }
+            snapshots.put(prefs, new PrefSnapshot(prefs, copy));
+        }
+
+        void commitOrThrow(SharedPreferences prefs, SharedPreferences.Editor editor, String label) throws IOException {
+            if (prefs == null || editor == null) {
+                return;
+            }
+            if (!editor.commit()) {
+                throw new IOException("No se pudieron guardar los ajustes en disco (" + label + ")");
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        void rollbackAll() {
+            for (PrefSnapshot snap : snapshots.values()) {
+                try {
+                    SharedPreferences.Editor editor = snap.prefs.edit();
+                    editor.clear();
+                    for (Map.Entry<String, ?> entry : snap.originalValues.entrySet()) {
+                        String key = entry.getKey();
+                        Object val = entry.getValue();
+                        if (TextUtils.isEmpty(key) || val == null) {
+                            continue;
+                        }
+                        if (val instanceof Boolean) {
+                            editor.putBoolean(key, (Boolean) val);
+                        } else if (val instanceof Integer) {
+                            editor.putInt(key, (Integer) val);
+                        } else if (val instanceof Long) {
+                            editor.putLong(key, (Long) val);
+                        } else if (val instanceof Float) {
+                            editor.putFloat(key, (Float) val);
+                        } else if (val instanceof String) {
+                            editor.putString(key, (String) val);
+                        } else if (val instanceof Set<?>) {
+                            editor.putStringSet(key, (Set<String>) val);
+                        }
+                    }
+                    editor.commit();
+                } catch (Throwable e) {
+                    FileLog.e(e);
+                }
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // JSON Serialization & Deserialization (Typed SharedPreferences)
     // -------------------------------------------------------------------------
+
+    private static SharedPreferences getUserConfigPrefs(Context context, int account) {
+        if (context == null) return null;
+        return context.getSharedPreferences(account == 0 ? "userconfing" : ("userconfig" + account), Context.MODE_PRIVATE);
+    }
+
+    private static SharedPreferences getMainConfigPrefs(Context context, int account) {
+        if (context == null) return null;
+        return context.getSharedPreferences(account == 0 ? "mainconfig" : ("mainconfig" + account), Context.MODE_PRIVATE);
+    }
+
+    private static SharedPreferences getNotificationsPrefs(Context context, int account) {
+        if (context == null) return null;
+        return context.getSharedPreferences(account == 0 ? "Notifications" : ("Notifications" + account), Context.MODE_PRIVATE);
+    }
+
+    private static SharedPreferences getEmojiPrefs(Context context, int account) {
+        if (context == null) return null;
+        return context.getSharedPreferences(account == 0 ? "emoji" : ("emoji" + account), Context.MODE_PRIVATE);
+    }
 
     public static JSONObject buildBackupJson(int account, BackupOptions options) throws Exception {
         Context context = ApplicationLoader.applicationContext;
@@ -172,12 +289,14 @@ public class KronoBackupManager {
         root.put("schema", BACKUP_SCHEMA_VERSION);
         root.put("timestamp", System.currentTimeMillis());
         root.put("device", getDeviceModelLabel());
+        root.put("sourceAccount", account);
 
         JSONObject sections = new JSONObject();
 
         if (options.includeKrono) {
             SharedPreferences kronoPrefs = context.getSharedPreferences("kronoconfig", Context.MODE_PRIVATE);
-            sections.put("krono", serializePreferences(kronoPrefs, key -> isExcludedKronoKey(key) || key.startsWith("filter_icon_") || key.startsWith("customFilterOrder_"), false));
+            sections.put("krono", serializePreferences(kronoPrefs,
+                    key -> isExcludedKronoKey(key) || key.startsWith("filter_icon_") || key.startsWith("customFilterOrder_"), false));
             JSONObject folderIconsObj = serializeAccountFolderIcons(kronoPrefs, account);
             if (folderIconsObj.length() > 0) {
                 sections.put("krono_folder_icons", folderIconsObj);
@@ -185,6 +304,21 @@ public class KronoBackupManager {
             String folderOrder = kronoPrefs.getString("customFilterOrder_" + account, "");
             if (!TextUtils.isEmpty(folderOrder)) {
                 sections.put("krono_folder_order", folderOrder);
+            }
+            JSONObject kronoMultiObj = new JSONObject();
+            for (int acc = 0; acc < UserConfig.MAX_ACCOUNT_COUNT; acc++) {
+                if (acc == account) continue;
+                JSONObject accIcons = serializeAccountFolderIcons(kronoPrefs, acc);
+                String accOrder = kronoPrefs.getString("customFilterOrder_" + acc, "");
+                if (accIcons.length() > 0 || !TextUtils.isEmpty(accOrder)) {
+                    JSONObject entry = new JSONObject();
+                    if (accIcons.length() > 0) entry.put("folder_icons", accIcons);
+                    if (!TextUtils.isEmpty(accOrder)) entry.put("folder_order", accOrder);
+                    kronoMultiObj.put(String.valueOf(acc), entry);
+                }
+            }
+            if (kronoMultiObj.length() > 0) {
+                sections.put("krono_multi", kronoMultiObj);
             }
         }
 
@@ -199,55 +333,153 @@ public class KronoBackupManager {
             String hiddenFilters = kronoPrefs.getString("hiddenFilters_" + account, "");
             putTypedEntry(vaultObj, "hiddenDialogs", hiddenDialogs);
             putTypedEntry(vaultObj, "hiddenFilters", hiddenFilters);
+            JSONObject vaultMulti = new JSONObject();
+            for (int acc = 0; acc < UserConfig.MAX_ACCOUNT_COUNT; acc++) {
+                if (acc == account) continue;
+                String d = kronoPrefs.getString("hiddenDialogs_" + acc, "");
+                String f = kronoPrefs.getString("hiddenFilters_" + acc, "");
+                if (!TextUtils.isEmpty(d) || !TextUtils.isEmpty(f)) {
+                    JSONObject accVault = new JSONObject();
+                    putTypedEntry(accVault, "hiddenDialogs", d);
+                    putTypedEntry(accVault, "hiddenFilters", f);
+                    vaultMulti.put(String.valueOf(acc), accVault);
+                }
+            }
+            if (vaultMulti.length() > 0) {
+                vaultObj.put("multi", vaultMulti);
+            }
             sections.put("vault", vaultObj);
         }
 
         if (options.includeTelegramMain) {
-            SharedPreferences mainPrefs = context.getSharedPreferences("mainconfig", Context.MODE_PRIVATE);
-            sections.put("tg_main", serializePreferences(mainPrefs, key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), false));
+            SharedPreferences mainPrefs = getMainConfigPrefs(context, 0);
+            sections.put("tg_main", serializePreferences(mainPrefs,
+                    key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), false));
             if (account != 0) {
-                SharedPreferences accMainPrefs = context.getSharedPreferences("mainconfig" + account, Context.MODE_PRIVATE);
-                JSONObject accMainObj = serializePreferences(accMainPrefs, key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), false);
+                SharedPreferences accMainPrefs = getMainConfigPrefs(context, account);
+                JSONObject accMainObj = serializePreferences(accMainPrefs,
+                        key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), false);
                 if (accMainObj.length() > 0) {
                     sections.put("tg_main_account", accMainObj);
                 }
+                SharedPreferences globalUserConfPrefs = getUserConfigPrefs(context, 0);
+                JSONObject globalUserConfObj = serializePreferences(globalUserConfPrefs,
+                        key -> !isSafeUserConfigKey(key), false);
+                if (globalUserConfObj.length() > 0) {
+                    sections.put("tg_userconfig_global", globalUserConfObj);
+                }
             }
-            SharedPreferences userConfPrefs = context.getSharedPreferences("userconfing", Context.MODE_PRIVATE);
-            JSONObject userConfObj = serializePreferences(userConfPrefs, key -> !isSafeUserConfigKey(key), false);
+
+            SharedPreferences userConfPrefs = getUserConfigPrefs(context, account);
+            JSONObject userConfObj = serializePreferences(userConfPrefs,
+                    key -> !isSafeUserConfigKey(key), false);
             if (userConfObj.length() > 0) {
                 sections.put("tg_userconfig", userConfObj);
             }
+
             SharedPreferences langPrefs = context.getSharedPreferences("langconfig", Context.MODE_PRIVATE);
             JSONObject langObj = serializePreferences(langPrefs, null, false);
             if (langObj.length() > 0) {
                 sections.put("tg_langconfig", langObj);
             }
+
             SharedPreferences playbackPrefs = context.getSharedPreferences("playback_speed", Context.MODE_PRIVATE);
             JSONObject playbackObj = serializePreferences(playbackPrefs, null, false);
             if (playbackObj.length() > 0) {
                 sections.put("tg_playback_speed", playbackObj);
             }
-            SharedPreferences emojiPrefs = context.getSharedPreferences(account == 0 ? "emoji" : ("emoji" + account), Context.MODE_PRIVATE);
+
+            SharedPreferences emojiPrefs = getEmojiPrefs(context, account);
             JSONObject emojiObj = serializePreferences(emojiPrefs, null, false);
             if (emojiObj.length() > 0) {
                 sections.put("tg_emoji", emojiObj);
             }
-            JSONObject galleryExceptionsObj = new JSONObject();
-            JSONObject usersEx = serializePreferences(context.getSharedPreferences(SaveToGallerySettingsHelper.USERS_PREF_NAME + "_" + account, Context.MODE_PRIVATE), null, false);
-            JSONObject groupsEx = serializePreferences(context.getSharedPreferences(SaveToGallerySettingsHelper.GROUPS_PREF_NAME + "_" + account, Context.MODE_PRIVATE), null, false);
-            JSONObject channelsEx = serializePreferences(context.getSharedPreferences(SaveToGallerySettingsHelper.CHANNELS_PREF_NAME + "_" + account, Context.MODE_PRIVATE), null, false);
-            if (usersEx.length() > 0) galleryExceptionsObj.put("users", usersEx);
-            if (groupsEx.length() > 0) galleryExceptionsObj.put("groups", groupsEx);
-            if (channelsEx.length() > 0) galleryExceptionsObj.put("channels", channelsEx);
+
+            JSONObject galleryExceptionsObj = serializeGalleryExceptions(context, account);
             if (galleryExceptionsObj.length() > 0) {
                 sections.put("tg_save_gallery_exceptions", galleryExceptionsObj);
+            }
+
+            // Additional native preferences previously missed
+            JSONObject sysConfObj = serializePreferences(
+                    context.getSharedPreferences("systemConfig", Context.MODE_PRIVATE),
+                    key -> !isSafeSystemConfigKey(key), false);
+            if (sysConfObj.length() > 0) {
+                sections.put("tg_system_config", sysConfObj);
+            }
+
+            JSONObject articlesObj = serializePreferences(
+                    context.getSharedPreferences("articles", Context.MODE_PRIVATE),
+                    KronoBackupManager::isExcludedArticleKey, false);
+            if (articlesObj.length() > 0) {
+                sections.put("tg_articles", articlesObj);
+            }
+
+            JSONObject cameraObj = serializePreferences(
+                    context.getSharedPreferences("camera", Context.MODE_PRIVATE),
+                    null, false);
+            if (cameraObj.length() > 0) {
+                sections.put("tg_camera", cameraObj);
+            }
+
+            JSONObject paintObj = serializePreferences(
+                    context.getSharedPreferences("paint", Context.MODE_PRIVATE),
+                    null, false);
+            if (paintObj.length() > 0) {
+                sections.put("tg_paint", paintObj);
+            }
+
+            JSONObject shapeObj = serializePreferences(
+                    context.getSharedPreferences("shapedetector_conf", Context.MODE_PRIVATE),
+                    null, false);
+            if (shapeObj.length() > 0) {
+                sections.put("tg_shapedetector", shapeObj);
+            }
+
+            JSONObject pipBundle = new JSONObject();
+            JSONObject pipRound = serializePreferences(context.getSharedPreferences("pipconfig", Context.MODE_PRIVATE), null, false);
+            JSONObject pipVoip = serializePreferences(context.getSharedPreferences("voippipconfig", Context.MODE_PRIVATE), null, false);
+            JSONObject pipGroup = serializePreferences(context.getSharedPreferences("groupcallpipconfig", Context.MODE_PRIVATE), null, false);
+            if (pipRound.length() > 0) pipBundle.put("round", pipRound);
+            if (pipVoip.length() > 0) pipBundle.put("voip", pipVoip);
+            if (pipGroup.length() > 0) pipBundle.put("groupcall", pipGroup);
+            if (pipBundle.length() > 0) {
+                sections.put("tg_pip", pipBundle);
+            }
+
+            // Additional accounts (for multi-account setups)
+            JSONObject multiAccountsObj = new JSONObject();
+            for (int acc = 0; acc < UserConfig.MAX_ACCOUNT_COUNT; acc++) {
+                if (acc == account) continue;
+                boolean active = UserConfig.getInstance(acc).isClientActivated();
+                JSONObject accBundle = new JSONObject();
+                if (acc != 0) {
+                    JSONObject m = serializePreferences(getMainConfigPrefs(context, acc),
+                            key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), false);
+                    if (m.length() > 0) accBundle.put("main", m);
+                }
+                JSONObject u = serializePreferences(getUserConfigPrefs(context, acc),
+                        key -> !isSafeUserConfigKey(key), false);
+                if (u.length() > 0) accBundle.put("userconfig", u);
+                JSONObject e = serializePreferences(getEmojiPrefs(context, acc), null, false);
+                if (e.length() > 0) accBundle.put("emoji", e);
+                JSONObject g = serializeGalleryExceptions(context, acc);
+                if (g.length() > 0) accBundle.put("save_gallery_exceptions", g);
+                if (active || accBundle.length() > 0) {
+                    if (accBundle.length() > 0) {
+                        multiAccountsObj.put(String.valueOf(acc), accBundle);
+                    }
+                }
+            }
+            if (multiAccountsObj.length() > 0) {
+                sections.put("tg_multi_accounts", multiAccountsObj);
             }
         }
 
         if (options.includeTelegramTheme) {
             SharedPreferences themePrefs = context.getSharedPreferences("themeconfig", Context.MODE_PRIVATE);
             sections.put("tg_theme", serializePreferences(themePrefs, KronoBackupManager::isExcludedThemeConfigKey, false));
-            SharedPreferences mainPrefs = context.getSharedPreferences("mainconfig", Context.MODE_PRIVATE);
+            SharedPreferences mainPrefs = getMainConfigPrefs(context, 0);
             JSONObject themeMainObj = serializePreferences(mainPrefs, key -> !isThemeMainConfigKey(key), false);
             if (themeMainObj.length() > 0) {
                 sections.put("tg_theme_main", themeMainObj);
@@ -255,18 +487,41 @@ public class KronoBackupManager {
         }
 
         if (options.includeTelegramNotifications) {
-            SharedPreferences globalNotifPrefs = MessagesController.getGlobalNotificationsSettings();
+            SharedPreferences globalNotifPrefs = getNotificationsPrefs(context, 0);
             JSONObject notifBundle = new JSONObject();
             notifBundle.put("global", serializePreferences(globalNotifPrefs, KronoBackupManager::isExcludedNotificationKey, true));
             if (account != 0) {
-                SharedPreferences accountNotifPrefs = MessagesController.getNotificationsSettings(account);
+                SharedPreferences accountNotifPrefs = getNotificationsPrefs(context, account);
                 notifBundle.put("account", serializePreferences(accountNotifPrefs, KronoBackupManager::isExcludedNotificationKey, true));
+            }
+            JSONObject multiNotifObj = new JSONObject();
+            for (int acc = 1; acc < UserConfig.MAX_ACCOUNT_COUNT; acc++) {
+                if (acc == account) continue;
+                JSONObject accNotif = serializePreferences(getNotificationsPrefs(context, acc),
+                        KronoBackupManager::isExcludedNotificationKey, true);
+                if (accNotif.length() > 0) {
+                    multiNotifObj.put(String.valueOf(acc), accNotif);
+                }
+            }
+            if (multiNotifObj.length() > 0) {
+                notifBundle.put("multi", multiNotifObj);
             }
             sections.put("tg_notifications", notifBundle);
         }
 
         root.put("sections", sections);
         return root;
+    }
+
+    private static JSONObject serializeGalleryExceptions(Context context, int account) throws Exception {
+        JSONObject galleryExceptionsObj = new JSONObject();
+        JSONObject usersEx = serializePreferences(context.getSharedPreferences(SaveToGallerySettingsHelper.USERS_PREF_NAME + "_" + account, Context.MODE_PRIVATE), null, false);
+        JSONObject groupsEx = serializePreferences(context.getSharedPreferences(SaveToGallerySettingsHelper.GROUPS_PREF_NAME + "_" + account, Context.MODE_PRIVATE), null, false);
+        JSONObject channelsEx = serializePreferences(context.getSharedPreferences(SaveToGallerySettingsHelper.CHANNELS_PREF_NAME + "_" + account, Context.MODE_PRIVATE), null, false);
+        if (usersEx.length() > 0) galleryExceptionsObj.put("users", usersEx);
+        if (groupsEx.length() > 0) galleryExceptionsObj.put("groups", groupsEx);
+        if (channelsEx.length() > 0) galleryExceptionsObj.put("channels", channelsEx);
+        return galleryExceptionsObj;
     }
 
     public static ParsedBackup parseBackupJson(String rawJson) throws Exception {
@@ -299,13 +554,7 @@ public class KronoBackupManager {
         meta.sha256 = sha256Hex(sanitized);
         meta.hasKrono = sections.has("krono") && sections.optJSONObject("krono") != null;
         meta.hasHiddenVault = sections.has("vault") && sections.optJSONObject("vault") != null;
-        meta.hasTelegramMain = (sections.has("tg_main") && sections.optJSONObject("tg_main") != null)
-                || (sections.has("tg_main_account") && sections.optJSONObject("tg_main_account") != null)
-                || (sections.has("tg_userconfig") && sections.optJSONObject("tg_userconfig") != null)
-                || (sections.has("tg_langconfig") && sections.optJSONObject("tg_langconfig") != null)
-                || (sections.has("tg_playback_speed") && sections.optJSONObject("tg_playback_speed") != null)
-                || (sections.has("tg_emoji") && sections.optJSONObject("tg_emoji") != null)
-                || (sections.has("tg_save_gallery_exceptions") && sections.optJSONObject("tg_save_gallery_exceptions") != null);
+        meta.hasTelegramMain = hasAnyTelegramMainSection(sections);
         meta.hasTelegramTheme = (sections.has("tg_theme") && sections.optJSONObject("tg_theme") != null)
                 || (sections.has("tg_theme_main") && sections.optJSONObject("tg_theme_main") != null);
         meta.hasTelegramNotifications = sections.has("tg_notifications") && sections.optJSONObject("tg_notifications") != null;
@@ -316,37 +565,178 @@ public class KronoBackupManager {
         return parsed;
     }
 
+    private static boolean hasAnyTelegramMainSection(JSONObject sections) {
+        String[] keys = new String[]{
+                "tg_main", "tg_main_account", "tg_userconfig", "tg_userconfig_global",
+                "tg_langconfig", "tg_playback_speed", "tg_emoji", "tg_save_gallery_exceptions",
+                "tg_system_config", "tg_articles", "tg_camera", "tg_paint",
+                "tg_shapedetector", "tg_pip", "tg_multi_accounts"
+        };
+        for (String k : keys) {
+            if (sections.has(k) && sections.optJSONObject(k) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Validates every selected section's typed entries before mutating any SharedPreferences.
+     */
+    private static void validateBackupForApply(ParsedBackup backup, BackupOptions options) throws Exception {
+        if (backup == null || backup.root == null) {
+            throw new IllegalArgumentException("Copia de seguridad inválida");
+        }
+        if (options == null || !options.hasAnySelected()) {
+            throw new IllegalArgumentException("Debes seleccionar al menos una categoría");
+        }
+        JSONObject sections = backup.root.optJSONObject("sections");
+        if (sections == null || sections.length() == 0) {
+            throw new IllegalArgumentException("La copia no contiene datos restaurables");
+        }
+
+        if (options.includeKrono && sections.has("krono")) {
+            validateTypedMapObject(sections.optJSONObject("krono"), "krono");
+        }
+        if (options.includeHiddenVault && sections.has("vault")) {
+            JSONObject vault = sections.optJSONObject("vault");
+            if (vault == null) throw new IllegalArgumentException("Sección 'vault' dañada");
+            String[] vaultKeys = new String[]{
+                    "hiddenUseBiometric", "hiddenMuteNotifications",
+                    "hiddenHideFolderChatsEverywhere", "hiddenAutoLockOnBackground",
+                    "hiddenDialogs", "hiddenFilters"
+            };
+            for (String vk : vaultKeys) {
+                if (vault.has(vk)) {
+                    validateTypedEntry(vk, vault.optJSONObject(vk));
+                }
+            }
+        }
+        if (options.includeTelegramMain) {
+            String[] mapSections = new String[]{
+                    "tg_main", "tg_main_account", "tg_userconfig", "tg_userconfig_global",
+                    "tg_langconfig", "tg_playback_speed", "tg_emoji",
+                    "tg_system_config", "tg_articles", "tg_camera", "tg_paint", "tg_shapedetector"
+            };
+            for (String sec : mapSections) {
+                if (sections.has(sec)) {
+                    validateTypedMapObject(sections.optJSONObject(sec), sec);
+                }
+            }
+            if (sections.has("tg_save_gallery_exceptions")) {
+                JSONObject ge = sections.optJSONObject("tg_save_gallery_exceptions");
+                if (ge != null) {
+                    if (ge.has("users")) validateTypedMapObject(ge.optJSONObject("users"), "tg_save_gallery_exceptions.users");
+                    if (ge.has("groups")) validateTypedMapObject(ge.optJSONObject("groups"), "tg_save_gallery_exceptions.groups");
+                    if (ge.has("channels")) validateTypedMapObject(ge.optJSONObject("channels"), "tg_save_gallery_exceptions.channels");
+                }
+            }
+            if (sections.has("tg_pip")) {
+                JSONObject pip = sections.optJSONObject("tg_pip");
+                if (pip != null) {
+                    if (pip.has("round")) validateTypedMapObject(pip.optJSONObject("round"), "tg_pip.round");
+                    if (pip.has("voip")) validateTypedMapObject(pip.optJSONObject("voip"), "tg_pip.voip");
+                    if (pip.has("groupcall")) validateTypedMapObject(pip.optJSONObject("groupcall"), "tg_pip.groupcall");
+                }
+            }
+        }
+        if (options.includeTelegramTheme) {
+            if (sections.has("tg_theme")) {
+                validateTypedMapObject(sections.optJSONObject("tg_theme"), "tg_theme");
+            }
+            if (sections.has("tg_theme_main")) {
+                validateTypedMapObject(sections.optJSONObject("tg_theme_main"), "tg_theme_main");
+            }
+        }
+        if (options.includeTelegramNotifications && sections.has("tg_notifications")) {
+            JSONObject notif = sections.optJSONObject("tg_notifications");
+            if (notif == null) throw new IllegalArgumentException("Sección 'tg_notifications' dañada");
+            if (notif.has("global")) validateTypedMapObject(notif.optJSONObject("global"), "tg_notifications.global");
+            if (notif.has("account")) validateTypedMapObject(notif.optJSONObject("account"), "tg_notifications.account");
+        }
+    }
+
+    private static void validateTypedMapObject(JSONObject obj, String sectionName) throws Exception {
+        if (obj == null) {
+            throw new IllegalArgumentException("Sección '" + sectionName + "' inválida");
+        }
+        Iterator<String> keys = obj.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (TextUtils.isEmpty(key)) continue;
+            JSONObject entry = obj.optJSONObject(key);
+            if (entry == null) {
+                throw new IllegalArgumentException("Entrada inválida en '" + sectionName + "." + key + "'");
+            }
+            validateTypedEntry(sectionName + "." + key, entry);
+        }
+    }
+
+    private static void validateTypedEntry(String keyLabel, JSONObject entry) throws Exception {
+        if (entry == null || !entry.has("t") || !entry.has("v")) {
+            throw new IllegalArgumentException("Entrada incompleta en '" + keyLabel + "'");
+        }
+        String type = entry.optString("t", "");
+        switch (type) {
+            case "b":
+                entry.getBoolean("v");
+                break;
+            case "i":
+                entry.getInt("v");
+                break;
+            case "l":
+                entry.getLong("v");
+                break;
+            case "f":
+                entry.getDouble("v");
+                break;
+            case "s":
+                entry.getString("v");
+                break;
+            case "ss":
+                JSONArray arr = entry.getJSONArray("v");
+                for (int i = 0; i < arr.length(); i++) {
+                    arr.getString(i);
+                }
+                break;
+            default:
+                throw new IllegalArgumentException("Tipo desconocido '" + type + "' en '" + keyLabel + "'");
+        }
+    }
+
     public static RestoreResult applyBackup(int account, ParsedBackup backup, BackupOptions options) throws Exception {
         Context context = ApplicationLoader.applicationContext;
         if (context == null) {
             throw new IllegalStateException("Contexto de aplicación no disponible");
         }
-        if (backup == null || backup.root == null) {
-            throw new IllegalArgumentException("Copia de seguridad inválida");
-        }
-        JSONObject sections = backup.root.optJSONObject("sections");
-        if (sections == null) {
-            throw new IllegalArgumentException("La copia no contiene datos restaurables");
-        }
+        validateBackupForApply(backup, options);
 
+        JSONObject sections = backup.root.optJSONObject("sections");
         RestoreResult result = new RestoreResult();
         AndroidUtilities.cancelRunOnUIThread(debouncedOnChangeRunnable);
         int schema = backup.root.optInt("schema", 1);
         boolean restoredTheme = false;
         boolean restoredEmoji = false;
+        boolean restoredSystemLogs = false;
+        boolean restoredPlaybackSpeed = false;
+        final Set<Integer> affectedAccounts = new HashSet<>();
+        affectedAccounts.add(account);
+
+        RollbackSession rollback = new RollbackSession();
         setSuppressObserver(true);
         try {
             if (options.includeKrono && sections.has("krono")) {
                 SharedPreferences kronoPrefs = context.getSharedPreferences("kronoconfig", Context.MODE_PRIVATE);
                 JSONObject kronoObj = sections.optJSONObject("krono");
                 if (kronoObj != null) {
-                    result.appliedKeysCount += deserializeKronoPreferences(kronoPrefs, account, kronoObj);
+                    result.appliedKeysCount += deserializeKronoPreferences(kronoPrefs, account, kronoObj, rollback);
                 }
                 JSONObject folderIconsObj = sections.optJSONObject("krono_folder_icons");
                 if (folderIconsObj != null) {
-                    result.appliedKeysCount += deserializeAccountFolderIcons(kronoPrefs, account, folderIconsObj);
+                    result.appliedKeysCount += deserializeAccountFolderIcons(kronoPrefs, account, folderIconsObj, rollback);
                 }
                 if (sections.has("krono_folder_order")) {
+                    rollback.captureIfNeeded(kronoPrefs);
                     String folderOrder = sections.optString("krono_folder_order", "");
                     SharedPreferences.Editor orderEd = kronoPrefs.edit();
                     if (TextUtils.isEmpty(folderOrder)) {
@@ -355,9 +745,45 @@ public class KronoBackupManager {
                         orderEd.putString("customFilterOrder_" + account, folderOrder);
                         result.appliedKeysCount++;
                     }
-                    orderEd.commit();
+                    rollback.commitOrThrow(kronoPrefs, orderEd, "kronoconfig.folder_order");
                 } else if (!hasLegacyFolderOrderKey(kronoObj)) {
-                    kronoPrefs.edit().remove("customFilterOrder_" + account).commit();
+                    rollback.captureIfNeeded(kronoPrefs);
+                    SharedPreferences.Editor rmEd = kronoPrefs.edit().remove("customFilterOrder_" + account);
+                    rollback.commitOrThrow(kronoPrefs, rmEd, "kronoconfig.remove_folder_order");
+                }
+
+                JSONObject kronoMulti = sections.optJSONObject("krono_multi");
+                if (kronoMulti != null) {
+                    Iterator<String> accKeys = kronoMulti.keys();
+                    while (accKeys.hasNext()) {
+                        String accStr = accKeys.next();
+                        int targetAcc;
+                        try {
+                            targetAcc = Integer.parseInt(accStr);
+                        } catch (Exception ignore) {
+                            continue;
+                        }
+                        if (targetAcc < 0 || targetAcc >= UserConfig.MAX_ACCOUNT_COUNT || targetAcc == account) {
+                            continue;
+                        }
+                        JSONObject accEntry = kronoMulti.optJSONObject(accStr);
+                        if (accEntry == null) continue;
+                        if (accEntry.has("folder_icons")) {
+                            result.appliedKeysCount += deserializeAccountFolderIcons(kronoPrefs, targetAcc, accEntry.optJSONObject("folder_icons"), rollback);
+                        }
+                        if (accEntry.has("folder_order")) {
+                            rollback.captureIfNeeded(kronoPrefs);
+                            SharedPreferences.Editor orderEd = kronoPrefs.edit();
+                            String ord = accEntry.optString("folder_order", "");
+                            if (TextUtils.isEmpty(ord)) {
+                                orderEd.remove("customFilterOrder_" + targetAcc);
+                            } else {
+                                orderEd.putString("customFilterOrder_" + targetAcc, ord);
+                                result.appliedKeysCount++;
+                            }
+                            rollback.commitOrThrow(kronoPrefs, orderEd, "kronoconfig.folder_order_" + targetAcc);
+                        }
+                    }
                 }
             }
 
@@ -365,6 +791,7 @@ public class KronoBackupManager {
                 JSONObject vaultObj = sections.optJSONObject("vault");
                 if (vaultObj != null) {
                     SharedPreferences kronoPrefs = context.getSharedPreferences("kronoconfig", Context.MODE_PRIVATE);
+                    rollback.captureIfNeeded(kronoPrefs);
                     SharedPreferences.Editor editor = kronoPrefs.edit();
                     int count = 0;
                     if (vaultObj.has("hiddenUseBiometric")) {
@@ -385,7 +812,31 @@ public class KronoBackupManager {
                     if (vaultObj.has("hiddenFilters")) {
                         count += applyTypedEntry(editor, "hiddenFilters_" + account, vaultObj.optJSONObject("hiddenFilters"));
                     }
-                    editor.commit();
+                    JSONObject vaultMulti = vaultObj.optJSONObject("multi");
+                    if (vaultMulti != null) {
+                        Iterator<String> accKeys = vaultMulti.keys();
+                        while (accKeys.hasNext()) {
+                            String accStr = accKeys.next();
+                            int targetAcc;
+                            try {
+                                targetAcc = Integer.parseInt(accStr);
+                            } catch (Exception ignore) {
+                                continue;
+                            }
+                            if (targetAcc < 0 || targetAcc >= UserConfig.MAX_ACCOUNT_COUNT || targetAcc == account) {
+                                continue;
+                            }
+                            JSONObject accVault = vaultMulti.optJSONObject(accStr);
+                            if (accVault == null) continue;
+                            if (accVault.has("hiddenDialogs")) {
+                                count += applyTypedEntry(editor, "hiddenDialogs_" + targetAcc, accVault.optJSONObject("hiddenDialogs"));
+                            }
+                            if (accVault.has("hiddenFilters")) {
+                                count += applyTypedEntry(editor, "hiddenFilters_" + targetAcc, accVault.optJSONObject("hiddenFilters"));
+                            }
+                        }
+                    }
+                    rollback.commitOrThrow(kronoPrefs, editor, "kronoconfig.vault");
                     result.appliedKeysCount += count;
                     result.restoredVault = count > 0;
                 }
@@ -395,30 +846,48 @@ public class KronoBackupManager {
                 if (sections.has("tg_main")) {
                     JSONObject mainObj = sections.optJSONObject("tg_main");
                     if (mainObj != null) {
-                        SharedPreferences mainPrefs = context.getSharedPreferences("mainconfig", Context.MODE_PRIVATE);
-                        int c = deserializeIntoPreferences(mainPrefs, mainObj, key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), true);
+                        SharedPreferences mainPrefs = getMainConfigPrefs(context, 0);
+                        int c = deserializeIntoPreferences(mainPrefs, mainObj,
+                                key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), true, rollback, "mainconfig");
                         result.appliedKeysCount += c;
                         if (c > 0) {
                             result.requiresRestart = true;
+                        }
+                        if (mainObj.has("playbackSpeed") || mainObj.has("musicPlaybackSpeed")
+                                || mainObj.has("fastPlaybackSpeed") || mainObj.has("fastMusicPlaybackSpeed")) {
+                            restoredPlaybackSpeed = true;
                         }
                     }
                 }
                 if (account != 0 && sections.has("tg_main_account")) {
                     JSONObject accMainObj = sections.optJSONObject("tg_main_account");
                     if (accMainObj != null) {
-                        SharedPreferences accMainPrefs = context.getSharedPreferences("mainconfig" + account, Context.MODE_PRIVATE);
-                        int c = deserializeIntoPreferences(accMainPrefs, accMainObj, key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), true);
+                        SharedPreferences accMainPrefs = getMainConfigPrefs(context, account);
+                        int c = deserializeIntoPreferences(accMainPrefs, accMainObj,
+                                key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key), true, rollback, "mainconfig" + account);
                         result.appliedKeysCount += c;
                         if (c > 0) {
                             result.requiresRestart = true;
                         }
                     }
                 }
+                if (account != 0 && sections.has("tg_userconfig_global")) {
+                    JSONObject globalUserConfObj = sections.optJSONObject("tg_userconfig_global");
+                    if (globalUserConfObj != null) {
+                        SharedPreferences globalUserConfPrefs = getUserConfigPrefs(context, 0);
+                        int c = deserializeIntoPreferences(globalUserConfPrefs, globalUserConfObj,
+                                key -> !isSafeUserConfigKey(key), false, rollback, "userconfing");
+                        result.appliedKeysCount += c;
+                        affectedAccounts.add(0);
+                    }
+                }
                 if (sections.has("tg_userconfig")) {
                     JSONObject userConfObj = sections.optJSONObject("tg_userconfig");
                     if (userConfObj != null) {
-                        SharedPreferences userConfPrefs = context.getSharedPreferences("userconfing", Context.MODE_PRIVATE);
-                        int c = deserializeIntoPreferences(userConfPrefs, userConfObj, key -> !isSafeUserConfigKey(key), true);
+                        SharedPreferences userConfPrefs = getUserConfigPrefs(context, account);
+                        // clearNonExcludedExisting = false so internal session/user/offset keys are untouched
+                        // while explicitly removing stale safe keys missing from the backup.
+                        int c = deserializeSafeUserConfig(userConfPrefs, userConfObj, rollback, account == 0 ? "userconfing" : ("userconfig" + account));
                         result.appliedKeysCount += c;
                     }
                 }
@@ -426,7 +895,7 @@ public class KronoBackupManager {
                     JSONObject langObj = sections.optJSONObject("tg_langconfig");
                     if (langObj != null) {
                         SharedPreferences langPrefs = context.getSharedPreferences("langconfig", Context.MODE_PRIVATE);
-                        int c = deserializeIntoPreferences(langPrefs, langObj, null, true);
+                        int c = deserializeIntoPreferences(langPrefs, langObj, null, true, rollback, "langconfig");
                         result.appliedKeysCount += c;
                         if (c > 0) {
                             result.requiresRestart = true;
@@ -437,14 +906,14 @@ public class KronoBackupManager {
                     JSONObject playbackObj = sections.optJSONObject("tg_playback_speed");
                     if (playbackObj != null) {
                         SharedPreferences playbackPrefs = context.getSharedPreferences("playback_speed", Context.MODE_PRIVATE);
-                        result.appliedKeysCount += deserializeIntoPreferences(playbackPrefs, playbackObj, null, true);
+                        result.appliedKeysCount += deserializeIntoPreferences(playbackPrefs, playbackObj, null, true, rollback, "playback_speed");
                     }
                 }
                 if (sections.has("tg_emoji")) {
                     JSONObject emojiObj = sections.optJSONObject("tg_emoji");
                     if (emojiObj != null) {
-                        SharedPreferences emojiPrefs = context.getSharedPreferences(account == 0 ? "emoji" : ("emoji" + account), Context.MODE_PRIVATE);
-                        int c = deserializeIntoPreferences(emojiPrefs, emojiObj, null, true);
+                        SharedPreferences emojiPrefs = getEmojiPrefs(context, account);
+                        int c = deserializeIntoPreferences(emojiPrefs, emojiObj, null, true, rollback, account == 0 ? "emoji" : ("emoji" + account));
                         result.appliedKeysCount += c;
                         if (c > 0) {
                             restoredEmoji = true;
@@ -452,22 +921,113 @@ public class KronoBackupManager {
                     }
                 }
                 if (sections.has("tg_save_gallery_exceptions")) {
-                    JSONObject galleryExObj = sections.optJSONObject("tg_save_gallery_exceptions");
-                    if (galleryExObj != null) {
-                        if (galleryExObj.has("users")) {
-                            result.appliedKeysCount += deserializeIntoPreferences(
-                                    context.getSharedPreferences(SaveToGallerySettingsHelper.USERS_PREF_NAME + "_" + account, Context.MODE_PRIVATE),
-                                    galleryExObj.optJSONObject("users"), null, true);
+                    result.appliedKeysCount += deserializeGalleryExceptions(
+                            context, account, sections.optJSONObject("tg_save_gallery_exceptions"), rollback);
+                }
+                if (sections.has("tg_system_config")) {
+                    JSONObject sysObj = sections.optJSONObject("tg_system_config");
+                    if (sysObj != null) {
+                        SharedPreferences sysPrefs = context.getSharedPreferences("systemConfig", Context.MODE_PRIVATE);
+                        int c = deserializeIntoPreferences(sysPrefs, sysObj, key -> !isSafeSystemConfigKey(key), false, rollback, "systemConfig");
+                        result.appliedKeysCount += c;
+                        if (c > 0) {
+                            restoredSystemLogs = true;
                         }
-                        if (galleryExObj.has("groups")) {
+                    }
+                }
+                if (sections.has("tg_articles")) {
+                    JSONObject artObj = sections.optJSONObject("tg_articles");
+                    if (artObj != null) {
+                        SharedPreferences artPrefs = context.getSharedPreferences("articles", Context.MODE_PRIVATE);
+                        result.appliedKeysCount += deserializeIntoPreferences(artPrefs, artObj, KronoBackupManager::isExcludedArticleKey, true, rollback, "articles");
+                    }
+                }
+                if (sections.has("tg_camera")) {
+                    JSONObject camObj = sections.optJSONObject("tg_camera");
+                    if (camObj != null) {
+                        SharedPreferences camPrefs = context.getSharedPreferences("camera", Context.MODE_PRIVATE);
+                        result.appliedKeysCount += deserializeIntoPreferences(camPrefs, camObj, null, true, rollback, "camera");
+                    }
+                }
+                if (sections.has("tg_paint")) {
+                    JSONObject paintObj = sections.optJSONObject("tg_paint");
+                    if (paintObj != null) {
+                        SharedPreferences paintPrefs = context.getSharedPreferences("paint", Context.MODE_PRIVATE);
+                        result.appliedKeysCount += deserializeIntoPreferences(paintPrefs, paintObj, null, true, rollback, "paint");
+                    }
+                }
+                if (sections.has("tg_shapedetector")) {
+                    JSONObject shapeObj = sections.optJSONObject("tg_shapedetector");
+                    if (shapeObj != null) {
+                        SharedPreferences shapePrefs = context.getSharedPreferences("shapedetector_conf", Context.MODE_PRIVATE);
+                        result.appliedKeysCount += deserializeIntoPreferences(shapePrefs, shapeObj, null, true, rollback, "shapedetector_conf");
+                    }
+                }
+                if (sections.has("tg_pip")) {
+                    JSONObject pipBundle = sections.optJSONObject("tg_pip");
+                    if (pipBundle != null) {
+                        if (pipBundle.has("round")) {
                             result.appliedKeysCount += deserializeIntoPreferences(
-                                    context.getSharedPreferences(SaveToGallerySettingsHelper.GROUPS_PREF_NAME + "_" + account, Context.MODE_PRIVATE),
-                                    galleryExObj.optJSONObject("groups"), null, true);
+                                    context.getSharedPreferences("pipconfig", Context.MODE_PRIVATE),
+                                    pipBundle.optJSONObject("round"), null, true, rollback, "pipconfig");
                         }
-                        if (galleryExObj.has("channels")) {
+                        if (pipBundle.has("voip")) {
                             result.appliedKeysCount += deserializeIntoPreferences(
-                                    context.getSharedPreferences(SaveToGallerySettingsHelper.CHANNELS_PREF_NAME + "_" + account, Context.MODE_PRIVATE),
-                                    galleryExObj.optJSONObject("channels"), null, true);
+                                    context.getSharedPreferences("voippipconfig", Context.MODE_PRIVATE),
+                                    pipBundle.optJSONObject("voip"), null, true, rollback, "voippipconfig");
+                        }
+                        if (pipBundle.has("groupcall")) {
+                            result.appliedKeysCount += deserializeIntoPreferences(
+                                    context.getSharedPreferences("groupcallpipconfig", Context.MODE_PRIVATE),
+                                    pipBundle.optJSONObject("groupcall"), null, true, rollback, "groupcallpipconfig");
+                        }
+                    }
+                }
+                if (sections.has("tg_multi_accounts")) {
+                    JSONObject multiObj = sections.optJSONObject("tg_multi_accounts");
+                    if (multiObj != null) {
+                        Iterator<String> accKeys = multiObj.keys();
+                        while (accKeys.hasNext()) {
+                            String accStr = accKeys.next();
+                            int targetAcc;
+                            try {
+                                targetAcc = Integer.parseInt(accStr);
+                            } catch (Exception ignore) {
+                                continue;
+                            }
+                            if (targetAcc < 0 || targetAcc >= UserConfig.MAX_ACCOUNT_COUNT || targetAcc == account) {
+                                continue;
+                            }
+                            JSONObject accBundle = multiObj.optJSONObject(accStr);
+                            if (accBundle == null) continue;
+                            affectedAccounts.add(targetAcc);
+                            if (targetAcc != 0 && accBundle.has("main")) {
+                                int c = deserializeIntoPreferences(
+                                        getMainConfigPrefs(context, targetAcc),
+                                        accBundle.optJSONObject("main"),
+                                        key -> isExcludedMainConfigKey(key) || isThemeMainConfigKey(key),
+                                        true, rollback, "mainconfig" + targetAcc);
+                                result.appliedKeysCount += c;
+                                if (c > 0) result.requiresRestart = true;
+                            }
+                            if (accBundle.has("userconfig")) {
+                                result.appliedKeysCount += deserializeSafeUserConfig(
+                                        getUserConfigPrefs(context, targetAcc),
+                                        accBundle.optJSONObject("userconfig"),
+                                        rollback, targetAcc == 0 ? "userconfing" : ("userconfig" + targetAcc));
+                            }
+                            if (accBundle.has("emoji")) {
+                                int c = deserializeIntoPreferences(
+                                        getEmojiPrefs(context, targetAcc),
+                                        accBundle.optJSONObject("emoji"),
+                                        null, true, rollback, targetAcc == 0 ? "emoji" : ("emoji" + targetAcc));
+                                result.appliedKeysCount += c;
+                                if (c > 0) restoredEmoji = true;
+                            }
+                            if (accBundle.has("save_gallery_exceptions")) {
+                                result.appliedKeysCount += deserializeGalleryExceptions(
+                                        context, targetAcc, accBundle.optJSONObject("save_gallery_exceptions"), rollback);
+                            }
                         }
                     }
                 }
@@ -479,7 +1039,8 @@ public class KronoBackupManager {
                 if (sanitizedThemeObj != null) {
                     SharedPreferences themePrefs = context.getSharedPreferences("themeconfig", Context.MODE_PRIVATE);
                     int c = deserializeIntoPreferences(themePrefs, sanitizedThemeObj,
-                            key -> isExcludedThemeConfigKey(key) || isUnavailableThemeReference(key, sanitizedThemeObj, sanitizedThemeObj), true);
+                            key -> isExcludedThemeConfigKey(key) || isUnavailableThemeReference(key, sanitizedThemeObj, sanitizedThemeObj),
+                            true, rollback, "themeconfig");
                     result.appliedKeysCount += c;
                     if (c > 0) {
                         restoredTheme = true;
@@ -493,9 +1054,10 @@ public class KronoBackupManager {
                 if (themeMainSource != null) {
                     final JSONObject refThemeObj = sanitizedThemeObj;
                     final JSONObject src = themeMainSource;
-                    SharedPreferences mainPrefs = context.getSharedPreferences("mainconfig", Context.MODE_PRIVATE);
+                    SharedPreferences mainPrefs = getMainConfigPrefs(context, 0);
                     int c = deserializeIntoPreferences(mainPrefs, src,
-                            key -> !isThemeMainConfigKey(key) || isUnavailableThemeReference(key, src, refThemeObj), true);
+                            key -> !isThemeMainConfigKey(key) || isUnavailableThemeReference(key, src, refThemeObj),
+                            true, rollback, "mainconfig.theme");
                     result.appliedKeysCount += c;
                     if (c > 0) {
                         restoredTheme = true;
@@ -509,52 +1071,124 @@ public class KronoBackupManager {
                 if (notifBundle != null) {
                     JSONObject globalObj = notifBundle.optJSONObject("global");
                     if (globalObj != null) {
-                        SharedPreferences globalNotifPrefs = MessagesController.getGlobalNotificationsSettings();
-                        int c = deserializeIntoPreferences(globalNotifPrefs, globalObj, KronoBackupManager::isExcludedNotificationKey, true);
+                        SharedPreferences globalNotifPrefs = getNotificationsPrefs(context, 0);
+                        int c = deserializeIntoPreferences(globalNotifPrefs, globalObj,
+                                KronoBackupManager::isExcludedNotificationKey, true, rollback, "Notifications");
                         result.appliedKeysCount += c;
+                        affectedAccounts.add(0);
                         if (c > 0) {
                             result.requiresRestart = true;
                         }
                     }
                     JSONObject accObj = notifBundle.optJSONObject("account");
-                    if (accObj != null) {
-                        SharedPreferences accNotifPrefs = MessagesController.getNotificationsSettings(account);
-                        int c = deserializeIntoPreferences(accNotifPrefs, accObj, KronoBackupManager::isExcludedNotificationKey, true);
+                    if (accObj != null && account != 0) {
+                        SharedPreferences accNotifPrefs = getNotificationsPrefs(context, account);
+                        int c = deserializeIntoPreferences(accNotifPrefs, accObj,
+                                KronoBackupManager::isExcludedNotificationKey, true, rollback, "Notifications" + account);
                         result.appliedKeysCount += c;
                         if (c > 0) {
                             result.requiresRestart = true;
                         }
                     }
+                    JSONObject multiNotifObj = notifBundle.optJSONObject("multi");
+                    if (multiNotifObj != null) {
+                        Iterator<String> accKeys = multiNotifObj.keys();
+                        while (accKeys.hasNext()) {
+                            String accStr = accKeys.next();
+                            int targetAcc;
+                            try {
+                                targetAcc = Integer.parseInt(accStr);
+                            } catch (Exception ignore) {
+                                continue;
+                            }
+                            if (targetAcc <= 0 || targetAcc >= UserConfig.MAX_ACCOUNT_COUNT || targetAcc == account) {
+                                continue;
+                            }
+                            JSONObject oneNotif = multiNotifObj.optJSONObject(accStr);
+                            if (oneNotif == null) continue;
+                            int c = deserializeIntoPreferences(
+                                    getNotificationsPrefs(context, targetAcc),
+                                    oneNotif, KronoBackupManager::isExcludedNotificationKey,
+                                    true, rollback, "Notifications" + targetAcc);
+                            result.appliedKeysCount += c;
+                            affectedAccounts.add(targetAcc);
+                            if (c > 0) {
+                                result.requiresRestart = true;
+                            }
+                        }
+                    }
                 }
             }
 
+            // Reload in-memory controllers cleanly after all commits succeed.
+            // Order matters: SharedConfig loads LiteMode from restored mainconfig first,
+            // then KronoConfig reloads kronoconfig and syncs GlassEngine + LiteMode glass flags.
+            SharedConfig.reloadConfigFromDisk();
             KronoConfig.reloadConfigFromDisk();
             KronoConfig.applyFirebaseAnalyticsPreference(context);
             KronoConfig.applyFirebasePushPreference();
-            SharedConfig.reloadConfigFromDisk();
-            UserConfig.getInstance(account).clearSaveGalleryExceptionsCache();
-            NotificationsController.getInstance(account).reloadPreferencesFromDisk();
+
+            if (restoredSystemLogs) {
+                SharedPreferences sysPrefs = context.getSharedPreferences("systemConfig", Context.MODE_PRIVATE);
+                BuildVars.LOGS_ENABLED = BuildVars.DEBUG_VERSION || sysPrefs.getBoolean("logsEnabled", BuildVars.DEBUG_VERSION);
+            }
+
+            for (int acc : affectedAccounts) {
+                if (acc >= 0 && acc < UserConfig.MAX_ACCOUNT_COUNT) {
+                    UserConfig.getInstance(acc).reloadUserSettingsFromDisk();
+                    NotificationsController.getInstance(acc).reloadPreferencesFromDisk();
+                    if (UserConfig.getInstance(acc).isClientActivated()) {
+                        DownloadController.getInstance(acc).reloadPreferencesFromDisk();
+                        ConnectionsManager.getInstance(acc).reloadPreferencesFromDisk();
+                    }
+                }
+            }
+
             try {
                 JSONObject postRestoreJson = buildBackupJson(account, BackupOptions.fromAutoConfig());
                 JSONObject postSections = postRestoreJson.optJSONObject("sections");
                 String postHash = sha256Hex(postSections != null ? postSections.toString() : postRestoreJson.toString());
                 KronoConfig.recordCloudBackupCompleted(account, System.currentTimeMillis(), postHash);
             } catch (Exception ignore) {}
+        } catch (Throwable t) {
+            FileLog.e(t);
+            rollback.rollbackAll();
+            try {
+                SharedConfig.reloadConfigFromDisk();
+                KronoConfig.reloadConfigFromDisk();
+                for (int acc : affectedAccounts) {
+                    if (acc >= 0 && acc < UserConfig.MAX_ACCOUNT_COUNT) {
+                        UserConfig.getInstance(acc).reloadUserSettingsFromDisk();
+                        NotificationsController.getInstance(acc).reloadPreferencesFromDisk();
+                    }
+                }
+            } catch (Throwable ignore) {}
+            if (t instanceof Exception) {
+                throw (Exception) t;
+            }
+            throw new RuntimeException(t);
         } finally {
             releaseSuppressObserverAfterMainDrain();
         }
+
         final boolean shouldReloadTheme = restoredTheme;
         final boolean shouldNotifyEmoji = restoredEmoji;
+        final boolean shouldReloadPlayback = restoredPlaybackSpeed;
         AndroidUtilities.runOnUIThread(() -> {
             try {
                 if (shouldReloadTheme) {
                     Theme.reloadThemesFromDisk();
                 }
+                if (shouldReloadPlayback) {
+                    syncMediaPlaybackSpeedsFromMainConfig();
+                }
+                ConnectionsManager.reloadProxySettingsFromDisk();
                 ApplicationLoader.startPushService();
                 MessagesController.getInstance(account).syncLocalFavoritesFilter(true);
                 NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.dialogsNeedReload, true);
                 NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.mainUserInfoChanged);
                 NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.dialogFiltersUpdated);
+                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.reloadInterface);
                 if (shouldNotifyEmoji) {
                     NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.emojiLoaded);
                 }
@@ -563,6 +1197,74 @@ public class KronoBackupManager {
             }
         });
         return result;
+    }
+
+    private static void syncMediaPlaybackSpeedsFromMainConfig() {
+        try {
+            SharedPreferences mainPrefs = MessagesController.getGlobalMainSettings();
+            if (mainPrefs == null) return;
+            MediaController mc = MediaController.getInstance();
+            if (mc == null) return;
+            float targetNormal = mainPrefs.getFloat("playbackSpeed", 1.0f);
+            if (Math.abs(mc.getPlaybackSpeed(false) - targetNormal) > 0.001f) {
+                mc.setPlaybackSpeed(false, targetNormal);
+            }
+            float targetMusic = mainPrefs.getFloat("musicPlaybackSpeed", 1.0f);
+            if (Math.abs(mc.getPlaybackSpeed(true) - targetMusic) > 0.001f) {
+                mc.setPlaybackSpeed(true, targetMusic);
+            }
+        } catch (Throwable ignore) {}
+    }
+
+    private static int deserializeGalleryExceptions(Context context, int account, JSONObject galleryExObj, RollbackSession rollback) throws IOException {
+        if (galleryExObj == null) {
+            return 0;
+        }
+        int total = 0;
+        if (galleryExObj.has("users")) {
+            total += deserializeIntoPreferences(
+                    context.getSharedPreferences(SaveToGallerySettingsHelper.USERS_PREF_NAME + "_" + account, Context.MODE_PRIVATE),
+                    galleryExObj.optJSONObject("users"), null, true, rollback, "save_gallery_users_" + account);
+        }
+        if (galleryExObj.has("groups")) {
+            total += deserializeIntoPreferences(
+                    context.getSharedPreferences(SaveToGallerySettingsHelper.GROUPS_PREF_NAME + "_" + account, Context.MODE_PRIVATE),
+                    galleryExObj.optJSONObject("groups"), null, true, rollback, "save_gallery_groups_" + account);
+        }
+        if (galleryExObj.has("channels")) {
+            total += deserializeIntoPreferences(
+                    context.getSharedPreferences(SaveToGallerySettingsHelper.CHANNELS_PREF_NAME + "_" + account, Context.MODE_PRIVATE),
+                    galleryExObj.optJSONObject("channels"), null, true, rollback, "save_gallery_channels_" + account);
+        }
+        return total;
+    }
+
+    private static int deserializeSafeUserConfig(SharedPreferences prefs, JSONObject source, RollbackSession rollback, String label) throws IOException {
+        if (prefs == null || source == null) {
+            return 0;
+        }
+        rollback.captureIfNeeded(prefs);
+        SharedPreferences.Editor editor = prefs.edit();
+        Map<String, ?> existing = prefs.getAll();
+        if (existing != null) {
+            for (String existingKey : existing.keySet()) {
+                if (!TextUtils.isEmpty(existingKey) && isSafeUserConfigKey(existingKey)) {
+                    editor.remove(existingKey);
+                }
+            }
+        }
+        int count = 0;
+        Iterator<String> keys = source.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (TextUtils.isEmpty(key) || !isSafeUserConfigKey(key)) {
+                continue;
+            }
+            JSONObject entry = source.optJSONObject(key);
+            count += applyTypedEntry(editor, key, entry);
+        }
+        rollback.commitOrThrow(prefs, editor, label);
+        return count;
     }
 
     private interface KeyFilter {
@@ -627,10 +1329,11 @@ public class KronoBackupManager {
         target.put(key, item);
     }
 
-    private static int deserializeIntoPreferences(SharedPreferences prefs, JSONObject source, KeyFilter filter, boolean clearNonExcludedExisting) {
+    private static int deserializeIntoPreferences(SharedPreferences prefs, JSONObject source, KeyFilter filter, boolean clearNonExcludedExisting, RollbackSession rollback, String label) throws IOException {
         if (prefs == null || source == null) {
             return 0;
         }
+        rollback.captureIfNeeded(prefs);
         SharedPreferences.Editor editor = prefs.edit();
         if (clearNonExcludedExisting) {
             Map<String, ?> existing = prefs.getAll();
@@ -652,7 +1355,7 @@ public class KronoBackupManager {
             JSONObject entry = source.optJSONObject(key);
             count += applyTypedEntry(editor, key, entry);
         }
-        editor.commit();
+        rollback.commitOrThrow(prefs, editor, label);
         return count;
     }
 
@@ -679,10 +1382,11 @@ public class KronoBackupManager {
         return out;
     }
 
-    private static int deserializeAccountFolderIcons(SharedPreferences kronoPrefs, int account, JSONObject iconsObj) {
+    private static int deserializeAccountFolderIcons(SharedPreferences kronoPrefs, int account, JSONObject iconsObj, RollbackSession rollback) throws IOException {
         if (kronoPrefs == null || iconsObj == null) {
             return 0;
         }
+        rollback.captureIfNeeded(kronoPrefs);
         SharedPreferences.Editor editor = kronoPrefs.edit();
         String prefix = "filter_icon_" + account + "_";
         Map<String, ?> existing = kronoPrefs.getAll();
@@ -706,7 +1410,7 @@ public class KronoBackupManager {
                 count++;
             }
         }
-        editor.commit();
+        rollback.commitOrThrow(kronoPrefs, editor, "kronoconfig.folder_icons_" + account);
         return count;
     }
 
@@ -724,10 +1428,11 @@ public class KronoBackupManager {
         return false;
     }
 
-    private static int deserializeKronoPreferences(SharedPreferences prefs, int targetAccount, JSONObject source) {
+    private static int deserializeKronoPreferences(SharedPreferences prefs, int targetAccount, JSONObject source, RollbackSession rollback) throws IOException {
         if (prefs == null || source == null) {
             return 0;
         }
+        rollback.captureIfNeeded(prefs);
         SharedPreferences.Editor editor = prefs.edit();
         Map<String, ?> existing = prefs.getAll();
         if (existing != null) {
@@ -749,7 +1454,6 @@ public class KronoBackupManager {
             }
             String destKey = key;
             if (key.startsWith("filter_icon_")) {
-                // Remap legacy account-bound key filter_icon_<srcAccount>_<filterId> to targetAccount
                 int lastUnderscore = key.lastIndexOf('_');
                 if (lastUnderscore > "filter_icon_".length() && lastUnderscore < key.length() - 1) {
                     destKey = "filter_icon_" + targetAccount + "_" + key.substring(lastUnderscore + 1);
@@ -760,7 +1464,7 @@ public class KronoBackupManager {
             JSONObject entry = source.optJSONObject(key);
             count += applyTypedEntry(editor, destKey, entry);
         }
-        editor.commit();
+        rollback.commitOrThrow(prefs, editor, "kronoconfig");
         return count;
     }
 
@@ -841,9 +1545,32 @@ public class KronoBackupManager {
     }
 
     private static boolean isSafeUserConfigKey(String key) {
+        if (TextUtils.isEmpty(key)) return false;
         return "sortContactsByName".equals(key)
                 || "sortFilesByName".equals(key)
-                || "saveIncomingPhotos".equals(key);
+                || "saveIncomingPhotos".equals(key)
+                || "allowScreenCapture".equals(key)
+                || "proxyRotationEnabled".equals(key)
+                || "proxyRotationTimeout".equals(key)
+                || "syncContacts".equals(key)
+                || "suggestContacts".equals(key)
+                || "showCallsTab".equals(key)
+                || key.startsWith("keep_media_exceptions_")
+                || "textSelectionHintShows".equals(key)
+                || "scheduledOrNoSoundHintShows".equals(key)
+                || "scheduledHintShows".equals(key)
+                || "forwardingOptionsHintShown".equals(key)
+                || "replyingOptionsHintShown".equals(key)
+                || "lockRecordAudioVideoHint".equals(key);
+    }
+
+    private static boolean isSafeSystemConfigKey(String key) {
+        return "logsEnabled".equals(key);
+    }
+
+    private static boolean isExcludedArticleKey(String key) {
+        if (TextUtils.isEmpty(key)) return true;
+        return key.startsWith("article");
     }
 
     private static boolean isThemeMainConfigKey(String key) {
@@ -862,13 +1589,26 @@ public class KronoBackupManager {
                 || "autoNightLocationLongitude3".equals(key)
                 || "autoNightLastSunCheckDay".equals(key)
                 || "dayNightThemeSwitchHintCount".equals(key)
-                || "dayNightWallpaperSwitchHint".equals(key);
+                || "dayNightWallpaperSwitchHint".equals(key)
+                || "selectedBackground2".equals(key)
+                || "overrideThemeWallpaper".equals(key)
+                || "selectedColor".equals(key)
+                || "selectedBackgroundSlug".equals(key)
+                || "selectedGradientColor".equals(key)
+                || "selectedGradientColor2".equals(key)
+                || "selectedGradientColor3".equals(key)
+                || "selectedGradientRotation".equals(key)
+                || "selectedBackgroundBlurred".equals(key)
+                || "selectedBackgroundMotion".equals(key)
+                || "selectedIntensity".equals(key)
+                || key.startsWith("accent_for_");
     }
 
     private static boolean isExcludedMainConfigKey(String key) {
         if (TextUtils.isEmpty(key)) return true;
         String lower = key.toLowerCase(Locale.US);
-        return lower.contains("passcode")
+        // Secrets, push tokens, device/session caches, and ephemeral per-dialog state
+        if (lower.contains("passcode")
                 || lower.contains("applocked")
                 || lower.contains("fingerprint")
                 || lower.contains("pushstring")
@@ -903,8 +1643,171 @@ public class KronoBackupManager {
                 || lower.equals("remoteconfigloaded")
                 || lower.equals("installreferer")
                 || lower.equals("pk")
+                || lower.equals("floatingdebugactive")
                 || lower.startsWith("storage_cache_dir")
-                || lower.equals("storagecachedir");
+                || lower.equals("storagecachedir")
+                || lower.startsWith("chatpendingrequests")
+                || lower.startsWith("effects_last_")
+                || lower.startsWith("forumlasttopic")
+                || lower.startsWith("2dialogs")
+                || lower.startsWith("2pinned")
+                || lower.startsWith("2total")
+                || lower.startsWith("6migrate")
+                || lower.startsWith("lastloading")) {
+            return true;
+        }
+        // Server-pushed remote appConfig values & heavy lookup lists (fetched automatically from Telegram)
+        return lower.equals("autologintoken")
+                || lower.equals("autologindomains")
+                || lower.equals("authdomains")
+                || lower.equals("dcdomainname2")
+                || lower.equals("webfiledatacenterid")
+                || lower.equals("googleauthclientid")
+                || lower.equals("tonproxyaddress")
+                || lower.equals("tonblockchainexplorerurl")
+                || lower.equals("weathersearchusername")
+                || lower.equals("premiummanagesubscriptionurl")
+                || lower.equals("premiuminvoiceslug")
+                || lower.equals("premiumbotusername")
+                || lower.equals("premiumlocked")
+                || lower.equals("verifyagebotusername")
+                || lower.equals("verifyagecountry")
+                || lower.equals("verifyagemin")
+                || lower.equals("peercolors")
+                || lower.equals("profilepeercolors")
+                || lower.equals("emojisounds")
+                || lower.equals("diceemojies")
+                || lower.equals("dicesuccess")
+                || lower.equals("gifsearchemojies")
+                || lower.equals("premiumfeaturestypestoposition")
+                || lower.equals("businessfeaturestypestoposition")
+                || lower.equals("stargiftscraftattributespermilles")
+                || lower.equals("tonstakedicestakesuggestedamounts")
+                || lower.equals("whitelistedbots")
+                || lower.equals("pendingsuggestions")
+                || lower.equals("dismissedsuggestions")
+                || lower.equals("ignorerestrictionreasons")
+                || lower.equals("exporturi2")
+                || lower.equals("exportgroupuri")
+                || lower.equals("exportprivateuri")
+                || lower.equals("directpaymentscurrency")
+                || lower.equals("starsgroupcallmessagelimits")
+                || lower.equals("webappallowedprotocols")
+                || lower.equals("starrefstartparamprefixes")
+                || lower.equals("freezeappealurl")
+                || lower.equals("freezesincedate")
+                || lower.equals("freezeuntildate")
+                || lower.equals("telegramantispamuserid")
+                || lower.equals("telegramantispamgroupsizemin")
+                || lower.equals("stories_changelog_user_id")
+                || lower.startsWith("stories_stealth_")
+                || lower.startsWith("giveaway_")
+                || lower.startsWith("boosts_")
+                || lower.startsWith("uploadmaxfileparts")
+                || lower.startsWith("uploadpremiumspeedup")
+                || lower.equals("maxgroupcount")
+                || lower.equals("maxmegagroupcount")
+                || lower.equals("maxrecentgifscount")
+                || lower.equals("maxrecentstickerscount")
+                || lower.equals("maxfavestickerscount")
+                || lower.equals("maxedittime")
+                || lower.equals("ratingdecay")
+                || lower.equals("linkprefix")
+                || lower.equals("callreceivetimeout")
+                || lower.equals("callringtimeout")
+                || lower.equals("callconnecttimeout")
+                || lower.equals("callpackettimeout")
+                || lower.equals("updatecheckdelay")
+                || lower.startsWith("maxfolderpinneddialogscount")
+                || lower.equals("maxmessagelength")
+                || lower.equals("maxcaptionlength")
+                || lower.equals("mapprovider")
+                || lower.equals("availablemapproviders")
+                || lower.equals("revoketimelimit")
+                || lower.equals("revoketimepmlimit")
+                || lower.equals("canrevokepminbox")
+                || lower.equals("preloadfeaturedstickers")
+                || lower.equals("gifsearchbot")
+                || lower.equals("imagesearchbot")
+                || lower.equals("blockedcountry")
+                || lower.equals("suggestedlangcode")
+                || lower.equals("getfileexperimentalparams")
+                || lower.equals("android_download_improvement_killswitch")
+                || lower.equals("smsjobsstickynotificationenabled")
+                || lower.equals("autoarchiveavailable")
+                || lower.equals("groipcallvideomaxparticipants")
+                || lower.equals("chatreadmarksizethreshold")
+                || lower.equals("chatreadmarkexpireperiod")
+                || lower.equals("ringtonedurationmax")
+                || lower.equals("ringtonesizemax")
+                || lower.equals("pmreaddateexpireperiod")
+                || lower.equals("suggeststickersapionly")
+                || lower.equals("roundvideosize")
+                || lower.equals("roundvideobitrate")
+                || lower.equals("roundaudiobitrate")
+                || lower.startsWith("channelslimit")
+                || lower.startsWith("savedgifslimit")
+                || lower.startsWith("stickersfavedlimit")
+                || lower.startsWith("maxpinneddialogscount")
+                || lower.startsWith("dialogfilterslimit")
+                || lower.startsWith("dialogfilterschatslimit")
+                || lower.startsWith("dialogfilterspinnedlimit")
+                || lower.startsWith("publiclinkslimit")
+                || lower.startsWith("captionlengthlimit")
+                || lower.startsWith("storycaptionlengthlimit")
+                || lower.startsWith("aboutlengthlimit")
+                || lower.startsWith("reactionsusermax")
+                || lower.equals("reactionsinchatmax")
+                || lower.equals("reactionsuniqmax")
+                || lower.equals("forumupgradeparticipantsmin")
+                || lower.equals("topicspinnedlimit")
+                || lower.equals("hiddenmembersgroupsizemin")
+                || lower.equals("chatlistupdateperiod")
+                || lower.equals("smallqueuemaxactiveoperations")
+                || lower.equals("largequeuemaxactiveoperations")
+                || lower.startsWith("chatlistinviteslimit")
+                || lower.startsWith("chatlistjoinedlimit")
+                || lower.startsWith("storyexpiringlimit")
+                || lower.startsWith("storiessent")
+                || lower.startsWith("storiessuggested")
+                || lower.endsWith("levelmin")
+                || lower.equals("quickreplieslimit")
+                || lower.startsWith("stargifts")
+                || lower.startsWith("stars")
+                || lower.startsWith("starref")
+                || lower.equals("botpreviewmediasmax")
+                || lower.equals("botverificationdescriptionlengthlimit")
+                || lower.equals("conferencecallsizelimit")
+                || lower.equals("callrequestsdisabled")
+                || lower.startsWith("todo")
+                || lower.equals("translationsmanualenabled")
+                || lower.equals("translationsautoenabled")
+                || lower.equals("enablegiftsinprofile")
+                || lower.equals("storiesposting")
+                || lower.equals("storiesentities")
+                || lower.equals("storiesexportnopubliclink")
+                || lower.equals("authorization_autoconfirm_period")
+                || lower.equals("quotelengthmax")
+                || lower.equals("fpnvallowed")
+                || lower.equals("secretwebpage2")
+                || lower.equals("androiddisableroundcamera2")
+                || lower.equals("storyweatherpreload")
+                || lower.equals("showannualpermonth")
+                || lower.equals("caneditfactcheck")
+                || lower.equals("factchecklengthlimit")
+                || lower.equals("sponsoredlinksinappallow")
+                || lower.equals("disablebotfullscreenblur")
+                || lower.equals("videoignorealtdocuments")
+                || lower.equals("uploadmarkupvideo")
+                || lower.equals("giftattachmenuicon")
+                || lower.equals("gifttextfieldicon")
+                || lower.equals("checkresetlangpack")
+                || lower.startsWith("transcribe")
+                || lower.equals("introtitlelengthlimit")
+                || lower.equals("introdescriptionlengthlimit")
+                || lower.equals("businesschatlinkslimit")
+                || lower.equals("channelrevenuewithdrawalenabled")
+                || lower.equals("newnoncontactpeersrequirepremiumwithoutownpremium");
     }
 
     private static boolean isExcludedThemeConfigKey(String key) {
@@ -1021,7 +1924,8 @@ public class KronoBackupManager {
     private static boolean isExcludedNotificationKey(String key) {
         if (TextUtils.isEmpty(key)) return true;
         String lower = key.toLowerCase(Locale.US);
-        return lower.contains("sound_path")
+        return lower.equals("otherkey")
+                || lower.contains("sound_path")
                 || lower.contains("ringtone_path")
                 || lower.startsWith("notify_channel")
                 || lower.startsWith("dialog_show_translate_count")
@@ -1043,15 +1947,15 @@ public class KronoBackupManager {
             try {
                 JSONObject json = buildBackupJson(account, options);
                 String formatted = json.toString(2);
+                ParsedBackup parsed = parseBackupJson(formatted);
                 byte[] bytes = formatted.getBytes(StandardCharsets.UTF_8);
-                try (OutputStream os = context.getContentResolver().openOutputStream(uri, "wt")) {
+                try (java.io.OutputStream os = context.getContentResolver().openOutputStream(uri, "wt")) {
                     if (os == null) {
                         throw new IllegalStateException("No se pudo abrir el archivo de destino");
                     }
                     os.write(bytes);
                     os.flush();
                 }
-                ParsedBackup parsed = parseBackupJson(formatted);
                 AndroidUtilities.runOnUIThread(() -> {
                     if (onSuccess != null) onSuccess.run(parsed.metadata);
                 });
@@ -1071,7 +1975,7 @@ public class KronoBackupManager {
                 if (is == null) {
                     throw new IllegalStateException("No se pudo leer el archivo seleccionado");
                 }
-                String content = readStreamUtf8Bounded(is);
+                String content = readStreamUtf8OrGzipBounded(is);
                 ParsedBackup parsed = parseBackupJson(content);
                 AndroidUtilities.runOnUIThread(() -> {
                     if (onSuccess != null) onSuccess.run(parsed);
@@ -1093,7 +1997,7 @@ public class KronoBackupManager {
                     throw new IllegalStateException("El archivo todavía no está descargado o no se puede leer");
                 }
                 try (InputStream is = new FileInputStream(file)) {
-                    String content = readStreamUtf8Bounded(is);
+                    String content = readStreamUtf8OrGzipBounded(is);
                     ParsedBackup parsed = parseBackupJson(content);
                     AndroidUtilities.runOnUIThread(() -> {
                         if (onSuccess != null) onSuccess.run(parsed);
@@ -1118,6 +2022,7 @@ public class KronoBackupManager {
                 }
                 JSONObject json = buildBackupJson(account, options);
                 String formatted = json.toString(2);
+                parseBackupJson(formatted);
                 File cacheDir = FileLoader.checkDirectory(FileLoader.MEDIA_DIR_CACHE);
                 if (cacheDir == null || !cacheDir.exists()) {
                     cacheDir = ApplicationLoader.applicationContext.getCacheDir();
@@ -1180,7 +2085,7 @@ public class KronoBackupManager {
                 JSONArray keys = new JSONArray();
                 keys.put(CLOUD_META_KEY);
                 params.put("keys", keys);
-                invokeCloudMethod(account, botUser, "getStorageValues", params, resultJson -> {
+                invokeCloudMethodWithRetry(account, botUser, "getStorageValues", params, 0, resultJson -> {
                     try {
                         JSONObject map = new JSONObject(resultJson);
                         String metaRaw = map.optString(CLOUD_META_KEY, "");
@@ -1216,7 +2121,7 @@ public class KronoBackupManager {
                 JSONObject backupJson = buildBackupJson(account, options);
                 JSONObject sectionsObj = backupJson.optJSONObject("sections");
                 String sectionsHash = sha256Hex(sectionsObj != null ? sectionsObj.toString() : backupJson.toString());
-                uploadPreparedBackupToCloud(account, options, backupJson, sectionsHash, onSuccess, onError);
+                uploadPreparedBackupToCloud(account, options, backupJson, sectionsHash, false, onSuccess, onError);
             } catch (Exception e) {
                 FileLog.e(e);
                 String msg = e.getMessage() != null ? e.getMessage() : "Error al preparar copia en la nube";
@@ -1227,12 +2132,12 @@ public class KronoBackupManager {
         });
     }
 
-    private static void uploadPreparedBackupToCloud(int account, BackupOptions options, JSONObject backupJson, String sectionsHash, Utilities.Callback<BackupMetadata> onSuccess, Utilities.Callback<String> onError) {
+    private static void uploadPreparedBackupToCloud(int account, BackupOptions options, JSONObject backupJson, String sectionsHash, boolean isAutoUpload, Utilities.Callback<BackupMetadata> onSuccess, Utilities.Callback<String> onError) {
         try {
             String rawJson = backupJson.toString();
             String sha256 = sha256Hex(rawJson);
             String compressed = compressToBase64(rawJson);
-            List<String> chunks = splitIntoChunks(compressed, CLOUD_CHUNK_SIZE);
+            List<String> chunks = splitIntoChunksUtf8Safe(compressed, CLOUD_CHUNK_SIZE, CLOUD_MAX_CHUNK_UTF8_BYTES);
             if (chunks.size() > CLOUD_MAX_CHUNKS) {
                 throw new IllegalStateException("La copia supera el límite máximo permitido por Telegram CloudStorage");
             }
@@ -1253,14 +2158,16 @@ public class KronoBackupManager {
             String metaJsonStr = serializeCloudMetadataJson(meta);
 
             resolveBackupBot(account, botUser -> {
-                // Save chunks sequentially, then commit metadata atomically last, then clean up stale chunks
+                // Save all chunks sequentially with retries, then commit metadata atomically last, then clean up stale chunks
                 saveChunksSequentially(account, botUser, chunks, 0, () -> {
                     try {
                         JSONObject metaParams = new JSONObject();
                         metaParams.put("key", CLOUD_META_KEY);
                         metaParams.put("value", metaJsonStr);
-                        invokeCloudMethod(account, botUser, "saveStorageValue", metaParams, ignored -> {
-                            KronoConfig.recordCloudBackupCompleted(account, meta.timestamp, sectionsHash);
+                        invokeCloudMethodWithRetry(account, botUser, "saveStorageValue", metaParams, 0, ignored -> {
+                            if (!isAutoUpload || !dirtyDuringUpload.get()) {
+                                KronoConfig.recordCloudBackupCompleted(account, meta.timestamp, sectionsHash);
+                            }
                             cleanupStaleCloudChunks(account, botUser, chunks.size());
                             AndroidUtilities.runOnUIThread(() -> {
                                 if (onSuccess != null) onSuccess.run(meta);
@@ -1335,7 +2242,7 @@ public class KronoBackupManager {
 
     public static void deleteCloudBackup(int account, Runnable onSuccess, Utilities.Callback<String> onError) {
         resolveBackupBot(account, botUser -> {
-            invokeCloudMethod(account, botUser, "getStorageKeys", new JSONObject(), resultJson -> {
+            invokeCloudMethodWithRetry(account, botUser, "getStorageKeys", new JSONObject(), 0, resultJson -> {
                 try {
                     List<String> keysToDelete = extractKronoBackupKeys(resultJson);
                     if (keysToDelete.isEmpty()) {
@@ -1374,9 +2281,6 @@ public class KronoBackupManager {
     }
 
     public static void releaseSuppressObserverAfterMainDrain() {
-        // SharedPreferences.Editor.commit() posts OnSharedPreferenceChangeListener callbacks
-        // asynchronously onto the main looper when invoked off the UI thread. Posting the
-        // release onto the main looper ensures FIFO drain before re-enabling observation.
         AndroidUtilities.runOnUIThread(() -> setSuppressObserver(false));
     }
 
@@ -1438,6 +2342,12 @@ public class KronoBackupManager {
                 }
                 scheduleOnChangeBackup(observedAccount);
             };
+            userConfPrefListener = (prefs, key) -> {
+                if (suppressObserverDepth > 0 || TextUtils.isEmpty(key)) return;
+                if (KronoConfig.cloudBackupMode != KronoConfig.CLOUD_BACKUP_ON_CHANGE) return;
+                if (!KronoConfig.cloudAutoIncludeTelegram || !isSafeUserConfigKey(key)) return;
+                scheduleOnChangeBackup(observedAccount);
+            };
             themePrefListener = (prefs, key) -> {
                 if (suppressObserverDepth > 0 || TextUtils.isEmpty(key)) return;
                 if (KronoConfig.cloudBackupMode != KronoConfig.CLOUD_BACKUP_ON_CHANGE) return;
@@ -1448,6 +2358,24 @@ public class KronoBackupManager {
                 if (suppressObserverDepth > 0 || TextUtils.isEmpty(key)) return;
                 if (KronoConfig.cloudBackupMode != KronoConfig.CLOUD_BACKUP_ON_CHANGE) return;
                 if (!KronoConfig.cloudAutoIncludeNotifications || isExcludedNotificationKey(key)) return;
+                scheduleOnChangeBackup(observedAccount);
+            };
+            auxPrefListener = (prefs, key) -> {
+                if (suppressObserverDepth > 0 || TextUtils.isEmpty(key)) return;
+                if (KronoConfig.cloudBackupMode != KronoConfig.CLOUD_BACKUP_ON_CHANGE) return;
+                if (!KronoConfig.cloudAutoIncludeTelegram) return;
+                scheduleOnChangeBackup(observedAccount);
+            };
+            systemPrefListener = (prefs, key) -> {
+                if (suppressObserverDepth > 0 || !isSafeSystemConfigKey(key)) return;
+                if (KronoConfig.cloudBackupMode != KronoConfig.CLOUD_BACKUP_ON_CHANGE) return;
+                if (!KronoConfig.cloudAutoIncludeTelegram) return;
+                scheduleOnChangeBackup(observedAccount);
+            };
+            articlesPrefListener = (prefs, key) -> {
+                if (suppressObserverDepth > 0 || isExcludedArticleKey(key)) return;
+                if (KronoConfig.cloudBackupMode != KronoConfig.CLOUD_BACKUP_ON_CHANGE) return;
+                if (!KronoConfig.cloudAutoIncludeTelegram) return;
                 scheduleOnChangeBackup(observedAccount);
             };
             connectionStateDelegate = (id, acc, args) -> {
@@ -1466,8 +2394,18 @@ public class KronoBackupManager {
 
             context.getSharedPreferences("kronoconfig", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(kronoPrefListener);
             context.getSharedPreferences("mainconfig", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(mainPrefListener);
+            context.getSharedPreferences("userconfing", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(userConfPrefListener);
             context.getSharedPreferences("themeconfig", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(themePrefListener);
-            MessagesController.getGlobalNotificationsSettings().registerOnSharedPreferenceChangeListener(notifPrefListener);
+            context.getSharedPreferences("Notifications", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(notifPrefListener);
+            context.getSharedPreferences("playback_speed", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(auxPrefListener);
+            context.getSharedPreferences("camera", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(auxPrefListener);
+            context.getSharedPreferences("paint", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(auxPrefListener);
+            context.getSharedPreferences("pipconfig", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(auxPrefListener);
+            context.getSharedPreferences("voippipconfig", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(auxPrefListener);
+            context.getSharedPreferences("groupcallpipconfig", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(auxPrefListener);
+            context.getSharedPreferences("shapedetector_conf", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(auxPrefListener);
+            context.getSharedPreferences("systemConfig", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(systemPrefListener);
+            context.getSharedPreferences("articles", Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(articlesPrefListener);
 
             observedAccount = account;
             attachAccountSpecificObserversLocked(context, account);
@@ -1490,11 +2428,15 @@ public class KronoBackupManager {
     private static void attachAccountSpecificObserversLocked(Context context, int account) {
         try {
             if (account != 0) {
-                observedAccountMainPrefs = context.getSharedPreferences("mainconfig" + account, Context.MODE_PRIVATE);
+                observedAccountMainPrefs = getMainConfigPrefs(context, account);
                 if (observedAccountMainPrefs != null && mainPrefListener != null) {
                     observedAccountMainPrefs.registerOnSharedPreferenceChangeListener(mainPrefListener);
                 }
-                observedAccountNotifPrefs = MessagesController.getNotificationsSettings(account);
+                observedAccountUserPrefs = getUserConfigPrefs(context, account);
+                if (observedAccountUserPrefs != null && userConfPrefListener != null) {
+                    observedAccountUserPrefs.registerOnSharedPreferenceChangeListener(userConfPrefListener);
+                }
+                observedAccountNotifPrefs = getNotificationsPrefs(context, account);
                 if (observedAccountNotifPrefs != null && notifPrefListener != null) {
                     observedAccountNotifPrefs.registerOnSharedPreferenceChangeListener(notifPrefListener);
                 }
@@ -1514,6 +2456,10 @@ public class KronoBackupManager {
             if (observedAccountMainPrefs != null && mainPrefListener != null) {
                 observedAccountMainPrefs.unregisterOnSharedPreferenceChangeListener(mainPrefListener);
                 observedAccountMainPrefs = null;
+            }
+            if (observedAccountUserPrefs != null && userConfPrefListener != null) {
+                observedAccountUserPrefs.unregisterOnSharedPreferenceChangeListener(userConfPrefListener);
+                observedAccountUserPrefs = null;
             }
             if (observedAccountNotifPrefs != null && notifPrefListener != null) {
                 observedAccountNotifPrefs.unregisterOnSharedPreferenceChangeListener(notifPrefListener);
@@ -1584,7 +2530,7 @@ public class KronoBackupManager {
                     autoBackupInProgress.set(false);
                     return;
                 }
-                uploadPreparedBackupToCloud(account, options, json, contentHash, meta -> {
+                uploadPreparedBackupToCloud(account, options, json, contentHash, true, meta -> {
                     setLastAutoUploadElapsed(account, SystemClock.elapsedRealtime());
                     autoBackupInProgress.set(false);
                     if (dirtyDuringUpload.getAndSet(false)) {
@@ -1687,7 +2633,7 @@ public class KronoBackupManager {
                     autoBackupInProgress.set(false);
                     return;
                 }
-                uploadPreparedBackupToCloud(account, options, json, contentHash, meta -> {
+                uploadPreparedBackupToCloud(account, options, json, contentHash, false, meta -> {
                     setLastAutoUploadElapsed(account, SystemClock.elapsedRealtime());
                     autoBackupInProgress.set(false);
                 }, err -> {
@@ -1702,7 +2648,7 @@ public class KronoBackupManager {
     }
 
     // -------------------------------------------------------------------------
-    // Internal CloudStorage Helpers
+    // Internal CloudStorage Helpers (with Automatic Retry & Backoff)
     // -------------------------------------------------------------------------
 
     private static void resolveBackupBot(int account, Utilities.Callback<TLRPC.User> onSuccess, Utilities.Callback<String> onError) {
@@ -1756,7 +2702,15 @@ public class KronoBackupManager {
         });
     }
 
-    private static void invokeCloudMethod(int account, TLRPC.User botUser, String method, JSONObject params, Utilities.Callback<String> onSuccess, Utilities.Callback<String> onError) {
+    private static void invokeCloudMethodWithRetry(
+            int account,
+            TLRPC.User botUser,
+            String method,
+            JSONObject params,
+            int attempt,
+            Utilities.Callback<String> onSuccess,
+            Utilities.Callback<String> onError
+    ) {
         TL_bots.invokeWebViewCustomMethod req = new TL_bots.invokeWebViewCustomMethod();
         TLRPC.InputUser inputUser = MessagesController.getInstance(account).getInputUser(botUser.id);
         if (inputUser == null || inputUser instanceof TLRPC.TL_inputUserEmpty) {
@@ -1771,13 +2725,28 @@ public class KronoBackupManager {
         req.params.data = params != null ? params.toString() : "{}";
         ConnectionsManager.getInstance(account).sendRequest(req, (response, error) -> {
             if (error != null) {
-                if ("BOT_INVALID".equalsIgnoreCase(error.text) || "USER_ID_INVALID".equalsIgnoreCase(error.text)) {
+                String errText = error.text != null ? error.text : "";
+                boolean botInvalid = "BOT_INVALID".equalsIgnoreCase(errText) || "USER_ID_INVALID".equalsIgnoreCase(errText);
+                if (botInvalid) {
                     synchronized (cachedBotByAccount) {
                         cachedBotByAccount.remove(account);
                     }
+                    if (attempt == 0) {
+                        resolveBackupBot(account, freshBot ->
+                                invokeCloudMethodWithRetry(account, freshBot, method, params, attempt + 1, onSuccess, onError),
+                                onError);
+                        return;
+                    }
+                }
+                long retryDelayMs = computeRetryDelayMs(errText, attempt);
+                if (retryDelayMs > 0 && attempt + 1 < CLOUD_RETRY_MAX_ATTEMPTS) {
+                    Utilities.globalQueue.postRunnable(() ->
+                            invokeCloudMethodWithRetry(account, botUser, method, params, attempt + 1, onSuccess, onError),
+                            retryDelayMs);
+                    return;
                 }
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (onError != null) onError.run(formatTelegramError(error.text));
+                    if (onError != null) onError.run(formatTelegramError(errText));
                 });
                 return;
             }
@@ -1787,11 +2756,43 @@ public class KronoBackupManager {
                     onSuccess.run(data != null ? data : "{}");
                 }
             } else {
+                if (attempt + 1 < CLOUD_RETRY_MAX_ATTEMPTS) {
+                    Utilities.globalQueue.postRunnable(() ->
+                            invokeCloudMethodWithRetry(account, botUser, method, params, attempt + 1, onSuccess, onError),
+                            700L);
+                    return;
+                }
                 AndroidUtilities.runOnUIThread(() -> {
                     if (onError != null) onError.run("Respuesta inesperada del servidor de Telegram");
                 });
             }
         });
+    }
+
+    private static long computeRetryDelayMs(String errText, int attempt) {
+        if (TextUtils.isEmpty(errText)) {
+            return 600L * (attempt + 1);
+        }
+        String upper = errText.toUpperCase(Locale.US);
+        Matcher m = FLOOD_WAIT_PATTERN.matcher(upper);
+        if (m.find()) {
+            try {
+                int seconds = Integer.parseInt(m.group(1));
+                if (seconds >= 0 && seconds <= 6) {
+                    return (seconds + 1L) * 1000L;
+                }
+            } catch (Exception ignore) {}
+            return -1L;
+        }
+        if (upper.contains("TIMEOUT")
+                || upper.contains("RPC_CALL_FAIL")
+                || upper.contains("INTERNAL")
+                || upper.contains("TRY_AGAIN")
+                || upper.contains("NETWORK")
+                || upper.contains("CONNECTION")) {
+            return 600L * (attempt + 1);
+        }
+        return -1L;
     }
 
     private static void saveChunksSequentially(int account, TLRPC.User botUser, List<String> chunks, int index, Runnable onDone, Utilities.Callback<String> onError) {
@@ -1803,7 +2804,7 @@ public class KronoBackupManager {
             JSONObject params = new JSONObject();
             params.put("key", CLOUD_CHUNK_PREFIX + index);
             params.put("value", chunks.get(index));
-            invokeCloudMethod(account, botUser, "saveStorageValue", params, ignored ->
+            invokeCloudMethodWithRetry(account, botUser, "saveStorageValue", params, 0, ignored ->
                     saveChunksSequentially(account, botUser, chunks, index + 1, onDone, onError), onError);
         } catch (Exception e) {
             FileLog.e(e);
@@ -1814,7 +2815,7 @@ public class KronoBackupManager {
     }
 
     private static void cleanupStaleCloudChunks(int account, TLRPC.User botUser, int currentChunkCount) {
-        invokeCloudMethod(account, botUser, "getStorageKeys", new JSONObject(), resultJson -> {
+        invokeCloudMethodWithRetry(account, botUser, "getStorageKeys", new JSONObject(), 0, resultJson -> {
             try {
                 List<String> allKeys = extractKronoBackupKeys(resultJson);
                 List<String> stale = new ArrayList<>();
@@ -1848,7 +2849,7 @@ public class KronoBackupManager {
                 keys.put(CLOUD_CHUNK_PREFIX + i);
             }
             params.put("keys", keys);
-            invokeCloudMethod(account, botUser, "getStorageValues", params, resultJson -> {
+            invokeCloudMethodWithRetry(account, botUser, "getStorageValues", params, 0, resultJson -> {
                 try {
                     JSONObject map = new JSONObject(resultJson);
                     for (int i = startIndex; i < endIndex; i++) {
@@ -1884,7 +2885,7 @@ public class KronoBackupManager {
                 arr.put(keys.get(i));
             }
             params.put("keys", arr);
-            invokeCloudMethod(account, botUser, "deleteStorageValues", params, ignored ->
+            invokeCloudMethodWithRetry(account, botUser, "deleteStorageValues", params, 0, ignored ->
                     deleteKeysInBatches(account, botUser, keys, endIndex, onDone, onError), onError);
         } catch (Exception e) {
             FileLog.e(e);
@@ -1988,7 +2989,7 @@ public class KronoBackupManager {
             while ((read = gzip.read(buf)) != -1) {
                 total += read;
                 if (total > MAX_BACKUP_FILE_BYTES) {
-                    throw new IllegalStateException("La copia descomprimida excede el tamaño máximo permitido");
+                    throw new IllegalStateException("La copia descomprimida excede el límite máximo permitido");
                 }
                 out.write(buf, 0, read);
             }
@@ -1996,16 +2997,24 @@ public class KronoBackupManager {
         return out.toString(StandardCharsets.UTF_8.name());
     }
 
-    private static List<String> splitIntoChunks(String text, int chunkSize) {
+    private static List<String> splitIntoChunksUtf8Safe(String text, int maxChars, int maxUtf8Bytes) {
         List<String> list = new ArrayList<>();
         int len = text.length();
-        for (int i = 0; i < len; i += chunkSize) {
-            list.add(text.substring(i, Math.min(len, i + chunkSize)));
+        int i = 0;
+        while (i < len) {
+            int end = Math.min(len, i + maxChars);
+            String chunk = text.substring(i, end);
+            while (chunk.getBytes(StandardCharsets.UTF_8).length > maxUtf8Bytes && end > i + 1) {
+                end = i + Math.max(1, (end - i) * 3 / 4);
+                chunk = text.substring(i, end);
+            }
+            list.add(chunk);
+            i = end;
         }
         return list;
     }
 
-    private static String readStreamUtf8Bounded(InputStream is) throws Exception {
+    private static String readStreamUtf8OrGzipBounded(InputStream is) throws Exception {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         byte[] buf = new byte[4096];
         int total = 0;
@@ -2013,11 +3022,26 @@ public class KronoBackupManager {
         while ((read = is.read(buf)) != -1) {
             total += read;
             if (total > MAX_BACKUP_FILE_BYTES) {
-                throw new IllegalStateException("El archivo supera el límite de 5 MB");
+                throw new IllegalStateException("El archivo supera el límite de 8 MB");
             }
             baos.write(buf, 0, read);
         }
-        return baos.toString(StandardCharsets.UTF_8.name());
+        byte[] rawBytes = baos.toByteArray();
+        if (rawBytes.length >= 2 && (rawBytes[0] & 0xFF) == 0x1F && (rawBytes[1] & 0xFF) == 0x8B) {
+            ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
+            try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(rawBytes))) {
+                int decTotal = 0;
+                while ((read = gzip.read(buf)) != -1) {
+                    decTotal += read;
+                    if (decTotal > MAX_BACKUP_FILE_BYTES) {
+                        throw new IllegalStateException("La copia descomprimida supera el límite de 8 MB");
+                    }
+                    decompressed.write(buf, 0, read);
+                }
+            }
+            return decompressed.toString(StandardCharsets.UTF_8.name());
+        }
+        return new String(rawBytes, StandardCharsets.UTF_8);
     }
 
     private static String sha256Hex(String input) throws Exception {

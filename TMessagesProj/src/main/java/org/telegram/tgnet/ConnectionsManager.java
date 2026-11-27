@@ -1023,6 +1023,38 @@ public class ConnectionsManager extends BaseController {
         }
     }
 
+    public void reloadPreferencesFromDisk() {
+        try {
+            if (ApplicationLoader.applicationContext == null) {
+                return;
+            }
+            SharedPreferences mainPreferences = currentAccount == 0
+                    ? ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Activity.MODE_PRIVATE)
+                    : ApplicationLoader.applicationContext.getSharedPreferences("mainconfig" + currentAccount, Activity.MODE_PRIVATE);
+            if (mainPreferences != null) {
+                forceTryIpV6 = mainPreferences.getBoolean("forceTryIpV6", false);
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
+    public static void reloadProxySettingsFromDisk() {
+        try {
+            if (ApplicationLoader.applicationContext == null) {
+                return;
+            }
+            SharedPreferences globalMain = ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Activity.MODE_PRIVATE);
+            if (globalMain != null) {
+                boolean enabled = globalMain.getBoolean("proxy_enabled", false);
+                ProxySettings proxySettings = ProxySettings.fromSharedPreferences(globalMain);
+                setProxySettings(enabled, proxySettings);
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
     public static native void native_switchBackend(int currentAccount, boolean restart);
     public static native int native_isTestBackend(int currentAccount);
     public static native void native_pauseNetwork(int currentAccount);

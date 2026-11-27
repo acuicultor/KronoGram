@@ -158,8 +158,8 @@ public class KronoConfig {
     public static int cloudBackupMode = CLOUD_BACKUP_ON_CHANGE;
     public static boolean cloudAutoIncludeTelegram = true;
     public static boolean cloudAutoIncludeTheme = true;
-    public static boolean cloudAutoIncludeNotifications = false;
-    public static boolean cloudAutoIncludeVault = false;
+    public static boolean cloudAutoIncludeNotifications = true;
+    public static boolean cloudAutoIncludeVault = true;
 
     static {
         loadConfig();
@@ -289,8 +289,8 @@ public class KronoConfig {
         }
         cloudAutoIncludeTelegram = preferences.getBoolean("cloudAutoIncludeTelegram", true);
         cloudAutoIncludeTheme = preferences.getBoolean("cloudAutoIncludeTheme", true);
-        cloudAutoIncludeNotifications = preferences.getBoolean("cloudAutoIncludeNotifications", false);
-        cloudAutoIncludeVault = preferences.getBoolean("cloudAutoIncludeVault", false);
+        cloudAutoIncludeNotifications = preferences.getBoolean("cloudAutoIncludeNotifications", true);
+        cloudAutoIncludeVault = preferences.getBoolean("cloudAutoIncludeVault", true);
         loaded = true;
     }
 
@@ -300,6 +300,10 @@ public class KronoConfig {
         loadConfig();
         if (postInitCompleted) {
             syncInitialGlassModeIfNeeded();
+            if (preferences != null && preferences.contains("glassMode")) {
+                LiteMode.setGlassFlagsFromKrono(glassMode != GLASS_MODE_OFF, glassMode == GLASS_MODE_LIQUID);
+            }
+            org.telegram.utils.glass.GlassEngine.refreshFromSettings();
         }
     }
 
@@ -436,7 +440,7 @@ public class KronoConfig {
                     .putLong("cloudLastBackupTime_" + account, timestampMs)
                     .putString("cloudLastBackupHash_" + account, safeHash)
                     .putBoolean("cloudBackupPending_" + account, false)
-                    .apply();
+                    .commit();
         }
     }
 
@@ -766,7 +770,7 @@ public class KronoConfig {
         if (glassMode < GLASS_MODE_LIQUID || glassMode > GLASS_MODE_OFF) {
             glassMode = GLASS_MODE_LIQUID;
         }
-        preferences.edit().putInt("glassMode", glassMode).apply();
+        preferences.edit().putInt("glassMode", glassMode).commit();
         if (glassMode != oldMode) {
             org.telegram.utils.glass.GlassEngine.refreshFromSettings();
         }

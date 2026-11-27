@@ -384,6 +384,18 @@ public class UserConfig extends BaseController {
         return configLoaded;
     }
 
+    public void reloadUserSettingsFromDisk() {
+        synchronized (sync) {
+            SharedPreferences preferences = getPreferences();
+            if (preferences != null) {
+                syncContacts = preferences.getBoolean("syncContacts", true);
+                showCallsTab = preferences.getBoolean("showCallsTab", false);
+                suggestContacts = preferences.getBoolean("suggestContacts", true);
+            }
+            clearSaveGalleryExceptionsCache();
+        }
+    }
+
     public void savePassword(byte[] hash, byte[] salted) {
         savedPasswordTime = SystemClock.elapsedRealtime();
         savedPasswordHash = hash;
