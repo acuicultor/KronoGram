@@ -8028,15 +8028,26 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         boolean loadFromCache = false;
         boolean isFolderPage = viewPage.dialogsType == DIALOGS_TYPE_FOLDER1 || viewPage.dialogsType == DIALOGS_TYPE_FOLDER2;
         int currentDialogsCount = getDialogsArray(currentAccount, viewPage.dialogsType, folderId, dialogsListFrozen).size();
-        boolean needsMoreServerFolderDialogs = isFolderPage && (currentDialogsCount < 50 || visibleItemCount == 0 || lastVisibleItem >= currentDialogsCount - 15 || getUserConfig().getTotalDialogsCount(folderId) < 1000);
+        MessagesController.DialogFilter filter = null;
         if (isFolderPage) {
-            MessagesController.DialogFilter filter = getMessagesController().selectedDialogFilter[viewPage.dialogsType == DIALOGS_TYPE_FOLDER1 ? 0 : 1];
+            filter = getMessagesController().selectedDialogFilter[viewPage.dialogsType == DIALOGS_TYPE_FOLDER1 ? 0 : 1];
             if (filter == null) {
                 ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
                 if (viewPage.selectedType >= 0 && viewPage.selectedType < dialogFilters.size()) {
                     filter = dialogFilters.get(viewPage.selectedType);
                 }
             }
+        }
+        boolean isRuleBasedFolder = filter != null && !filter.isLocalFavorites()
+                && (filter.flags & MessagesController.DIALOG_FILTER_FLAG_ALL_CHATS) != 0;
+        boolean needsMoreServerFolderDialogs = isFolderPage && (
+                currentDialogsCount < 50
+                        || visibleItemCount == 0
+                        || lastVisibleItem >= currentDialogsCount - 20
+                        || getUserConfig().getTotalDialogsCount(folderId) < 1000
+                        || (isRuleBasedFolder && (currentDialogsCount < 100 || getUserConfig().getTotalDialogsCount(folderId) < 5000))
+        );
+        if (isFolderPage) {
             if (filter != null) {
                 if (filter.isLocalFavorites()) {
                     getMessagesController().ensureFilterPeersLoaded(filter);
@@ -8046,7 +8057,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 if (!filter.isLocalFavorites() && (filter.flags & MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) == 0) {
                     loadArchivedFromCache = !getMessagesController().isDialogsEndReached(1);
-                    if (loadArchivedFromCache || (needsMoreServerFolderDialogs && !getMessagesController().isServerDialogsEndReached(1))) {
+                    if (loadArchivedFromCache || ((needsMoreServerFolderDialogs || (isRuleBasedFolder && getUserConfig().getTotalDialogsCount(1) < 5000)) && !getMessagesController().isServerDialogsEndReached(1))) {
                         loadArchived = true;
                     }
                 }

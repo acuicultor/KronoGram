@@ -1871,7 +1871,7 @@ public class Theme {
             }
             int myMessagesGradientAccentColor2 = settings.message_colors.size() > 2 ? settings.message_colors.get(2) | 0xff000000 : 0;
             int myMessagesGradientAccentColor3 = settings.message_colors.size() > 3 ? settings.message_colors.get(3) | 0xff000000 : 0;
-            int backgroundOverrideColor = 0;
+            long backgroundOverrideColor = 0;
             long backgroundGradientOverrideColor1 = 0;
             long backgroundGradientOverrideColor2 = 0;
             long backgroundGradientOverrideColor3 = 0;
@@ -1879,18 +1879,22 @@ public class Theme {
             String patternSlug = null;
             float patternIntensity = 0;
             if (settings.wallpaper != null && settings.wallpaper.settings != null) {
-                backgroundOverrideColor = getWallpaperColor(settings.wallpaper.settings.background_color);
-                if (settings.wallpaper.settings.second_background_color == 0) {
+                if (settings.wallpaper.settings.background_color == 0) {
+                    backgroundOverrideColor = 0x100000000L;
+                } else {
+                    backgroundOverrideColor = getWallpaperColor(settings.wallpaper.settings.background_color);
+                }
+                if ((settings.wallpaper.settings.flags & 16) != 0 && settings.wallpaper.settings.second_background_color == 0) {
                     backgroundGradientOverrideColor1 = 0x100000000L;
                 } else {
                     backgroundGradientOverrideColor1 = getWallpaperColor(settings.wallpaper.settings.second_background_color);
                 }
-                if (settings.wallpaper.settings.third_background_color == 0) {
+                if ((settings.wallpaper.settings.flags & 32) != 0 && settings.wallpaper.settings.third_background_color == 0) {
                     backgroundGradientOverrideColor2 = 0x100000000L;
                 } else {
                     backgroundGradientOverrideColor2 = getWallpaperColor(settings.wallpaper.settings.third_background_color);
                 }
-                if (settings.wallpaper.settings.fourth_background_color == 0) {
+                if ((settings.wallpaper.settings.flags & 64) != 0 && settings.wallpaper.settings.fourth_background_color == 0) {
                     backgroundGradientOverrideColor3 = 0x100000000L;
                 } else {
                     backgroundGradientOverrideColor3 = getWallpaperColor(settings.wallpaper.settings.fourth_background_color);
@@ -4219,8 +4223,10 @@ public class Theme {
 
             theme = preferences.getString("nighttheme", null);
             if ("Default".equals(theme)) {
-                applyingTheme = themesDict.get("Blue");
-                applyingTheme.currentAccentId = DEFALT_THEME_ACCENT_ID;
+                currentNightTheme = themesDict.get("Blue");
+                if (currentNightTheme != null) {
+                    currentNightTheme.currentAccentId = DEFALT_THEME_ACCENT_ID;
+                }
             } else if ("Dark".equals(theme)) {
                 currentNightTheme = themeDarkBlue;
                 themeDarkBlue.currentAccentId = 9;
@@ -6413,11 +6419,18 @@ public class Theme {
         if (accent.info != null) {
             theme.accentsByThemeId.remove(accent.info.id);
         }
-        if (accent.overrideWallpaper != null) {
+        OverrideWallpaperInfo preservedOverride = (current && !save) ? accent.overrideWallpaper : null;
+        if (preservedOverride == null && accent.overrideWallpaper != null) {
             accent.overrideWallpaper.delete();
         }
         if (current) {
             ThemeAccent themeAccent = theme.themeAccents.get(0);
+            if (preservedOverride != null && themeAccent.overrideWallpaper == null) {
+                OverrideWallpaperInfo migrated = new OverrideWallpaperInfo(preservedOverride, theme, themeAccent);
+                themeAccent.overrideWallpaper = migrated;
+                migrated.saveOverrideWallpaper();
+                preservedOverride.delete();
+            }
             theme.setCurrentAccentId(themeAccent.id);
         }
         if (save) {
@@ -7086,7 +7099,7 @@ public class Theme {
                                 file.delete();
                             }
                             ThemeInfo.fillAccentValues(accent, settings);
-                            if (currentTheme == themeInfo && currentTheme.currentAccentId == accent.id) {
+                            if (currentTheme == themeInfo && currentTheme.currentAccentId == accent.id && accent.overrideWallpaper == null) {
                                 refreshThemeColors();
                                 createChatResources(ApplicationLoader.applicationContext, false);
                                 switchThemeWithReveal(currentTheme, currentNightTheme == currentTheme, -1, null);
@@ -7180,7 +7193,7 @@ public class Theme {
                                         ThemeInfo.fillAccentValues(accent, settings);
                                         loadPatterns = true;
                                         added = true;
-                                        if (currentTheme == info && currentTheme.currentAccentId == accent.id) {
+                                        if (currentTheme == info && currentTheme.currentAccentId == accent.id && accent.overrideWallpaper == null) {
                                             refreshThemeColors();
                                             switchThemeWithReveal(currentTheme, currentNightTheme == currentTheme, -1, null);
                                         }
@@ -9818,11 +9831,11 @@ public class Theme {
                     settings.wallpaper = createDefaultWallpaper();
                     settings.isCustomTheme = false;
                 } else if (!overrideWallpaper.isColor() || overrideWallpaper.gradientColor1 != 0) {
-                    if (selectedColor != 0 && (!isPatternWallpaper || overrideWallpaper.gradientColor2 != 0)) {
+                    if (selectedColor != 0 && (!Boolean.TRUE.equals(settings.isPatternWallpaper) || overrideWallpaper.gradientColor2 != 0)) {
                         if (overrideWallpaper.gradientColor1 != 0 && overrideWallpaper.gradientColor2 != 0) {
                             MotionBackgroundDrawable motionBackgroundDrawable = new MotionBackgroundDrawable(overrideWallpaper.color, overrideWallpaper.gradientColor1, overrideWallpaper.gradientColor2, overrideWallpaper.gradientColor3, false);
                             motionBackgroundDrawable.setPhase(previousPhase);
-                            if (settings.isPatternWallpaper) {
+                            if (Boolean.TRUE.equals(settings.isPatternWallpaper) && !TextUtils.isEmpty(overrideWallpaper.fileName)) {
                                 File toFile = new File(ApplicationLoader.getFilesDirFixed(), overrideWallpaper.fileName);
                                 if (toFile.exists()) {
                                     motionBackgroundDrawable.setPatternBitmap((int) (overrideWallpaper.intensity * 100), loadScreenSizedBitmap(new FileInputStream(toFile), 0));
@@ -9830,7 +9843,7 @@ public class Theme {
                                 }
                             }
                             settings.wallpaper = motionBackgroundDrawable;
-                        } else if (settings.isPatternWallpaper) {
+                        } else if (Boolean.TRUE.equals(settings.isPatternWallpaper) && !TextUtils.isEmpty(overrideWallpaper.fileName)) {
                             File toFile = new File(ApplicationLoader.getFilesDirFixed(), overrideWallpaper.fileName);
                             if (toFile.exists()) {
                                 Bitmap bitmap = loadScreenSizedBitmap(new FileInputStream(toFile), 0);
@@ -9859,7 +9872,7 @@ public class Theme {
                         } else {
                             settings.wallpaper = new ColorDrawable(selectedColor);
                         }
-                    } else {
+                    } else if (!TextUtils.isEmpty(overrideWallpaper.fileName)) {
                         File toFile = new File(ApplicationLoader.getFilesDirFixed(), overrideWallpaper.fileName);
                         if (toFile.exists()) {
                             Bitmap bitmap = loadScreenSizedBitmap(new FileInputStream(toFile), 0);
@@ -9873,6 +9886,9 @@ public class Theme {
                             settings.wallpaper = createDefaultWallpaper();
                             settings.isCustomTheme = false;
                         }
+                    } else {
+                        settings.wallpaper = createDefaultWallpaper();
+                        settings.isCustomTheme = false;
                     }
                 }
             } catch (Throwable throwable) {
@@ -9896,6 +9912,10 @@ public class Theme {
                 w = motionBackgroundDrawable.getPatternBitmap().getWidth();
                 h = motionBackgroundDrawable.getPatternBitmap().getHeight();
             }
+            if (w <= 0 || h <= 0) {
+                w = Math.max(1, AndroidUtilities.dp(360));
+                h = Math.max(1, AndroidUtilities.dp(640));
+            }
             Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
             settings.wallpaper.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
@@ -9914,6 +9934,10 @@ public class Theme {
         if (w <= 0 || h <= 0) {
             w = Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
             h = Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
+        }
+        if (w <= 0 || h <= 0) {
+            w = Math.max(1, AndroidUtilities.dp(360));
+            h = Math.max(1, AndroidUtilities.dp(640));
         }
         motionBackgroundDrawable.setPatternBitmap(34, SvgHelper.getBitmap(R.raw.default_pattern, w, h, Color.BLACK, 1f, SvgHelper.ScaleMode.ByWidth));
         motionBackgroundDrawable.setPatternColorFilter(motionBackgroundDrawable.getPatternColor());

@@ -870,6 +870,9 @@ public class ConnectionsManager extends BaseController {
         AndroidUtilities.runOnUIThread(() -> {
             getInstance(currentAccount).connectionState = state;
             AccountInstance.getInstance(currentAccount).getNotificationCenter().postNotificationName(NotificationCenter.didUpdateConnectionState);
+            if (state == ConnectionStateConnected) {
+                AccountInstance.getInstance(currentAccount).getMessagesController().onConnectionStateConnected();
+            }
         });
     }
 

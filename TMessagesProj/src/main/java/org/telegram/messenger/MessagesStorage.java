@@ -3889,11 +3889,22 @@ public class MessagesStorage extends BaseController {
                         if (chat == null) {
                             continue;
                         }
-                        if (chat instanceof TLRPC.TL_channelForbidden || chat.left || ChatObject.isNotInChat(chat)) {
+                        if (chat instanceof TLRPC.TL_channelForbidden || chat.left || ChatObject.isNotInChat(chat) || chat.min) {
                             TLRPC.InputPeer stalePeer = chatsToLoadMap.get(chat.id);
                             if (stalePeer != null && dialogsToLoad.contains(-chat.id) && !dialogsToLoadMap.containsKey(-chat.id)) {
                                 dialogsToLoadMap.put(-chat.id, stalePeer);
                             }
+                            if (dialogs != null && dialogs.chats != null) {
+                                for (int dci = dialogs.chats.size() - 1; dci >= 0; dci--) {
+                                    TLRPC.Chat dc = dialogs.chats.get(dci);
+                                    if (dc != null && dc.id == chat.id) {
+                                        dialogs.chats.remove(dci);
+                                    }
+                                }
+                            }
+                            chats.remove(a);
+                            a--;
+                            N--;
                         } else {
                             chatsToLoadMap.remove(chat.id);
                         }

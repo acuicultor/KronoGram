@@ -286,6 +286,9 @@ public class MessagesController extends BaseController implements NotificationCe
     private boolean loadingRemoteFilters;
     private boolean checkedMissingFilterPeers;
     private boolean remoteFilterPeersFailed;
+    private boolean remoteFiltersSyncedThisSession;
+    private boolean pendingRemoteFiltersReload;
+    private boolean remoteFiltersNeedRetryOnConnect;
     public boolean dialogFiltersLoaded;
     public ArrayList<TLRPC.TL_dialogFilterSuggested> suggestedFilters = new ArrayList<>();
 
@@ -2212,6 +2215,20 @@ public class MessagesController extends BaseController implements NotificationCe
             LongSparseArray<TLRPC.User> usersDict = new LongSparseArray<>();
             LongSparseArray<TLRPC.Chat> chatsDict = new LongSparseArray<>();
 
+            if (pinnedDialogs != null) {
+                for (int a = 0; a < pinnedDialogs.users.size(); a++) {
+                    TLRPC.User u = pinnedDialogs.users.get(a);
+                    if (u != null) {
+                        usersDict.put(u.id, u);
+                    }
+                }
+                for (int a = 0; a < pinnedDialogs.chats.size(); a++) {
+                    TLRPC.Chat c = pinnedDialogs.chats.get(a);
+                    if (c != null) {
+                        chatsDict.put(c.id, c);
+                    }
+                }
+            }
             if (users != null) {
                 for (int a = 0; a < users.size(); a++) {
                     TLRPC.User u = users.get(a);
@@ -2228,13 +2245,19 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
                 }
             }
-            for (int a = 0; a < pinnedDialogs.users.size(); a++) {
-                TLRPC.User u = pinnedDialogs.users.get(a);
-                usersDict.put(u.id, u);
-            }
-            for (int a = 0; a < pinnedDialogs.chats.size(); a++) {
-                TLRPC.Chat c = pinnedDialogs.chats.get(a);
-                chatsDict.put(c.id, c);
+            if (pinnedRemoteDialogs != null) {
+                for (int a = 0; a < pinnedRemoteDialogs.users.size(); a++) {
+                    TLRPC.User u = pinnedRemoteDialogs.users.get(a);
+                    if (u != null) {
+                        usersDict.put(u.id, u);
+                    }
+                }
+                for (int a = 0; a < pinnedRemoteDialogs.chats.size(); a++) {
+                    TLRPC.Chat c = pinnedRemoteDialogs.chats.get(a);
+                    if (c != null) {
+                        chatsDict.put(c.id, c);
+                    }
+                }
             }
             if (encryptedChats != null) {
                 enc_chats_dict = new SparseArray<>();
@@ -2366,7 +2389,26 @@ public class MessagesController extends BaseController implements NotificationCe
             }
 
             AndroidUtilities.runOnUIThread(() -> {
-                if (remote != 2) {
+                boolean ramFiltersDesynced = false;
+                if (remote == 2) {
+                    if (filters == null || dialogFilters.size() != filters.size()) {
+                        ramFiltersDesynced = true;
+                    } else {
+                        for (int i = 0; i < filters.size(); i++) {
+                            DialogFilter f1 = filters.get(i);
+                            DialogFilter f2 = dialogFilters.get(i);
+                            if (f1 == null || f2 == null || f1.id != f2.id || f1.flags != f2.flags
+                                    || f1.alwaysShow.size() != f2.alwaysShow.size()
+                                    || f1.neverShow.size() != f2.neverShow.size()
+                                    || f1.pinnedDialogs.size() != f2.pinnedDialogs.size()) {
+                                ramFiltersDesynced = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                final boolean applyFullFiltersUpdate = remote != 2 || ramFiltersDesynced;
+                if (applyFullFiltersUpdate) {
                     dialogFilters = filters;
                     dialogFiltersById.clear();
                     for (int a = 0, N = dialogFilters.size(); a < N; a++) {
@@ -2396,8 +2438,12 @@ public class MessagesController extends BaseController implements NotificationCe
                         }
                         return 0;
                     });
-                    putUsers(users, true);
-                    putChats(chats, true);
+                    putUsers(users, remote == 0);
+                    putChats(chats, remote == 0);
+                    if (pinnedRemoteDialogs != null) {
+                        putUsers(pinnedRemoteDialogs.users, false);
+                        putChats(pinnedRemoteDialogs.chats, false);
+                    }
                     dialogFiltersLoaded = true;
                     getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
                     if (remote == 0) {
@@ -2452,7 +2498,11 @@ public class MessagesController extends BaseController implements NotificationCe
                             }
                             checkedMissingFilterPeers = true;
                         }
-                        loadRemoteFilters(needsRepair);
+                        final boolean shouldSyncRemote = needsRepair || !getUserConfig().filtersLoaded || !remoteFiltersSyncedThisSession;
+                        if (shouldSyncRemote) {
+                            remoteFiltersSyncedThisSession = true;
+                        }
+                        loadRemoteFilters(shouldSyncRemote);
                     }
 
                     if (pinnedRemoteDialogs != null && !pinnedRemoteDialogs.dialogs.isEmpty()) {
@@ -2639,10 +2689,18 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (!skipMarkFiltersLoaded) {
                         getUserConfig().filtersLoaded = true;
                         getUserConfig().saveConfig(false);
+                        remoteFiltersSyncedThisSession = true;
+                        remoteFiltersNeedRetryOnConnect = false;
+                    } else {
+                        remoteFiltersNeedRetryOnConnect = true;
                     }
                     loadingRemoteFilters = false;
                     getNotificationCenter().postNotificationName(NotificationCenter.filterSettingsUpdated);
-                    if (pendingFilterPeerRepair) {
+                    if (pendingRemoteFiltersReload) {
+                        pendingRemoteFiltersReload = false;
+                        pendingFilterPeerRepair = false;
+                        loadRemoteFilters(true);
+                    } else if (pendingFilterPeerRepair) {
                         pendingFilterPeerRepair = false;
                         for (int b = 0; b < selectedDialogFilter.length; b++) {
                             if (selectedDialogFilter[b] != null) {
@@ -2688,14 +2746,32 @@ public class MessagesController extends BaseController implements NotificationCe
         loadingRemoteFilters = false;
     }
 
+    public void onConnectionStateConnected() {
+        if (!getUserConfig().isClientActivated() || loadingRemoteFilters) {
+            return;
+        }
+        if (remoteFiltersNeedRetryOnConnect || (dialogFiltersLoaded && !remoteFiltersSyncedThisSession)) {
+            remoteFiltersNeedRetryOnConnect = false;
+            remoteFiltersSyncedThisSession = true;
+            loadRemoteFilters(true);
+        }
+    }
+
     public void loadRemoteFilters(boolean force, Utilities.Callback<Boolean> whenDone) {
         if (whenDone != null) {
             onLoadedRemoteFilters = whenDone;
         }
-        if (loadingRemoteFilters || !getUserConfig().isClientActivated() || !force && getUserConfig().filtersLoaded) {
+        if (loadingRemoteFilters) {
+            if (force && getUserConfig().isClientActivated()) {
+                pendingRemoteFiltersReload = true;
+            }
+            return;
+        }
+        if (!getUserConfig().isClientActivated() || !force && getUserConfig().filtersLoaded) {
             return;
         }
         loadingRemoteFilters = true;
+        remoteFiltersNeedRetryOnConnect = false;
         if (force) {
             getUserConfig().filtersLoaded = false;
             getUserConfig().saveConfig(false);
@@ -2734,6 +2810,13 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (onLoadedRemoteFilters != null) {
                         onLoadedRemoteFilters.run(false);
                         onLoadedRemoteFilters = null;
+                    }
+                    if (pendingRemoteFiltersReload) {
+                        pendingRemoteFiltersReload = false;
+                        loadRemoteFilters(true);
+                    } else if (getUserConfig().isClientActivated()) {
+                        remoteFiltersSyncedThisSession = false;
+                        remoteFiltersNeedRetryOnConnect = true;
                     }
                 });
             }
@@ -7132,6 +7215,9 @@ public class MessagesController extends BaseController implements NotificationCe
         loadingRemoteFilters = false;
         checkedMissingFilterPeers = false;
         remoteFilterPeersFailed = false;
+        remoteFiltersSyncedThisSession = false;
+        pendingRemoteFiltersReload = false;
+        remoteFiltersNeedRetryOnConnect = false;
         checkedLocalFilterPeerIds.clear();
         lastFilterPeerRepairTime = 0;
         pendingFilterPeerRepair = false;
@@ -13108,7 +13194,8 @@ public class MessagesController extends BaseController implements NotificationCe
             if (dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetId] == Integer.MAX_VALUE && (folderId == 0 || folderId == 1)) {
                 SharedPreferences mainPrefs = getMainSettings(currentAccount);
                 String healKey = "krono_dialog_offset_heal_v1_" + folderId;
-                if (!mainPrefs.getBoolean(healKey, false)) {
+                boolean shouldHeal = !mainPrefs.getBoolean(healKey, false) || getUserConfig().getTotalDialogsCount(folderId) == 0;
+                if (shouldHeal) {
                     mainPrefs.edit().putBoolean(healKey, true).apply();
                     getUserConfig().setDialogsLoadOffset(folderId, 0, 0, 0, 0, 0, 0);
                     getUserConfig().saveConfig(false);
@@ -13817,9 +13904,8 @@ public class MessagesController extends BaseController implements NotificationCe
                 if (totalDialogsLoadCount < 400 && dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetId] != -1 && dialogsLoadOffset[UserConfig.i_dialogsLoadOffsetId] != Integer.MAX_VALUE) {
                     loadDialogs(0, 0, 100, false);
                 }
-                if (dialogFilters.size() > 1 || getUserConfig().filtersLoaded) {
-                    loadRemoteFilters(true);
-                }
+                remoteFiltersSyncedThisSession = true;
+                loadRemoteFilters(true);
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
             });
         });

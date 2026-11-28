@@ -1040,7 +1040,9 @@ public class KronoBackupManager {
                 if (sanitizedThemeObj != null) {
                     SharedPreferences themePrefs = context.getSharedPreferences("themeconfig", Context.MODE_PRIVATE);
                     int c = deserializeIntoPreferences(themePrefs, sanitizedThemeObj,
-                            key -> isExcludedThemeConfigKey(key) || isUnavailableThemeReference(key, sanitizedThemeObj, sanitizedThemeObj),
+                            key -> isExcludedThemeConfigKey(key)
+                                    || isUnavailableThemeReference(key, sanitizedThemeObj, sanitizedThemeObj)
+                                    || isPreservedOrBrokenWallpaperOwpKey(key, sanitizedThemeObj),
                             true, rollback, "themeconfig");
                     result.appliedKeysCount += c;
                     if (c > 0) {
@@ -1645,7 +1647,12 @@ public class KronoBackupManager {
                 || "autoNightLocationLongitude3".equals(key)
                 || "autoNightLastSunCheckDay".equals(key)
                 || "dayNightThemeSwitchHintCount".equals(key)
-                || "dayNightWallpaperSwitchHint".equals(key)
+                || key.startsWith("accent_for_");
+    }
+
+    private static boolean isExcludedMainConfigKey(String key) {
+        if (TextUtils.isEmpty(key)) return true;
+        if ("dayNightWallpaperSwitchHint".equals(key)
                 || "selectedBackground2".equals(key)
                 || "overrideThemeWallpaper".equals(key)
                 || "selectedColor".equals(key)
@@ -1656,12 +1663,9 @@ public class KronoBackupManager {
                 || "selectedGradientRotation".equals(key)
                 || "selectedBackgroundBlurred".equals(key)
                 || "selectedBackgroundMotion".equals(key)
-                || "selectedIntensity".equals(key)
-                || key.startsWith("accent_for_");
-    }
-
-    private static boolean isExcludedMainConfigKey(String key) {
-        if (TextUtils.isEmpty(key)) return true;
+                || "selectedIntensity".equals(key)) {
+            return true;
+        }
         String lower = key.toLowerCase(Locale.US);
         // Secrets, push tokens, device/session caches, and ephemeral per-dialog state
         if (lower.contains("passcode")
@@ -1873,6 +1877,48 @@ public class KronoBackupManager {
                 || lower.startsWith("2remotethemeshash")
                 || lower.startsWith("lastloadingthemestime")
                 || lower.startsWith("theme_file_");
+    }
+
+    private static boolean isPreservedOrBrokenWallpaperOwpKey(String key, JSONObject sanitizedThemeObj) {
+        if (TextUtils.isEmpty(key) || !key.endsWith("_owp")) {
+            return false;
+        }
+        if (sanitizedThemeObj == null || !sanitizedThemeObj.has(key)) {
+            // Preserve existing local override wallpaper on device when absent from backup
+            return true;
+        }
+        try {
+            JSONObject entry = sanitizedThemeObj.optJSONObject(key);
+            if (entry == null || !"s".equals(entry.optString("t"))) {
+                return true;
+            }
+            String rawJson = entry.optString("v", "");
+            if (TextUtils.isEmpty(rawJson)) {
+                return true;
+            }
+            JSONObject owp = new JSONObject(rawJson);
+            String slug = owp.optString("wallSlug", "");
+            if (Theme.DEFAULT_BACKGROUND_SLUG.equals(slug) || Theme.COLOR_BACKGROUND_SLUG.equals(slug)) {
+                return false;
+            }
+            String wall = owp.optString("wall", "");
+            String owall = owp.optString("owall", "");
+            if (!TextUtils.isEmpty(wall)) {
+                File f = new File(ApplicationLoader.getFilesDirFixed(), wall);
+                if (!f.exists() || f.length() == 0) {
+                    return true;
+                }
+            }
+            if (!TextUtils.isEmpty(owall) && !owall.equals(wall)) {
+                File of = new File(ApplicationLoader.getFilesDirFixed(), owall);
+                if (!of.exists() || of.length() == 0) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Throwable e) {
+            return true;
+        }
     }
 
     private static JSONObject filterThemesJsonEntries(JSONObject themeObj) {
