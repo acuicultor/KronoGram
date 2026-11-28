@@ -84,9 +84,9 @@ public final class KronoHiddenLockHelper {
         }
         final boolean[] resolved = new boolean[1];
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, fragment.getResourceProvider());
-        builder.setTitle("Proteger chats y carpetas ocultos");
-        builder.setMessage("Configura un método de acceso (biometría, PIN o contraseña) antes de ocultar chats o carpetas.");
-        builder.setPositiveButton("Configurar", (d, w) -> {
+        builder.setTitle(LocaleController.getString(R.string.KronoVaultProtectTitle));
+        builder.setMessage(LocaleController.getString(R.string.KronoVaultProtectMsg));
+        builder.setPositiveButton(LocaleController.getString(R.string.KronoConfigure), (d, w) -> {
             resolved[0] = true;
             showSetupLockDialog(fragment, () -> {
                 if (isProtectionConfigured(activity)) {
@@ -189,7 +189,7 @@ public final class KronoHiddenLockHelper {
                     if (hasFallbackPasscode && onFallback != null) {
                         onFallback.run();
                     } else {
-                        String msg = !TextUtils.isEmpty(errString) ? errString.toString() : "Error de autenticación biométrica";
+                        String msg = !TextUtils.isEmpty(errString) ? errString.toString() : LocaleController.getString(R.string.KronoBioAuthError);
                         Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show();
                         if (onCancel != null) {
                             onCancel.run();
@@ -211,13 +211,13 @@ public final class KronoHiddenLockHelper {
             });
             String negText;
             if (hasFallbackPasscode) {
-                negText = KronoConfig.hiddenLockType == KronoConfig.HIDDEN_LOCK_PIN ? "Usar PIN" : "Usar contraseña";
+                negText = LocaleController.getString(KronoConfig.hiddenLockType == KronoConfig.HIDDEN_LOCK_PIN ? R.string.KronoUsePin : R.string.KronoUsePass);
             } else {
                 negText = LocaleController.getString(R.string.Cancel);
             }
             BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
-                    .setTitle(TextUtils.isEmpty(title) ? "Bóveda oculta" : title)
-                    .setSubtitle(TextUtils.isEmpty(subtitle) ? "Verifica tu identidad para continuar" : subtitle)
+                    .setTitle(TextUtils.isEmpty(title) ? LocaleController.getString(R.string.KronoVaultTitle) : title)
+                    .setSubtitle(TextUtils.isEmpty(subtitle) ? LocaleController.getString(R.string.KronoVaultVerifySubtitle) : subtitle)
                     .setNegativeButtonText(negText)
                     .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.BIOMETRIC_WEAK)
                     .build();
@@ -227,7 +227,7 @@ public final class KronoHiddenLockHelper {
             if (hasFallbackPasscode && onFallback != null) {
                 onFallback.run();
             } else {
-                Toast.makeText(activity, "Biometría no disponible en este momento", Toast.LENGTH_SHORT).show();
+                Toast.makeText(activity, LocaleController.getString(R.string.KronoBioUnavailable), Toast.LENGTH_SHORT).show();
                 if (onCancel != null) {
                     onCancel.run();
                 }
@@ -263,7 +263,7 @@ public final class KronoHiddenLockHelper {
         editText.setCursorWidth(1.5f);
         editText.setSingleLine(true);
         editText.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        editText.setHint(isPin ? "Introduce tu PIN" : "Introduce tu contraseña");
+        editText.setHint(LocaleController.getString(isPin ? R.string.KronoEnterPin : R.string.KronoEnterPass));
         editText.setInputType(isPin
                 ? (InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD)
                 : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD));
@@ -281,12 +281,12 @@ public final class KronoHiddenLockHelper {
         container.addView(errorView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, fragment.getResourceProvider());
-        builder.setTitle(isPin ? "PIN de Bóveda oculta" : "Contraseña de Bóveda oculta");
+        builder.setTitle(LocaleController.getString(isPin ? R.string.KronoVaultPinTitle : R.string.KronoVaultPassTitle));
         builder.setView(container);
-        builder.setPositiveButton("Desbloquear", null);
+        builder.setPositiveButton(LocaleController.getString(R.string.KronoUnlock), null);
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         if (KronoConfig.hiddenUseBiometric && canUseBiometrics(activity) && activity instanceof FragmentActivity) {
-            builder.setNeutralButton("Biometría", null);
+            builder.setNeutralButton(LocaleController.getString(R.string.KronoBiometrics), null);
         }
 
         final boolean[] resolved = new boolean[1];
@@ -316,7 +316,7 @@ public final class KronoHiddenLockHelper {
                     onSuccess.run();
                 }
             } else {
-                errorView.setText(isPin ? "PIN incorrecto" : "Contraseña incorrecta");
+                errorView.setText(LocaleController.getString(isPin ? R.string.KronoWrongPin : R.string.KronoWrongPass));
                 errorView.setVisibility(View.VISIBLE);
                 editText.setText("");
                 AndroidUtilities.shakeView(editText);
@@ -341,7 +341,7 @@ public final class KronoHiddenLockHelper {
                 resolved[0] = true;
                 AndroidUtilities.hideKeyboard(editText);
                 dialog.dismiss();
-                authenticate(fragment, "Bóveda oculta", "Verifica tu identidad para continuar", onSuccess, onCancel);
+                authenticate(fragment, LocaleController.getString(R.string.KronoVaultTitle), LocaleController.getString(R.string.KronoVaultVerifySubtitle), onSuccess, onCancel);
             });
         }
         editText.requestFocus();
@@ -354,7 +354,7 @@ public final class KronoHiddenLockHelper {
         }
         Activity activity = fragment.getParentActivity();
         if (isProtectionConfigured(activity)) {
-            authenticate(fragment, "Seguridad de la bóveda", "Confirma tu identidad para cambiar el bloqueo", () -> showSetupOptionsInternal(fragment, onUpdated));
+            authenticate(fragment, LocaleController.getString(R.string.KronoVaultSecurity), LocaleController.getString(R.string.KronoVaultConfirmChange), () -> showSetupOptionsInternal(fragment, onUpdated));
         } else {
             showSetupOptionsInternal(fragment, onUpdated);
         }
@@ -371,18 +371,18 @@ public final class KronoHiddenLockHelper {
         java.util.ArrayList<String> labels = new java.util.ArrayList<>();
         java.util.ArrayList<Runnable> actions = new java.util.ArrayList<>();
 
-        labels.add("PIN numérico (4–8 dígitos)");
+        labels.add(LocaleController.getString(R.string.KronoLockOptPin));
         actions.add(() -> showSetSecretDialog(fragment, KronoConfig.HIDDEN_LOCK_PIN, onUpdated));
 
-        labels.add("Contraseña personalizada");
+        labels.add(LocaleController.getString(R.string.KronoLockOptPass));
         actions.add(() -> showSetSecretDialog(fragment, KronoConfig.HIDDEN_LOCK_PASSWORD, onUpdated));
 
         if (bioAvailable) {
-            labels.add(hasPass ? "Usar solo biometría (quitar PIN/contraseña)" : "Solo biometría del dispositivo");
+            labels.add(LocaleController.getString(hasPass ? R.string.KronoLockOptBioOnlyRemove : R.string.KronoLockOptBioDevice));
             actions.add(() -> {
                 KronoConfig.clearHiddenPasscode();
                 KronoConfig.setHiddenUseBiometric(true);
-                BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, "Desbloqueo biométrico activado").show();
+                BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.KronoBioEnabled)).show();
                 if (onUpdated != null) {
                     onUpdated.run();
                 }
@@ -390,11 +390,11 @@ public final class KronoHiddenLockHelper {
         }
 
         if (hasPass || (bioAvailable && KronoConfig.hiddenUseBiometric)) {
-            labels.add("Desactivar bloqueo");
+            labels.add(LocaleController.getString(R.string.KronoDisableLock));
             actions.add(() -> {
                 KronoConfig.clearHiddenPasscode();
                 KronoConfig.setHiddenUseBiometric(false);
-                BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, "Bloqueo de la bóveda desactivado").show();
+                BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.KronoLockDisabled)).show();
                 if (onUpdated != null) {
                     onUpdated.run();
                 }
@@ -402,7 +402,7 @@ public final class KronoHiddenLockHelper {
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, fragment.getResourceProvider());
-        builder.setTitle("Método de bloqueo de la bóveda");
+        builder.setTitle(LocaleController.getString(R.string.KronoVaultLockTitle));
         builder.setItems(labels.toArray(new CharSequence[0]), (d, which) -> {
             if (which >= 0 && which < actions.size()) {
                 actions.get(which).run();
@@ -428,7 +428,7 @@ public final class KronoHiddenLockHelper {
         firstInput.setHintTextColor(Theme.getColor(Theme.key_dialogTextHint, fragment.getResourceProvider()));
         firstInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, fragment.getResourceProvider()));
         firstInput.setSingleLine(true);
-        firstInput.setHint(isPin ? "Nuevo PIN (mínimo 4 dígitos)" : "Nueva contraseña (mínimo 4 caracteres)");
+        firstInput.setHint(LocaleController.getString(isPin ? R.string.KronoNewPinHint : R.string.KronoNewPassHint));
         firstInput.setInputType(isPin
                 ? (InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD)
                 : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD));
@@ -445,7 +445,7 @@ public final class KronoHiddenLockHelper {
         confirmInput.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, fragment.getResourceProvider()));
         confirmInput.setSingleLine(true);
         confirmInput.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        confirmInput.setHint(isPin ? "Repite el PIN" : "Repite la contraseña");
+        confirmInput.setHint(LocaleController.getString(isPin ? R.string.KronoRepeatPin : R.string.KronoRepeatPass));
         confirmInput.setInputType(firstInput.getInputType());
         confirmInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
         if (isPin) {
@@ -462,7 +462,7 @@ public final class KronoHiddenLockHelper {
         container.addView(errorView, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity, fragment.getResourceProvider());
-        builder.setTitle(isPin ? "Configurar PIN" : "Configurar contraseña");
+        builder.setTitle(LocaleController.getString(isPin ? R.string.KronoSetupPin : R.string.KronoSetupPass));
         builder.setView(container);
         builder.setPositiveButton(LocaleController.getString(R.string.Save), null);
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
@@ -474,13 +474,13 @@ public final class KronoHiddenLockHelper {
             String v1 = firstInput.getText() != null ? firstInput.getText().toString() : "";
             String v2 = confirmInput.getText() != null ? confirmInput.getText().toString() : "";
             if (v1.length() < 4) {
-                errorView.setText(isPin ? "El PIN debe tener al menos 4 dígitos" : "La contraseña debe tener al menos 4 caracteres");
+                errorView.setText(LocaleController.getString(isPin ? R.string.KronoPinMinErr : R.string.KronoPassMinErr));
                 errorView.setVisibility(View.VISIBLE);
                 AndroidUtilities.shakeView(firstInput);
                 return;
             }
             if (!v1.equals(v2)) {
-                errorView.setText("No coinciden, inténtalo de nuevo");
+                errorView.setText(LocaleController.getString(R.string.KronoMismatchRetry));
                 errorView.setVisibility(View.VISIBLE);
                 confirmInput.setText("");
                 AndroidUtilities.shakeView(confirmInput);
@@ -489,7 +489,7 @@ public final class KronoHiddenLockHelper {
             KronoConfig.setHiddenPasscode(lockType, v1);
             AndroidUtilities.hideKeyboard(confirmInput);
             dialog.dismiss();
-            BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, isPin ? "PIN guardado" : "Contraseña guardada").show();
+            BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(isPin ? R.string.KronoPinSaved : R.string.KronoPassSaved)).show();
             if (onUpdated != null) {
                 onUpdated.run();
             }

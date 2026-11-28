@@ -222,14 +222,14 @@ public final class FolderSyncLogger {
             UserConfig userConfig = UserConfig.getInstance(account);
             if (userConfig == null || !userConfig.isClientActivated() || userConfig.getClientUserId() == 0) {
                 if (onError != null) {
-                    onError.run("Debes iniciar sesión para enviar logs a Mensajes Guardados");
+                    onError.run(LocaleController.getString(R.string.KronoFolderLogsNeedLogin));
                 }
                 return;
             }
             AtomicBoolean inProgress = getSendInProgressFlag(account);
             if (!inProgress.compareAndSet(false, true)) {
                 if (onError != null) {
-                    onError.run("Ya hay un envío de logs en curso");
+                    onError.run(LocaleController.getString(R.string.KronoFolderLogsInProgress));
                 }
                 return;
             }
@@ -246,7 +246,7 @@ public final class FolderSyncLogger {
                         }
                     }
                     if (cacheDir == null) {
-                        throw new IllegalStateException("No se pudo acceder al directorio de caché");
+                        throw new IllegalStateException(LocaleController.getString(R.string.KronoFolderLogsCacheErr));
                     }
 
                     String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
@@ -334,7 +334,7 @@ public final class FolderSyncLogger {
                     if (BuildVars.LOGS_ENABLED) {
                         FileLog.e(e);
                     }
-                    final String errorMsg = e.getMessage() != null ? e.getMessage() : "Error generando reporte de logs";
+                    final String errorMsg = e.getMessage() != null ? e.getMessage() : LocaleController.getString(R.string.KronoFolderLogsGenErr);
                     AndroidUtilities.runOnUIThread(() -> {
                         if (onError != null) {
                             onError.run(errorMsg);
@@ -347,17 +347,16 @@ public final class FolderSyncLogger {
 
     private static String buildCaption(int account, boolean manual, String triggerLayer, String triggerReason) {
         StringBuilder sb = new StringBuilder();
-        sb.append(manual ? "📋 Logs de sincronización de carpetas" : "⚠️ Fallo de sincronización de carpetas detectado");
-        sb.append("\nCuenta: ").append(account);
-        sb.append(" | Red: ").append(getConnectionStateName(account));
+        sb.append(manual ? "📋 " + LocaleController.getString(R.string.KronoFolderLogsCaptionManual) : "⚠️ " + LocaleController.getString(R.string.KronoFolderLogsCaptionAuto));
+        sb.append("\n").append(LocaleController.formatString(R.string.KronoFolderLogsCaptionAccountNet, account, getConnectionStateName(account)));
         if (!TextUtils.isEmpty(triggerLayer)) {
-            sb.append("\nCapa: ").append(triggerLayer);
+            sb.append("\n").append(LocaleController.formatString(R.string.KronoFolderLogsCaptionLayer, triggerLayer));
         }
         if (!TextUtils.isEmpty(triggerReason)) {
             String cleanReason = triggerReason.length() > 220 ? triggerReason.substring(0, 220) + "..." : triggerReason;
-            sb.append("\nDetalle: ").append(cleanReason);
+            sb.append("\n").append(LocaleController.formatString(R.string.KronoFolderLogsCaptionDetail, cleanReason));
         }
-        sb.append("\nFecha: ").append(formatTimestamp(System.currentTimeMillis()));
+        sb.append("\n").append(LocaleController.formatString(R.string.KronoFolderLogsCaptionDate, formatTimestamp(System.currentTimeMillis())));
         return sb.toString();
     }
 

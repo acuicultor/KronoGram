@@ -73,6 +73,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.ActionBar.ThemeColors;
 import org.telegram.ui.ActionBar.ThemeDescription;
+import org.telegram.ui.ActionBar.ThemeKeyLocalizer;
 import java.util.HashSet;
 import org.telegram.ui.Cells.TextColorThemeCell;
 import org.telegram.ui.LaunchActivity;
@@ -1254,11 +1255,17 @@ public class ThemeEditorView {
                     for (int a = 0, N = listAdapter.items.size(); a < N; a++) {
                         ArrayList<ThemeDescription> themeDescriptions = listAdapter.items.get(a);
                         String key = ThemeColors.getStringName(themeDescriptions.get(0).getCurrentKey());
-                        String name = key.toLowerCase();
+                        String localized = ThemeKeyLocalizer.getLocalizedTitle(key);
+                        String localizedLower = localized.toLowerCase();
+                        String rawLower = key.toLowerCase();
                         for (String q : search) {
-                            if (name.contains(q)) {
+                            if (localizedLower.contains(q)) {
                                 searchResults.add(themeDescriptions);
-                                names.add(generateSearchName(key, q));
+                                names.add(generateSearchName(localized, q));
+                                break;
+                            } else if (rawLower.contains(q)) {
+                                searchResults.add(themeDescriptions);
+                                names.add(localized);
                                 break;
                             }
                         }
@@ -1446,7 +1453,7 @@ public class ThemeEditorView {
                     } else {
                         color = description.getSetColor();
                     }
-                    ((TextColorThemeCell) holder.itemView).setTextAndColor(description.getTitle(), color);
+                    ((TextColorThemeCell) holder.itemView).setTextAndColor(ThemeKeyLocalizer.getLocalizedTitle(description.getTitle()), color);
                 }
             }
 

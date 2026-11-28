@@ -143,10 +143,25 @@ public final class KronoVoiceTranscriber {
     public static String getLanguageDisplayName(@Nullable String code) {
         if (TextUtils.isEmpty(code) || "auto".equalsIgnoreCase(code)) {
             String resolved = resolveEffectiveLanguageCode("auto");
-            LanguageModelSpec spec = MODELS.get(resolved);
-            return "Automático (" + (spec != null ? spec.displayName : resolved) + ")";
+            return LocaleController.formatString(R.string.KronoVoiceLangAuto, getLocalizedSingleLanguageName(resolved));
         }
-        LanguageModelSpec spec = MODELS.get(code.toLowerCase(Locale.US));
+        return getLocalizedSingleLanguageName(code.toLowerCase(Locale.US));
+    }
+
+    private static String getLocalizedSingleLanguageName(@NonNull String code) {
+        try {
+            Locale appLocale = LocaleController.getInstance().getCurrentLocale();
+            if (appLocale == null) {
+                appLocale = Locale.getDefault();
+            }
+            Locale target = new Locale(code);
+            String name = target.getDisplayLanguage(appLocale);
+            if (!TextUtils.isEmpty(name) && !name.equalsIgnoreCase(code)) {
+                return name.substring(0, 1).toUpperCase(appLocale) + name.substring(1);
+            }
+        } catch (Throwable ignore) {
+        }
+        LanguageModelSpec spec = MODELS.get(code);
         return spec != null ? spec.displayName : code;
     }
 

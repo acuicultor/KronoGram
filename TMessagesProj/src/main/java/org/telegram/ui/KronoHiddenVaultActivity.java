@@ -127,7 +127,7 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
                 KronoConfig.setHiddenVaultUnlocked(true);
             } else if (!authPromptInFlight) {
                 authPromptInFlight = true;
-                KronoHiddenLockHelper.authenticate(this, "Bóveda oculta", "Verifica tu identidad para continuar", () -> {
+                KronoHiddenLockHelper.authenticate(this, LocaleController.getString(R.string.KronoVaultTitle), LocaleController.getString(R.string.KronoVaultVerifySubtitle), () -> {
                     authPromptInFlight = false;
                     if (!isFinishing() && getParentActivity() != null) {
                         rebuildData();
@@ -167,15 +167,15 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
 
         if (targetFilterId != 0) {
             MessagesController.DialogFilter filter = getMessagesController().dialogFiltersById.get(targetFilterId);
-            actionBar.setTitle(filter != null ? filter.name : "Carpeta oculta");
+            actionBar.setTitle(filter != null ? filter.name : LocaleController.getString(R.string.KronoHiddenFolderTitle));
         } else {
-            actionBar.setTitle("Bóveda oculta");
+            actionBar.setTitle(LocaleController.getString(R.string.KronoVaultTitle));
         }
 
         ActionBarMenu menu = actionBar.createMenu();
-        menu.addItem(MENU_LOCK, R.drawable.msg_pin_code).setContentDescription("Bloquear bóveda");
+        menu.addItem(MENU_LOCK, R.drawable.msg_pin_code).setContentDescription(LocaleController.getString(R.string.KronoVaultLockNow));
         if (targetFilterId == 0) {
-            menu.addItem(MENU_SETTINGS, R.drawable.msg_settings).setContentDescription("Ajustes de la bóveda");
+            menu.addItem(MENU_SETTINGS, R.drawable.msg_settings).setContentDescription(LocaleController.getString(R.string.KronoVaultSettings));
         }
 
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
@@ -252,8 +252,8 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
         builder.setTitle(filter.name);
         builder.setItems(new CharSequence[]{
-                "Abrir carpeta",
-                "Mostrar carpeta de nuevo"
+                LocaleController.getString(R.string.KronoVaultOpenFolder),
+                LocaleController.getString(R.string.KronoVaultUnhideFolder)
         }, (d, which) -> {
             if (which == 0) {
                 presentFragment(new KronoHiddenVaultActivity(filter.id));
@@ -261,7 +261,7 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
                 KronoConfig.setFilterHidden(currentAccount, filter.id, false);
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
-                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_archive_show, "Carpeta restaurada a la vista principal").show();
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_archive_show, LocaleController.getString(R.string.KronoVaultFolderRestored)).show();
                 rebuildData();
                 if (listAdapter != null) {
                     listAdapter.notifyDataSetChanged();
@@ -281,15 +281,15 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
         ArrayList<String> labels = new ArrayList<>();
         ArrayList<Runnable> actions = new ArrayList<>();
 
-        labels.add("Abrir chat");
+        labels.add(LocaleController.getString(R.string.KronoVaultOpenChat));
         actions.add(() -> openDialog(dialog.id));
 
         if (isDirectlyHidden) {
-            labels.add("Dejar de ocultar chat");
+            labels.add(LocaleController.getString(R.string.KronoVaultUnhideChat));
             actions.add(() -> {
                 KronoConfig.setDialogHidden(currentAccount, dialog.id, false);
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload, true);
-                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_archive_show, "Chat devuelto a la lista principal").show();
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_archive_show, LocaleController.getString(R.string.KronoVaultChatRestored)).show();
                 rebuildData();
                 if (listAdapter != null) {
                     listAdapter.notifyDataSetChanged();
@@ -337,12 +337,12 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
                     for (int i = 0; i < matched.size(); i++) {
                         items.add(new RowItem(TYPE_DIALOG, null, null, matched.get(i), i < matched.size() - 1));
                     }
-                    items.add(new RowItem(TYPE_INFO, "Mantén pulsado un chat para abrir opciones rápidas. Puedes restaurar esta carpeta desde la bóveda principal.", null, null, false));
+                    items.add(new RowItem(TYPE_INFO, LocaleController.getString(R.string.KronoVaultFolderHint), null, null, false));
                 } else {
-                    items.add(new RowItem(TYPE_INFO, "Esta carpeta oculta no contiene chats actualmente.", null, null, false));
+                    items.add(new RowItem(TYPE_INFO, LocaleController.getString(R.string.KronoVaultFolderEmpty), null, null, false));
                 }
             } else {
-                items.add(new RowItem(TYPE_INFO, "La carpeta oculta ya no existe.", null, null, false));
+                items.add(new RowItem(TYPE_INFO, LocaleController.getString(R.string.KronoVaultFolderMissing), null, null, false));
             }
             return;
         }
@@ -358,7 +358,7 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
             }
         }
         if (!hiddenFilters.isEmpty()) {
-            items.add(new RowItem(TYPE_HEADER, "Carpetas ocultas", null, null, false));
+            items.add(new RowItem(TYPE_HEADER, LocaleController.getString(R.string.KronoVaultHiddenFolders), null, null, false));
             for (int i = 0; i < hiddenFilters.size(); i++) {
                 items.add(new RowItem(TYPE_FOLDER, null, hiddenFilters.get(i), null, i < hiddenFilters.size() - 1));
             }
@@ -379,16 +379,16 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
             if (!hiddenFilters.isEmpty()) {
                 items.add(new RowItem(TYPE_SHADOW, null, null, null, false));
             }
-            items.add(new RowItem(TYPE_HEADER, "Chats ocultos", null, null, false));
+            items.add(new RowItem(TYPE_HEADER, LocaleController.getString(R.string.KronoVaultHiddenChats), null, null, false));
             for (int i = 0; i < directHiddenDialogs.size(); i++) {
                 items.add(new RowItem(TYPE_DIALOG, null, null, directHiddenDialogs.get(i), i < directHiddenDialogs.size() - 1));
             }
         }
 
         if (hiddenFilters.isEmpty() && directHiddenDialogs.isEmpty()) {
-            items.add(new RowItem(TYPE_INFO, "Tu bóveda oculta está vacía.\n\nPara ocultar un chat o carpeta, mantenlo pulsado en la pantalla principal y selecciona «Ocultar chat» u «Ocultar carpeta».", null, null, false));
+            items.add(new RowItem(TYPE_INFO, LocaleController.getString(R.string.KronoVaultEmptyHint), null, null, false));
         } else {
-            items.add(new RowItem(TYPE_INFO, "Mantén pulsado cualquier chat o carpeta para dejar de ocultarlo. La bóveda se bloquea automáticamente al salir de la app si así está configurado.", null, null, false));
+            items.add(new RowItem(TYPE_INFO, LocaleController.getString(R.string.KronoVaultMainHint), null, null, false));
         }
     }
 
@@ -468,7 +468,7 @@ public class KronoHiddenVaultActivity extends BaseFragment implements Notificati
                     TextSettingsCell cell = (TextSettingsCell) holder.itemView;
                     MessagesController.DialogFilter filter = item.filter;
                     int unread = filter.unreadCount;
-                    String summary = unread > 0 ? (unread + " sin leer") : "Abrir";
+                    String summary = unread > 0 ? LocaleController.formatString(R.string.KronoUnreadCount, unread) : LocaleController.getString(R.string.KronoOpen);
                     int iconRes = FolderIconHelper.getTabIconResId(currentAccount, filter, false);
                     cell.setIcon(iconRes != 0 ? iconRes : R.drawable.msg_secret);
                     cell.setTextAndValue(filter.name, summary, item.divider);

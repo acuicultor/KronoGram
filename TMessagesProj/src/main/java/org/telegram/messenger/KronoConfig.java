@@ -353,14 +353,14 @@ public class KronoConfig {
         loadConfig();
         switch (cloudBackupMode) {
             case CLOUD_BACKUP_ON_CHANGE:
-                return "Automática (al detectar cambios)";
+                return LocaleController.getString(R.string.KronoBackupModeAuto);
             case CLOUD_BACKUP_DAILY:
-                return "Periódica (diaria)";
+                return LocaleController.getString(R.string.KronoBackupModeDaily);
             case CLOUD_BACKUP_WEEKLY:
-                return "Periódica (semanal)";
+                return LocaleController.getString(R.string.KronoBackupModeWeekly);
             case CLOUD_BACKUP_MANUAL:
             default:
-                return "Manual";
+                return LocaleController.getString(R.string.KronoBackupModeManual);
         }
     }
 
@@ -1113,13 +1113,13 @@ public class KronoConfig {
         loadConfig();
         boolean bio = hiddenUseBiometric && deviceHasBiometrics;
         if (hiddenLockType == HIDDEN_LOCK_PIN) {
-            return bio ? "PIN y Biometría" : "PIN numérico";
+            return LocaleController.getString(bio ? R.string.KronoLockPinBio : R.string.KronoLockPin);
         } else if (hiddenLockType == HIDDEN_LOCK_PASSWORD) {
-            return bio ? "Contraseña y Biometría" : "Contraseña";
+            return LocaleController.getString(bio ? R.string.KronoLockPassBio : R.string.KronoLockPass);
         } else if (bio) {
-            return "Solo Biometría";
+            return LocaleController.getString(R.string.KronoLockBioOnly);
         }
-        return "Sin configurar";
+        return LocaleController.getString(R.string.KronoNotConfigured);
     }
 
     private static Set<Long> getOrLoadHiddenDialogsLocked(int account) {
@@ -1704,12 +1704,12 @@ public class KronoConfig {
         loadConfig();
         switch (tabMode) {
             case TAB_MODE_ICON_TEXT:
-                return "Icono y nombre";
+                return LocaleController.getString(R.string.KronoTabModeIconTitle);
             case TAB_MODE_ICON:
-                return "Solo icono";
+                return LocaleController.getString(R.string.KronoTabModeIconOnly);
             case TAB_MODE_TEXT:
             default:
-                return "Solo nombre";
+                return LocaleController.getString(R.string.KronoTabModeTitleOnly);
         }
     }
 
@@ -1717,16 +1717,16 @@ public class KronoConfig {
         loadConfig();
         switch (tabStyle) {
             case TAB_STYLE_ROUNDED:
-                return "Redondeado";
+                return LocaleController.getString(R.string.KronoTabStyleRounded);
             case TAB_STYLE_PILL:
-                return "Píldora";
+                return LocaleController.getString(R.string.KronoTabStylePill);
             case TAB_STYLE_VKUI:
-                return "Subrayado inferior (VKUI)";
+                return LocaleController.getString(R.string.KronoTabStyleVkui);
             case TAB_STYLE_TEXT_ONLY:
-                return "Solo texto (sin indicador)";
+                return LocaleController.getString(R.string.KronoTabStyleTextOnly);
             case TAB_STYLE_DEFAULT:
             default:
-                return "Predeterminado";
+                return LocaleController.getString(R.string.KronoDefault);
         }
     }
 
@@ -1757,12 +1757,12 @@ public class KronoConfig {
         loadConfig();
         switch (uiStyle) {
             case UI_STYLE_IOS:
-                return "Estilo iOS";
+                return LocaleController.getString(R.string.KronoUiStyleIos);
             case UI_STYLE_TELEGRAM_X:
-                return "Estilo Clásico";
+                return LocaleController.getString(R.string.KronoUiStyleClassic);
             case UI_STYLE_MATERIAL_YOU:
             default:
-                return "Material You (Material 3)";
+                return LocaleController.getString(R.string.KronoUiStyleMaterial);
         }
     }
 
@@ -1959,7 +1959,7 @@ public class KronoConfig {
             case GLASS_MODE_FROSTED:
                 return "Frosted Glass";
             case GLASS_MODE_OFF:
-                return "Desactivado (Sólido)";
+                return LocaleController.getString(R.string.KronoGlassOff);
             case GLASS_MODE_LIQUID:
             default:
                 if (android.os.Build.VERSION.SDK_INT < 33) {
@@ -1972,9 +1972,9 @@ public class KronoConfig {
     public static String getVoiceTranscriptionModeName() {
         loadConfig();
         if (voiceTranscriptionMode == VOICE_TRANSCRIBE_MODE_LOCAL_ONLY) {
-            return "Siempre local offline";
+            return LocaleController.getString(R.string.KronoVoiceModeLocal);
         }
-        return "Automático (Telegram → Local offline)";
+        return LocaleController.getString(R.string.KronoVoiceModeAuto);
     }
 
     public static String getVoiceTranscriptionLanguageName() {
@@ -1993,7 +1993,7 @@ public class KronoConfig {
                 return "Lingva Translate";
             case TRANSLATE_PROVIDER_TELEGRAM:
             default:
-                return "Telegram Oficial";
+                return LocaleController.getString(R.string.KronoProviderTelegram);
         }
     }
 
@@ -2001,20 +2001,20 @@ public class KronoConfig {
         loadConfig();
         switch (messageSwipeAction) {
             case SWIPE_ACTION_EDIT_OR_REPLY:
-                return "Editar (propio) / Responder";
+                return LocaleController.getString(R.string.KronoMsgSwipeEditReply);
             case SWIPE_ACTION_SAVE:
-                return "Guardar en Mensajes guardados";
+                return LocaleController.getString(R.string.KronoMsgSwipeSave);
             case SWIPE_ACTION_TRANSLATE:
-                return "Traducir mensaje";
+                return LocaleController.getString(R.string.KronoMsgSwipeTranslate);
             case SWIPE_ACTION_FORWARD:
-                return "Reenviar mensaje";
+                return LocaleController.getString(R.string.KronoMsgSwipeForward);
             case SWIPE_ACTION_COPY:
-                return "Copiar texto";
+                return LocaleController.getString(R.string.KronoMsgSwipeCopy);
             case SWIPE_ACTION_DISABLED:
-                return "Desactivado";
+                return LocaleController.getString(R.string.KronoDisabled);
             case SWIPE_ACTION_REPLY:
             default:
-                return "Responder";
+                return LocaleController.getString(R.string.KronoMsgSwipeReply);
         }
     }
 

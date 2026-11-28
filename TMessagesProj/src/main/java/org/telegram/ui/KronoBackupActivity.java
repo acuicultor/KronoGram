@@ -23,6 +23,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.KronoBackupManager;
 import org.telegram.messenger.KronoConfig;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.Utilities;
@@ -124,7 +125,7 @@ public class KronoBackupActivity extends BaseFragment {
         setHasOwnBackground(true);
 
         simpleActionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        simpleActionBar.setTitle("Copia de seguridad");
+        simpleActionBar.setTitle(LocaleController.getString(R.string.KronoSectionBackupTitle));
         if (parentLayout != null && parentLayout.isRightLayout()) {
             simpleActionBar.setBackButtonImage(R.drawable.ic_ab_close);
         }
@@ -164,9 +165,9 @@ public class KronoBackupActivity extends BaseFragment {
         } else if (position == cloudSaveRow) {
             showCategoryPickerDialog(
                     this,
-                    "Guardar copia en la nube",
-                    "Se guardará en el almacenamiento privado CloudStorage de tu cuenta de Telegram mediante @" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + ".",
-                    "Guardar en la nube",
+                    LocaleController.getString(R.string.KronoBackupCloudSave),
+                    LocaleController.formatString(R.string.KronoBackupCloudSaveDesc, KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME),
+                    LocaleController.getString(R.string.KronoBackupSaveCloudBtn),
                     KronoBackupManager.BackupOptions.createDefault(),
                     null,
                     this::performCloudUpload
@@ -182,9 +183,9 @@ public class KronoBackupActivity extends BaseFragment {
         } else if (position == sendSavedMessagesRow) {
             showCategoryPickerDialog(
                     this,
-                    "Enviar a Mensajes Guardados",
-                    "Se generará un archivo .kronogram y se enviará directamente a tu chat de Mensajes Guardados.",
-                    "Enviar copia",
+                    LocaleController.getString(R.string.KronoBackupSendSaved),
+                    LocaleController.getString(R.string.KronoBackupSendSavedDesc),
+                    LocaleController.getString(R.string.KronoBackupSendBtn),
                     KronoBackupManager.BackupOptions.createDefault(),
                     null,
                     this::performSavedMessagesExport
@@ -192,9 +193,9 @@ public class KronoBackupActivity extends BaseFragment {
         } else if (position == exportFileRow) {
             showCategoryPickerDialog(
                     this,
-                    "Exportar copia a archivo",
-                    "Elige las categorías que deseas incluir en el archivo .kronogram.",
-                    "Elegir ubicación",
+                    LocaleController.getString(R.string.KronoBackupExportTitle),
+                    LocaleController.getString(R.string.KronoBackupExportDesc),
+                    LocaleController.getString(R.string.KronoBackupChooseLoc),
                     KronoBackupManager.BackupOptions.createDefault(),
                     null,
                     options -> {
@@ -247,7 +248,7 @@ public class KronoBackupActivity extends BaseFragment {
             if (userTriggered) {
                 BulletinFactory.of(this).createSimpleBulletin(
                         R.raw.chats_infotip,
-                        meta != null ? "Estado de la nube actualizado" : "No hay ninguna copia en la nube todavía"
+                        LocaleController.getString(meta != null ? R.string.KronoBackupCloudUpdated : R.string.KronoBackupCloudNone)
                 ).show();
             }
         }, err -> {
@@ -281,7 +282,7 @@ public class KronoBackupActivity extends BaseFragment {
             }
             BulletinFactory.of(this).createSimpleBulletin(
                     R.raw.contact_check,
-                    "Copia guardada en la nube (" + AndroidUtilities.formatFileSize(meta.rawByteSize) + ")"
+                    LocaleController.formatString(R.string.KronoBackupCloudSaved, AndroidUtilities.formatFileSize(meta.rawByteSize))
             ).show();
         }, err -> {
             try {
@@ -303,7 +304,7 @@ public class KronoBackupActivity extends BaseFragment {
                 progress.dismiss();
             } catch (Exception ignore) {}
             if (!isFragmentAlive()) return;
-            showRestoreDialogForParsedBackup(this, currentAccount, parsed, "Restaurar desde la nube", () -> {
+            showRestoreDialogForParsedBackup(this, currentAccount, parsed, LocaleController.getString(R.string.KronoBackupCloudRestore), () -> {
                 if (isFragmentAlive() && listAdapter != null) {
                     listAdapter.notifyDataSetChanged();
                 }
@@ -320,10 +321,10 @@ public class KronoBackupActivity extends BaseFragment {
     private void confirmDeleteCloudBackup() {
         if (!isFragmentAlive()) return;
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Eliminar copia de la nube");
-        builder.setMessage("Se eliminará la copia de seguridad almacenada en Telegram CloudStorage (@" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + "). Tus ajustes locales actuales no se modificarán.");
-        builder.setNegativeButton("Cancelar", null);
-        builder.setPositiveButton("Eliminar", (dialog, which) -> {
+        builder.setTitle(LocaleController.getString(R.string.KronoBackupCloudDelete));
+        builder.setMessage(LocaleController.formatString(R.string.KronoBackupCloudDeleteMsg, KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME));
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.setPositiveButton(LocaleController.getString(R.string.Delete), (dialog, which) -> {
             if (!isFragmentAlive()) return;
             AlertDialog progress = new AlertDialog(getParentActivity(), AlertDialog.ALERT_TYPE_SPINNER);
             progress.setCanCancel(false);
@@ -338,7 +339,7 @@ public class KronoBackupActivity extends BaseFragment {
                 if (listAdapter != null) {
                     listAdapter.notifyDataSetChanged();
                 }
-                BulletinFactory.of(this).createSimpleBulletin(R.raw.ic_delete, "Copia eliminada de la nube").show();
+                BulletinFactory.of(this).createSimpleBulletin(R.raw.ic_delete, LocaleController.getString(R.string.KronoBackupCloudDeleted)).show();
             }, err -> {
                 try {
                     progress.dismiss();
@@ -364,13 +365,13 @@ public class KronoBackupActivity extends BaseFragment {
                 KronoConfig.CLOUD_BACKUP_MANUAL
         };
         String[] items = new String[]{
-                "Automática (al detectar cambios)",
-                "Periódica (diaria)",
-                "Periódica (semanal)",
-                "Manual (solo cuando tú la inicies)"
+                LocaleController.getString(R.string.KronoBackupModeAuto),
+                LocaleController.getString(R.string.KronoBackupModeDaily),
+                LocaleController.getString(R.string.KronoBackupModeWeekly),
+                LocaleController.getString(R.string.KronoBackupModeManualLong)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Modo de copia en la nube");
+        builder.setTitle(LocaleController.getString(R.string.KronoBackupMode));
         builder.setItems(items, (dialog, which) -> {
             int chosenMode = modeValues[which];
             KronoConfig.setCloudBackupMode(chosenMode);
@@ -383,7 +384,7 @@ public class KronoBackupActivity extends BaseFragment {
             }
             BulletinFactory.of(this).createSimpleBulletin(
                     R.raw.contact_check,
-                    "Modo de copia: " + KronoConfig.getCloudBackupModeName()
+                    LocaleController.formatString(R.string.KronoBackupModeApplied, KronoConfig.getCloudBackupModeName())
             ).show();
         });
         showDialog(builder.create());
@@ -393,9 +394,9 @@ public class KronoBackupActivity extends BaseFragment {
         KronoBackupManager.BackupOptions current = KronoBackupManager.BackupOptions.fromAutoConfig();
         showCategoryPickerDialog(
                 this,
-                "Categorías para copia automática",
-                "Por defecto se incluyen todas las categorías (100% de los ajustes de KronoGram y Telegram, incluyendo notificaciones y chats/carpetas ocultas sin PIN). Puedes desmarcar las que prefieras omitir.",
-                "Guardar selección",
+                LocaleController.getString(R.string.KronoBackupAutoScopeTitle),
+                LocaleController.getString(R.string.KronoBackupAutoScopeDesc),
+                LocaleController.getString(R.string.KronoSaveSelection),
                 current,
                 null,
                 true,
@@ -410,7 +411,7 @@ public class KronoBackupActivity extends BaseFragment {
                     if (listAdapter != null && cloudAutoScopeRow >= 0) {
                         listAdapter.notifyItemChanged(cloudAutoScopeRow);
                     }
-                    BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, "Alcance de copia automática actualizado").show();
+                    BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.KronoBackupScopeUpdated)).show();
                 }
         );
     }
@@ -432,7 +433,7 @@ public class KronoBackupActivity extends BaseFragment {
             if (!isFragmentAlive()) return;
             BulletinFactory.of(this).createSimpleBulletin(
                     R.raw.saved_messages,
-                    "Copia enviada a Mensajes Guardados"
+                    LocaleController.getString(R.string.KronoBackupSentSaved)
             ).show();
         }, err -> {
             try {
@@ -452,7 +453,7 @@ public class KronoBackupActivity extends BaseFragment {
             startActivityForResult(intent, REQUEST_CODE_EXPORT_BACKUP);
         } catch (Exception e) {
             FileLog.e(e);
-            BulletinFactory.of(this).createErrorBulletin("No se pudo abrir el selector de archivos del sistema").show();
+            BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.KronoBackupPickerErr)).show();
         }
     }
 
@@ -464,7 +465,7 @@ public class KronoBackupActivity extends BaseFragment {
             startActivityForResult(intent, REQUEST_CODE_IMPORT_BACKUP);
         } catch (Exception e) {
             FileLog.e(e);
-            BulletinFactory.of(this).createErrorBulletin("No se pudo abrir el selector de archivos del sistema").show();
+            BulletinFactory.of(this).createErrorBulletin(LocaleController.getString(R.string.KronoBackupPickerErr)).show();
         }
     }
 
@@ -495,7 +496,7 @@ public class KronoBackupActivity extends BaseFragment {
                 if (!isFragmentAlive()) return;
                 BulletinFactory.of(this).createSimpleBulletin(
                         R.raw.contact_check,
-                        "Archivo exportado (" + AndroidUtilities.formatFileSize(meta.rawByteSize) + ")"
+                        LocaleController.formatString(R.string.KronoBackupExported, AndroidUtilities.formatFileSize(meta.rawByteSize))
                 ).show();
             }, err -> {
                 try {
@@ -514,7 +515,7 @@ public class KronoBackupActivity extends BaseFragment {
                     progress.dismiss();
                 } catch (Exception ignore) {}
                 if (!isFragmentAlive()) return;
-                showRestoreDialogForParsedBackup(this, currentAccount, parsed, "Importar desde archivo", () -> {
+                showRestoreDialogForParsedBackup(this, currentAccount, parsed, LocaleController.getString(R.string.KronoBackupImportFile), () -> {
                     if (isFragmentAlive() && listAdapter != null) {
                         listAdapter.notifyDataSetChanged();
                     }
@@ -544,13 +545,13 @@ public class KronoBackupActivity extends BaseFragment {
         msg.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
         msg.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
         msg.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(4), AndroidUtilities.dp(12), AndroidUtilities.dp(8));
-        msg.setText("Se restablecerán todos los ajustes exclusivos de KronoGram a sus valores predeterminados. Tus chats, mensajes y ajustes propios de Telegram no se eliminarán.");
+        msg.setText(LocaleController.getString(R.string.KronoBackupResetMsg));
         container.addView(msg, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
         final boolean[] preserveVault = new boolean[]{true};
         CheckBoxCell vaultCheck = new CheckBoxCell(ctx, CheckBoxCell.TYPE_CHECK_BOX_DEFAULT);
         vaultCheck.setBackground(Theme.getSelectorDrawable(false));
-        vaultCheck.setText("Conservar bóveda oculta (PIN y chats ocultos)", "", true, false);
+        vaultCheck.setText(LocaleController.getString(R.string.KronoBackupKeepVault), "", true, false);
         vaultCheck.setOnClickListener(v -> {
             preserveVault[0] = !preserveVault[0];
             vaultCheck.setChecked(preserveVault[0], true);
@@ -558,10 +559,10 @@ public class KronoBackupActivity extends BaseFragment {
         container.addView(vaultCheck, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
-        builder.setTitle("Restablecer ajustes de KronoGram");
+        builder.setTitle(LocaleController.getString(R.string.KronoBackupResetTitle));
         builder.setView(container);
-        builder.setNegativeButton("Cancelar", null);
-        builder.setPositiveButton("Restablecer", (dialog, which) -> {
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.setPositiveButton(LocaleController.getString(R.string.KronoReset), (dialog, which) -> {
             KronoConfig.resetKronoDefaults(preserveVault[0]);
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.dialogsNeedReload, true);
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.mainUserInfoChanged);
@@ -570,7 +571,7 @@ public class KronoBackupActivity extends BaseFragment {
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
-            BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, "Ajustes de KronoGram restablecidos").show();
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.contact_check, LocaleController.getString(R.string.KronoBackupResetDone)).show();
         });
         AlertDialog alert = builder.create();
         showDialog(alert);
@@ -597,7 +598,7 @@ public class KronoBackupActivity extends BaseFragment {
                 progress.dismiss();
             } catch (Exception ignore) {}
             if (!isFragmentAlive(fragment)) return;
-            showRestoreDialogForParsedBackup(fragment, fragment.getCurrentAccount(), parsed, "Importar copia de KronoGram", null);
+            showRestoreDialogForParsedBackup(fragment, fragment.getCurrentAccount(), parsed, LocaleController.getString(R.string.KronoBackupImportTitle), null);
         }, err -> {
             try {
                 progress.dismiss();
@@ -619,12 +620,12 @@ public class KronoBackupActivity extends BaseFragment {
         }
         KronoBackupManager.BackupMetadata meta = parsed.metadata;
         StringBuilder subtitle = new StringBuilder();
-        subtitle.append("Fecha: ").append(KronoBackupManager.formatTimestamp(meta.timestamp));
+        subtitle.append(LocaleController.formatString(R.string.KronoBackupDate, KronoBackupManager.formatTimestamp(meta.timestamp)));
         if (!TextUtils.isEmpty(meta.deviceModel)) {
-            subtitle.append("\nDispositivo: ").append(meta.deviceModel);
+            subtitle.append("\n").append(LocaleController.formatString(R.string.KronoBackupDevice, meta.deviceModel));
         }
-        subtitle.append("\nTamaño: ").append(AndroidUtilities.formatFileSize(meta.rawByteSize));
-        subtitle.append("\n\nMarca qué categorías quieres restaurar:");
+        subtitle.append("\n").append(LocaleController.formatString(R.string.KronoBackupSize, AndroidUtilities.formatFileSize(meta.rawByteSize)));
+        subtitle.append("\n\n").append(LocaleController.getString(R.string.KronoBackupChooseRestoreCats));
 
         KronoBackupManager.BackupOptions defaults = new KronoBackupManager.BackupOptions();
         defaults.includeKrono = meta.hasKrono;
@@ -637,7 +638,7 @@ public class KronoBackupActivity extends BaseFragment {
                 fragment,
                 title,
                 subtitle.toString(),
-                "Restaurar",
+                LocaleController.getString(R.string.KronoRestore),
                 defaults,
                 meta,
                 false,
@@ -661,16 +662,16 @@ public class KronoBackupActivity extends BaseFragment {
                                 if (res.requiresRestart) {
                                     showRestartPrompt(fragment, res);
                                 } else {
-                                    String msg = "Restaurados " + res.appliedKeysCount + " ajustes";
+                                    String msg = LocaleController.formatString(R.string.KronoBackupRestoredCount, res.appliedKeysCount);
                                     if (res.restoredVault) {
-                                        msg += " (bóveda incluida; tu PIN local se mantiene)";
+                                        msg += LocaleController.getString(R.string.KronoBackupVaultPinKept);
                                     }
                                     BulletinFactory.of(fragment).createSimpleBulletin(R.raw.contact_check, msg).show();
                                 }
                             });
                         } catch (Exception e) {
                             FileLog.e(e);
-                            String errMsg = e.getMessage() != null ? e.getMessage() : "Error al aplicar la copia";
+                            String errMsg = e.getMessage() != null ? e.getMessage() : LocaleController.getString(R.string.KronoBackupApplyErr);
                             AndroidUtilities.runOnUIThread(() -> {
                                 try {
                                     progress.dismiss();
@@ -733,32 +734,32 @@ public class KronoBackupActivity extends BaseFragment {
 
         if (availableFilter == null || availableFilter.hasKrono) {
             if (lockKronoChecked) {
-                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Siempre incluido (Fantasma, pestañas, carpetas, gestos, IA, spoilers)", true, true, true, null);
+                addCategoryCheckbox(container, ctx, LocaleController.getString(R.string.KronoSettingsTitle), LocaleController.getString(R.string.KronoBackupCatKronoAlways), true, true, true, null);
             } else {
-                addCategoryCheckbox(container, ctx, "Ajustes de KronoGram", "Fantasma, pestañas, carpetas, gestos, IA, spoilers", opts.includeKrono, true, false, checked -> opts.includeKrono = checked);
+                addCategoryCheckbox(container, ctx, LocaleController.getString(R.string.KronoSettingsTitle), LocaleController.getString(R.string.KronoBackupCatKronoDesc), opts.includeKrono, true, false, checked -> opts.includeKrono = checked);
             }
         }
         if (availableFilter == null || availableFilter.hasTelegramMain) {
-            addCategoryCheckbox(container, ctx, "Ajustes de Telegram", "General, fuente, proxy, multimedia, cámara, PiP, caché, idioma y cuentas", opts.includeTelegramMain, true, false, checked -> opts.includeTelegramMain = checked);
+            addCategoryCheckbox(container, ctx, LocaleController.getString(R.string.KronoBackupCatTelegram), LocaleController.getString(R.string.KronoBackupCatTelegramDesc), opts.includeTelegramMain, true, false, checked -> opts.includeTelegramMain = checked);
         }
         if (availableFilter == null || availableFilter.hasTelegramTheme) {
-            addCategoryCheckbox(container, ctx, "Tema y apariencia", "Tema día/noche, fondos, acentos y modo noche automático", opts.includeTelegramTheme, true, false, checked -> opts.includeTelegramTheme = checked);
+            addCategoryCheckbox(container, ctx, LocaleController.getString(R.string.KronoBackupCatTheme), LocaleController.getString(R.string.KronoBackupCatThemeDesc), opts.includeTelegramTheme, true, false, checked -> opts.includeTelegramTheme = checked);
         }
         if (availableFilter == null || availableFilter.hasTelegramNotifications) {
-            addCategoryCheckbox(container, ctx, "Notificaciones de Telegram", "Preferencias globales, por cuenta y excepciones de chats", opts.includeTelegramNotifications, true, false, checked -> opts.includeTelegramNotifications = checked);
+            addCategoryCheckbox(container, ctx, LocaleController.getString(R.string.KronoBackupCatNotif), LocaleController.getString(R.string.KronoBackupCatNotifDesc), opts.includeTelegramNotifications, true, false, checked -> opts.includeTelegramNotifications = checked);
         }
         if (availableFilter == null || availableFilter.hasHiddenVault) {
-            addCategoryCheckbox(container, ctx, "Bóveda oculta (sin PIN)", "Chats y carpetas ocultas de tus cuentas (sin exportar PIN)", opts.includeHiddenVault, false, false, checked -> opts.includeHiddenVault = checked);
+            addCategoryCheckbox(container, ctx, LocaleController.getString(R.string.KronoBackupCatVault), LocaleController.getString(R.string.KronoBackupCatVaultDesc), opts.includeHiddenVault, false, false, checked -> opts.includeHiddenVault = checked);
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
         builder.setTitle(title);
         builder.setView(scrollView);
-        builder.setNegativeButton("Cancelar", null);
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         builder.setPositiveButton(positiveButtonText, (dialog, which) -> {
             if (!opts.hasAnySelected()) {
                 if (isFragmentAlive(fragment)) {
-                    BulletinFactory.of(fragment).createErrorBulletin("Selecciona al menos una categoría").show();
+                    BulletinFactory.of(fragment).createErrorBulletin(LocaleController.getString(R.string.KronoBackupSelectOne)).show();
                 }
                 return;
             }
@@ -803,17 +804,17 @@ public class KronoBackupActivity extends BaseFragment {
         Activity activity = fragment.getParentActivity();
         if (activity == null) return;
         StringBuilder sb = new StringBuilder();
-        sb.append("Se han restaurado ").append(res.appliedKeysCount).append(" ajustes correctamente.");
+        sb.append(LocaleController.formatString(R.string.KronoBackupRestoredMsg, res.appliedKeysCount));
         if (res.restoredVault) {
-            sb.append("\n\nTambién se restauraron tus chats/carpetas ocultas (sin modificar tu bloqueo PIN/contraseña local).");
+            sb.append("\n\n").append(LocaleController.getString(R.string.KronoBackupRestoredVaultNote));
         }
-        sb.append("\n\nComo la copia incluía ajustes internos de Telegram (tema, configuración general o notificaciones), se recomienda reiniciar KronoGram para aplicarlos por completo.");
+        sb.append("\n\n").append(LocaleController.getString(R.string.KronoBackupRestartNote));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-        builder.setTitle("Copia restaurada");
+        builder.setTitle(LocaleController.getString(R.string.KronoBackupRestoredTitle));
         builder.setMessage(sb.toString());
-        builder.setNegativeButton("Más tarde", null);
-        builder.setPositiveButton("Reiniciar ahora", (dialog, which) -> restartApp(activity));
+        builder.setNegativeButton(LocaleController.getString(R.string.KronoLater), null);
+        builder.setPositiveButton(LocaleController.getString(R.string.KronoRestartNow), (dialog, which) -> restartApp(activity));
         fragment.showDialog(builder.create());
     }
 
@@ -910,73 +911,73 @@ public class KronoBackupActivity extends BaseFragment {
             if (type == 0) {
                 HeaderCell headerCell = (HeaderCell) holder.itemView;
                 if (position == cloudHeaderRow) {
-                    headerCell.setText("Nube de Telegram");
+                    headerCell.setText(LocaleController.getString(R.string.KronoBackupCloudHeader));
                 } else if (position == localHeaderRow) {
-                    headerCell.setText("Archivo local y Mensajes Guardados");
+                    headerCell.setText(LocaleController.getString(R.string.KronoBackupLocalHeader));
                 } else if (position == resetHeaderRow) {
-                    headerCell.setText("Restablecimiento");
+                    headerCell.setText(LocaleController.getString(R.string.KronoBackupResetHeader));
                 }
             } else if (type == 1) {
                 TextDetailSettingsCell detailCell = (TextDetailSettingsCell) holder.itemView;
                 detailCell.setMultilineDetail(true);
                 if (position == cloudStatusRow) {
                     if (cloudLoading) {
-                        detailCell.setTextAndValue("Estado de la nube", "Consultando @" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + "...", true);
+                        detailCell.setTextAndValue(LocaleController.getString(R.string.KronoBackupCloudStatus), LocaleController.formatString(R.string.KronoBackupChecking, KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME), true);
                     } else if (!TextUtils.isEmpty(cloudErrorText)) {
-                        detailCell.setTextAndValue("Estado de la nube (toca para reintentar)", cloudErrorText, true);
+                        detailCell.setTextAndValue(LocaleController.getString(R.string.KronoBackupCloudRetry), cloudErrorText, true);
                     } else if (cloudMetadata != null) {
                         String summary = KronoBackupManager.formatTimestamp(cloudMetadata.timestamp)
                                 + " · " + AndroidUtilities.formatFileSize(cloudMetadata.rawByteSize)
                                 + (TextUtils.isEmpty(cloudMetadata.deviceModel) ? "" : (" · " + cloudMetadata.deviceModel))
-                                + "\nIncluye: " + cloudMetadata.buildCategoriesSummary();
+                                + "\n" + LocaleController.formatString(R.string.KronoBackupIncludes, cloudMetadata.buildCategoriesSummary());
                         if (KronoConfig.isCloudBackupPending(currentAccount) && KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE) {
-                            summary += "\nSincronización automática pendiente...";
+                            summary += "\n" + LocaleController.getString(R.string.KronoBackupAutoSyncPending);
                         }
-                        detailCell.setTextAndValue("Copia disponible en la nube", summary, true);
+                        detailCell.setTextAndValue(LocaleController.getString(R.string.KronoBackupCloudAvail), summary, true);
                     } else {
-                        String emptyMsg = (KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE)
-                                ? "La primera copia automática se subirá en breve, o toca «Guardar copia en la nube» ahora."
-                                : "Toca «Guardar copia en la nube» para crear tu primer respaldo.";
-                        detailCell.setTextAndValue("Sin copia en la nube", emptyMsg, true);
+                        String emptyMsg = LocaleController.getString(KronoConfig.cloudBackupMode == KronoConfig.CLOUD_BACKUP_ON_CHANGE
+                                ? R.string.KronoBackupAutoHint
+                                : R.string.KronoBackupManualHint);
+                        detailCell.setTextAndValue(LocaleController.getString(R.string.KronoBackupCloudNoShort), emptyMsg, true);
                     }
                 } else if (position == cloudModeRow) {
-                    detailCell.setTextAndValue("Modo de copia en la nube", KronoConfig.getCloudBackupModeName(), true);
+                    detailCell.setTextAndValue(LocaleController.getString(R.string.KronoBackupMode), KronoConfig.getCloudBackupModeName(), true);
                 } else if (position == cloudAutoScopeRow) {
                     String scope = KronoBackupManager.BackupOptions.fromAutoConfig().buildCategoriesSummary();
-                    detailCell.setTextAndValue("Alcance de copia automática", scope, true);
+                    detailCell.setTextAndValue(LocaleController.getString(R.string.KronoBackupAutoScope), scope, true);
                 }
             } else if (type == 3) {
                 TextInfoPrivacyCell infoCell = (TextInfoPrivacyCell) holder.itemView;
                 if (position == cloudInfoRow) {
-                    infoCell.setText("Usa el almacenamiento privado CloudStorage oficial de Telegram mediante @" + KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME + ", sin servidores externos ni tokens en la app. En modo automático, KronoGram detecta cambios en tus ajustes, agrupa modificaciones durante 20 s y sincroniza solo cuando hay cambios reales (reintentando automáticamente si estabas sin conexión).");
+                    infoCell.setText(LocaleController.formatString(R.string.KronoBackupCloudInfo, KronoBackupManager.CLOUD_BACKUP_BOT_USERNAME));
                 } else if (position == localInfoRow) {
-                    infoCell.setText("También puedes tocar cualquier archivo .kronogram recibido en Mensajes Guardados o en un chat para restaurarlo directamente. Por seguridad, nunca se exportan sesiones, contraseñas de bloqueo ni el PIN de la bóveda.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoBackupLocalInfo));
                 } else if (position == resetInfoRow) {
-                    infoCell.setText("Restablecer solo afecta a los ajustes de KronoGram; puedes elegir conservar tu bóveda oculta intacta.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoBackupResetInfo));
                 }
             } else if (type == 4) {
                 TextCell textCell = (TextCell) holder.itemView;
                 if (position == cloudSaveRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
-                    textCell.setTextAndIcon("Guardar copia en la nube", R.drawable.msg_saved, true);
+                    textCell.setTextAndIcon(LocaleController.getString(R.string.KronoBackupCloudSave), R.drawable.msg_saved, true);
                 } else if (position == cloudRestoreRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
-                    textCell.setTextAndIcon("Restaurar desde la nube", R.drawable.msg_download, true);
+                    textCell.setTextAndIcon(LocaleController.getString(R.string.KronoBackupCloudRestore), R.drawable.msg_download, true);
                 } else if (position == cloudDeleteRow) {
                     textCell.setColors(Theme.key_text_RedRegular, Theme.key_text_RedRegular);
-                    textCell.setTextAndIcon("Eliminar copia de la nube", R.drawable.msg_delete, false);
+                    textCell.setTextAndIcon(LocaleController.getString(R.string.KronoBackupCloudDelete), R.drawable.msg_delete, false);
                 } else if (position == sendSavedMessagesRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
-                    textCell.setTextAndIcon("Enviar a Guardados", R.drawable.msg_shareout, true);
+                    textCell.setTextAndIcon(LocaleController.getString(R.string.KronoBackupSendSavedShort), R.drawable.msg_shareout, true);
                 } else if (position == exportFileRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
-                    textCell.setTextAndIcon("Exportar a archivo", R.drawable.msg_download, true);
+                    textCell.setTextAndIcon(LocaleController.getString(R.string.KronoBackupExportShort), R.drawable.msg_download, true);
                 } else if (position == importFileRow) {
                     textCell.setColors(Theme.key_windowBackgroundWhiteGrayIcon, Theme.key_windowBackgroundWhiteBlackText);
-                    textCell.setTextAndIcon("Importar desde archivo", R.drawable.msg_folders, false);
+                    textCell.setTextAndIcon(LocaleController.getString(R.string.KronoBackupImportFile), R.drawable.msg_folders, false);
                 } else if (position == resetKronoRow) {
                     textCell.setColors(Theme.key_text_RedRegular, Theme.key_text_RedRegular);
-                    textCell.setTextAndIcon("Restablecer ajustes", R.drawable.msg_reset, false);
+                    textCell.setTextAndIcon(LocaleController.getString(R.string.KronoBackupResetBtn), R.drawable.msg_reset, false);
                 }
             }
         }

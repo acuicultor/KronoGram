@@ -199,8 +199,8 @@ public class KronoSettingsActivity extends BaseFragment {
     private int diagSystemBatteryRow = -1;
     private int diagInfoRow = -1;
 
-    private String cacheSizeText = "Calculando...";
-    private String voiceModelsStatusText = "Comprobando...";
+    private String cacheSizeText = LocaleController.getString(R.string.KronoCalculating);
+    private String voiceModelsStatusText = LocaleController.getString(R.string.KronoChecking);
 
     public KronoSettingsActivity() {
         this(SECTION_MAIN);
@@ -240,10 +240,10 @@ public class KronoSettingsActivity extends BaseFragment {
             boolean activeReady = org.telegram.messenger.KronoVoiceTranscriber.isModelDownloaded(KronoConfig.voiceTranscriptionLanguage);
             String label;
             if (size <= 0L) {
-                label = "Sin descargar";
+                label = LocaleController.getString(R.string.KronoNotDownloaded);
             } else {
                 String formatted = AndroidUtilities.formatFileSize(size);
-                label = activeReady ? ("Listo (" + formatted + ")") : formatted;
+                label = activeReady ? LocaleController.formatString(R.string.KronoReadyWithSize, formatted) : formatted;
             }
             AndroidUtilities.runOnUIThread(() -> {
                 voiceModelsStatusText = label;
@@ -523,23 +523,23 @@ public class KronoSettingsActivity extends BaseFragment {
         simpleActionBar.setBackButtonImage(R.drawable.ic_ab_back);
         switch (currentSection) {
             case SECTION_PRIVACY:
-                simpleActionBar.setTitle("Privacidad y Seguridad");
+                simpleActionBar.setTitle(LocaleController.getString(R.string.KronoSectionPrivacyTitle));
                 break;
             case SECTION_APPEARANCE:
-                simpleActionBar.setTitle("Apariencia y Temas");
+                simpleActionBar.setTitle(LocaleController.getString(R.string.KronoSectionAppearanceTitle));
                 break;
             case SECTION_CHATS:
-                simpleActionBar.setTitle("Chats, Carpetas y Caché");
+                simpleActionBar.setTitle(LocaleController.getString(R.string.KronoSectionChatsTitle));
                 break;
             case SECTION_AI:
-                simpleActionBar.setTitle("Voz y Traducción");
+                simpleActionBar.setTitle(LocaleController.getString(R.string.KronoSectionAiTitle));
                 break;
             case SECTION_NOTIFICATIONS:
-                simpleActionBar.setTitle("Notificaciones y Diagnóstico");
+                simpleActionBar.setTitle(LocaleController.getString(R.string.KronoSectionNotifTitle));
                 break;
             case SECTION_MAIN:
             default:
-                simpleActionBar.setTitle("Ajustes de KronoGram");
+                simpleActionBar.setTitle(LocaleController.getString(R.string.KronoSettingsTitle));
                 break;
         }
         if (parentLayout != null && parentLayout.isRightLayout()) {
@@ -599,7 +599,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 KronoConfig.setDontSendOnline(!KronoConfig.dontSendOnline);
                 listAdapter.notifyItemRangeChanged(ghostMasterRow, 5);
             } else if (position == hiddenVaultOpenRow) {
-                KronoHiddenLockHelper.authenticate(this, "Bóveda oculta", "Verifica tu identidad para abrir la bóveda", () -> presentFragment(new KronoHiddenVaultActivity()));
+                KronoHiddenLockHelper.authenticate(this, LocaleController.getString(R.string.KronoVaultTitle), LocaleController.getString(R.string.KronoVaultOpenPrompt), () -> presentFragment(new KronoHiddenVaultActivity()));
             } else if (position == hiddenVaultLockMethodRow) {
                 KronoHiddenLockHelper.showSetupLockDialog(this, () -> {
                     if (listAdapter != null) {
@@ -608,7 +608,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 });
             } else if (position == hiddenVaultBiometricRow) {
                 if (!KronoHiddenLockHelper.canUseBiometrics(getParentActivity())) {
-                    BulletinFactory.of(this).createSimpleBulletin(R.drawable.fingerprint, "Tu dispositivo no tiene biometría configurada").show();
+                    BulletinFactory.of(this).createSimpleBulletin(R.drawable.fingerprint, LocaleController.getString(R.string.KronoVaultNoBioDevice)).show();
                 } else {
                     KronoConfig.setHiddenUseBiometric(!KronoConfig.hiddenUseBiometric);
                     if (view instanceof TextCheckCell) {
@@ -702,9 +702,9 @@ public class KronoSettingsActivity extends BaseFragment {
                 }
                 BulletinFactory.of(this).createSimpleBulletin(
                         R.drawable.msg_notifications,
-                        KronoConfig.disableFirebasePush
-                                ? "Push de Google (FCM) desactivado: usando servicio en segundo plano"
-                                : "Push de Google (FCM) reactivado"
+                        LocaleController.getString(KronoConfig.disableFirebasePush
+                                ? R.string.KronoFcmDisabledToast
+                                : R.string.KronoFcmEnabledToast)
                 ).show();
             } else if (position == openThemesRow) {
                 presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_BASIC));
@@ -851,14 +851,14 @@ public class KronoSettingsActivity extends BaseFragment {
                         currentAccount,
                         true,
                         "MANUAL",
-                        "Solicitud del usuario desde Ajustes",
+                        LocaleController.getString(R.string.KronoFolderLogsManualReason),
                         fileName -> {
                             if (listAdapter != null && sendFolderLogsNowRow >= 0) {
                                 listAdapter.notifyItemChanged(sendFolderLogsNowRow);
                             }
                             BulletinFactory.of(this).createSimpleBulletin(
                                     R.drawable.msg_folders,
-                                    "Logs de carpetas enviados a Mensajes Guardados"
+                                    LocaleController.getString(R.string.KronoFolderLogsSent)
                             ).show();
                         },
                         err -> BulletinFactory.of(this).createSimpleBulletin(
@@ -917,9 +917,9 @@ public class KronoSettingsActivity extends BaseFragment {
                 }
                 BulletinFactory.of(this).createSimpleBulletin(
                         R.drawable.msg_notifications,
-                        enabled
-                                ? "Servicio persistente anti-cierre activado"
-                                : "Servicio persistente anti-cierre desactivado"
+                        LocaleController.getString(enabled
+                                ? R.string.KronoPersistentEnabled
+                                : R.string.KronoPersistentDisabled)
                 ).show();
             } else if (position == backgroundPushConnectionRow) {
                 if (KronoConfig.isPersistentForegroundService()) {
@@ -963,12 +963,12 @@ public class KronoSettingsActivity extends BaseFragment {
         String currentName = current != null ? current.name : "";
         final String[] themeKeys = new String[]{"Monet Light", "Monet Dark", "Monet AMOLED"};
         final CharSequence[] items = new CharSequence[]{
-                ("Monet Light".equals(currentName) ? "✓ " : "") + "Monet Light (Claro dinámico)",
-                ("Monet Dark".equals(currentName) ? "✓ " : "") + "Monet Dark (Oscuro dinámico)",
-                ("Monet AMOLED".equals(currentName) ? "✓ " : "") + "Monet AMOLED (Negro puro)"
+                ("Monet Light".equals(currentName) ? "✓ " : "") + LocaleController.getString(R.string.KronoMonetLight),
+                ("Monet Dark".equals(currentName) ? "✓ " : "") + LocaleController.getString(R.string.KronoMonetDark),
+                ("Monet AMOLED".equals(currentName) ? "✓ " : "") + LocaleController.getString(R.string.KronoMonetAmoled)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Tema Monet (Material You)");
+        builder.setTitle(LocaleController.getString(R.string.KronoMonetTheme));
         builder.setItems(items, (dialog, which) -> {
             String key = themeKeys[which];
             Theme.ThemeInfo themeInfo = Theme.getTheme(key);
@@ -981,9 +981,9 @@ public class KronoSettingsActivity extends BaseFragment {
                 if (listAdapter != null && monetThemeRow >= 0) {
                     listAdapter.notifyItemChanged(monetThemeRow);
                 }
-                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, "Tema aplicado: " + key).show();
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, LocaleController.formatString(R.string.KronoThemeApplied, key)).show();
             } else {
-                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, "No se pudo cargar el tema " + key).show();
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, LocaleController.formatString(R.string.KronoThemeLoadFailed, key)).show();
             }
             dialog.dismiss();
         });
@@ -1014,12 +1014,12 @@ public class KronoSettingsActivity extends BaseFragment {
             return;
         }
         final CharSequence[] items = new CharSequence[]{
-                (KronoConfig.uiStyle == 0 ? "✓ " : "") + "Material You (Material 3 / Monet)",
-                (KronoConfig.uiStyle == 1 ? "✓ " : "") + "Estilo iOS",
-                (KronoConfig.uiStyle == 2 ? "✓ " : "") + "Estilo Clásico"
+                (KronoConfig.uiStyle == 0 ? "✓ " : "") + LocaleController.getString(R.string.KronoUiStyleMaterial),
+                (KronoConfig.uiStyle == 1 ? "✓ " : "") + LocaleController.getString(R.string.KronoUiStyleIos),
+                (KronoConfig.uiStyle == 2 ? "✓ " : "") + LocaleController.getString(R.string.KronoUiStyleClassic)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Estilo visual de componentes");
+        builder.setTitle(LocaleController.getString(R.string.KronoUiStyleDialogTitle));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setUiStyle(which);
             int recommendedRadius = KronoConfig.getRecommendedBubbleRadius();
@@ -1042,7 +1042,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 parentLayout.rebuildAllFragmentViews(true, true);
             }
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, "Estilo aplicado: " + KronoConfig.getUiStyleName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, LocaleController.formatString(R.string.KronoStyleApplied, KronoConfig.getUiStyleName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1072,12 +1072,12 @@ public class KronoSettingsActivity extends BaseFragment {
         }
         final CharSequence[] items = new CharSequence[]{
                 (KronoConfig.glassMode == KronoConfig.GLASS_MODE_LIQUID ? "✓ " : "")
-                        + (Build.VERSION.SDK_INT >= 33 ? "Liquid Glass (Refracción y brillo)" : "Liquid Glass (Specular)"),
-                (KronoConfig.glassMode == KronoConfig.GLASS_MODE_FROSTED ? "✓ " : "") + "Frosted Glass (Esmerilado)",
-                (KronoConfig.glassMode == KronoConfig.GLASS_MODE_OFF ? "✓ " : "") + "Desactivado (Sólido)"
+                        + (Build.VERSION.SDK_INT >= 33 ? LocaleController.getString(R.string.KronoGlassLiquidDesc) : "Liquid Glass (Specular)"),
+                (KronoConfig.glassMode == KronoConfig.GLASS_MODE_FROSTED ? "✓ " : "") + LocaleController.getString(R.string.KronoGlassFrostedDesc),
+                (KronoConfig.glassMode == KronoConfig.GLASS_MODE_OFF ? "✓ " : "") + LocaleController.getString(R.string.KronoGlassOff)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Efecto de cristal (Glass)");
+        builder.setTitle(LocaleController.getString(R.string.KronoGlassMode));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setGlassMode(which);
             applyGlassSettingsChange(null, false);
@@ -1085,7 +1085,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 listAdapter.notifyDataSetChanged();
             }
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, "Modo Glass: " + KronoConfig.getGlassModeName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, LocaleController.formatString(R.string.KronoGlassApplied, KronoConfig.getGlassModeName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1096,18 +1096,18 @@ public class KronoSettingsActivity extends BaseFragment {
             return;
         }
         final CharSequence[] items = new CharSequence[]{
-                (KronoConfig.voiceTranscriptionMode == KronoConfig.VOICE_TRANSCRIBE_MODE_AUTO ? "✓ " : "") + "Automático (Telegram gratis → Local offline)",
-                (KronoConfig.voiceTranscriptionMode == KronoConfig.VOICE_TRANSCRIBE_MODE_LOCAL_ONLY ? "✓ " : "") + "Siempre local offline (sin servidores)"
+                (KronoConfig.voiceTranscriptionMode == KronoConfig.VOICE_TRANSCRIBE_MODE_AUTO ? "✓ " : "") + LocaleController.getString(R.string.KronoVoiceModeAuto),
+                (KronoConfig.voiceTranscriptionMode == KronoConfig.VOICE_TRANSCRIBE_MODE_LOCAL_ONLY ? "✓ " : "") + LocaleController.getString(R.string.KronoVoiceModeLocal)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Modo de transcripción de voz");
+        builder.setTitle(LocaleController.getString(R.string.KronoVoiceModeDialogTitle));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setVoiceTranscriptionMode(which);
             if (listAdapter != null && voiceTranscriptionModeRow >= 0) {
                 listAdapter.notifyItemChanged(voiceTranscriptionModeRow);
             }
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, "Modo: " + KronoConfig.getVoiceTranscriptionModeName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, LocaleController.formatString(R.string.KronoModeApplied, KronoConfig.getVoiceTranscriptionModeName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1131,7 +1131,7 @@ public class KronoSettingsActivity extends BaseFragment {
             items[i] = (selected ? "✓ " : "") + label;
         }
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Idioma de transcripción local");
+        builder.setTitle(LocaleController.getString(R.string.KronoVoiceLang));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setVoiceTranscriptionLanguage(codes[which]);
             if (listAdapter != null && voiceTranscriptionLanguageRow >= 0) {
@@ -1139,7 +1139,7 @@ public class KronoSettingsActivity extends BaseFragment {
             }
             refreshVoiceModelsStatus();
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, "Idioma local: " + KronoConfig.getVoiceTranscriptionLanguageName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, LocaleController.formatString(R.string.KronoVoiceLangApplied, KronoConfig.getVoiceTranscriptionLanguageName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1150,23 +1150,23 @@ public class KronoSettingsActivity extends BaseFragment {
             return;
         }
         org.telegram.messenger.KronoVoiceTranscriber.LanguageModelSpec spec = org.telegram.messenger.KronoVoiceTranscriber.getModelSpec(KronoConfig.voiceTranscriptionLanguage);
-        String activeName = spec != null ? (spec.displayName + " (" + spec.approxSize + ")") : KronoConfig.getVoiceTranscriptionLanguageName();
+        String activeName = spec != null ? (org.telegram.messenger.KronoVoiceTranscriber.getLanguageDisplayName(spec.code) + " (" + spec.approxSize + ")") : KronoConfig.getVoiceTranscriptionLanguageName();
         boolean isDownloaded = org.telegram.messenger.KronoVoiceTranscriber.isModelDownloaded(KronoConfig.voiceTranscriptionLanguage);
 
         final CharSequence[] items = new CharSequence[]{
-                (isDownloaded ? "Volver a comprobar / descargar modelo: " : "Descargar ahora: ") + activeName,
-                "Eliminar modelos descargados (" + voiceModelsStatusText + ")"
+                LocaleController.formatString(isDownloaded ? R.string.KronoVoiceModelCheck : R.string.KronoVoiceModelDownloadNow, activeName),
+                LocaleController.formatString(R.string.KronoVoiceModelDelete, voiceModelsStatusText)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Modelos de voz offline (Vosk)");
+        builder.setTitle(LocaleController.getString(R.string.KronoVoiceModels));
         builder.setItems(items, (dialog, which) -> {
             dialog.dismiss();
             if (which == 0) {
-                voiceModelsStatusText = "Descargando...";
+                voiceModelsStatusText = LocaleController.getString(R.string.KronoDownloading);
                 if (listAdapter != null && voiceTranscriptionModelsRow >= 0) {
                     listAdapter.notifyItemChanged(voiceTranscriptionModelsRow);
                 }
-                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, "Descargando modelo " + activeName + "...").show();
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, LocaleController.formatString(R.string.KronoDownloadingModel, activeName)).show();
                 org.telegram.messenger.KronoVoiceTranscriber.downloadModelAsync(KronoConfig.voiceTranscriptionLanguage, (ok, msg) -> {
                     if (isFinishing() || getParentActivity() == null || fragmentView == null) {
                         return;
@@ -1180,7 +1180,7 @@ public class KronoSettingsActivity extends BaseFragment {
                         return;
                     }
                     refreshVoiceModelsStatus();
-                    BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_delete, "Modelos de voz eliminados").show();
+                    BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_delete, LocaleController.getString(R.string.KronoVoiceModelsDeleted)).show();
                 });
             }
         });
@@ -1199,13 +1199,13 @@ public class KronoSettingsActivity extends BaseFragment {
                 KronoConfig.TRANSLATE_PROVIDER_LINGVA
         };
         final CharSequence[] items = new CharSequence[]{
-                (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_TELEGRAM ? "✓ " : "") + "Telegram Oficial",
+                (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_TELEGRAM ? "✓ " : "") + LocaleController.getString(R.string.KronoProviderTelegram),
                 (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_GOOGLE ? "✓ " : "") + "Google Translate",
                 (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_YANDEX ? "✓ " : "") + "Yandex Translate",
                 (KronoConfig.translationProvider == KronoConfig.TRANSLATE_PROVIDER_LINGVA ? "✓ " : "") + "Lingva Translate"
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Motor de traducción");
+        builder.setTitle(LocaleController.getString(R.string.KronoTranslationProviderDialog));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setTranslationProvider(providerValues[which]);
             getMessagesController().getTranslateController().reset();
@@ -1215,7 +1215,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 listAdapter.notifyItemChanged(translationProviderRow);
             }
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_translate, "Motor activo: " + KronoConfig.getTranslationProviderName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_translate, LocaleController.formatString(R.string.KronoProviderApplied, KronoConfig.getTranslationProviderName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1226,23 +1226,23 @@ public class KronoSettingsActivity extends BaseFragment {
             return;
         }
         final CharSequence[] items = new CharSequence[]{
-                (KronoConfig.messageSwipeAction == 0 ? "✓ " : "") + "Responder",
-                (KronoConfig.messageSwipeAction == 1 ? "✓ " : "") + "Editar (si es propio) / Responder",
-                (KronoConfig.messageSwipeAction == 2 ? "✓ " : "") + "Guardar en Mensajes guardados",
-                (KronoConfig.messageSwipeAction == 3 ? "✓ " : "") + "Traducir mensaje",
-                (KronoConfig.messageSwipeAction == 4 ? "✓ " : "") + "Reenviar mensaje",
-                (KronoConfig.messageSwipeAction == 5 ? "✓ " : "") + "Copiar texto",
-                (KronoConfig.messageSwipeAction == 6 ? "✓ " : "") + "Desactivado"
+                (KronoConfig.messageSwipeAction == 0 ? "✓ " : "") + LocaleController.getString(R.string.KronoMsgSwipeReply),
+                (KronoConfig.messageSwipeAction == 1 ? "✓ " : "") + LocaleController.getString(R.string.KronoMsgSwipeEditReply),
+                (KronoConfig.messageSwipeAction == 2 ? "✓ " : "") + LocaleController.getString(R.string.KronoMsgSwipeSave),
+                (KronoConfig.messageSwipeAction == 3 ? "✓ " : "") + LocaleController.getString(R.string.KronoMsgSwipeTranslate),
+                (KronoConfig.messageSwipeAction == 4 ? "✓ " : "") + LocaleController.getString(R.string.KronoMsgSwipeForward),
+                (KronoConfig.messageSwipeAction == 5 ? "✓ " : "") + LocaleController.getString(R.string.KronoMsgSwipeCopy),
+                (KronoConfig.messageSwipeAction == 6 ? "✓ " : "") + LocaleController.getString(R.string.KronoDisabled)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Acción al deslizar sobre un mensaje");
+        builder.setTitle(LocaleController.getString(R.string.KronoMsgSwipeAction));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setMessageSwipeAction(which);
             if (listAdapter != null && messageSwipeActionRow >= 0) {
                 listAdapter.notifyItemChanged(messageSwipeActionRow);
             }
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.menu_reply, "Gesto al deslizar: " + KronoConfig.getMessageSwipeActionName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.menu_reply, LocaleController.formatString(R.string.KronoSwipeApplied, KronoConfig.getMessageSwipeActionName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1253,12 +1253,12 @@ public class KronoSettingsActivity extends BaseFragment {
             return;
         }
         final CharSequence[] items = new CharSequence[]{
-                (KronoConfig.tabMode == KronoConfig.TAB_MODE_TEXT ? "✓ " : "") + "Solo nombre",
-                (KronoConfig.tabMode == KronoConfig.TAB_MODE_ICON_TEXT ? "✓ " : "") + "Icono y nombre",
-                (KronoConfig.tabMode == KronoConfig.TAB_MODE_ICON ? "✓ " : "") + "Solo icono"
+                (KronoConfig.tabMode == KronoConfig.TAB_MODE_TEXT ? "✓ " : "") + LocaleController.getString(R.string.KronoTabModeTitleOnly),
+                (KronoConfig.tabMode == KronoConfig.TAB_MODE_ICON_TEXT ? "✓ " : "") + LocaleController.getString(R.string.KronoTabModeIconTitle),
+                (KronoConfig.tabMode == KronoConfig.TAB_MODE_ICON ? "✓ " : "") + LocaleController.getString(R.string.KronoTabModeIconOnly)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Contenido de las pestañas");
+        builder.setTitle(LocaleController.getString(R.string.KronoTabMode));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setTabMode(which);
             if (listAdapter != null && tabModeRow >= 0) {
@@ -1266,7 +1266,7 @@ public class KronoSettingsActivity extends BaseFragment {
             }
             getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_folders, "Pestañas: " + KronoConfig.getTabModeName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_folders, LocaleController.formatString(R.string.KronoTabsApplied, KronoConfig.getTabModeName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1277,14 +1277,14 @@ public class KronoSettingsActivity extends BaseFragment {
             return;
         }
         final CharSequence[] items = new CharSequence[]{
-                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_DEFAULT ? "✓ " : "") + "Predeterminado",
-                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_ROUNDED ? "✓ " : "") + "Redondeado",
-                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_PILL ? "✓ " : "") + "Píldora",
-                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_VKUI ? "✓ " : "") + "Subrayado inferior (VKUI)",
-                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_TEXT_ONLY ? "✓ " : "") + "Solo texto (sin indicador)"
+                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_DEFAULT ? "✓ " : "") + LocaleController.getString(R.string.KronoDefault),
+                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_ROUNDED ? "✓ " : "") + LocaleController.getString(R.string.KronoTabStyleRounded),
+                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_PILL ? "✓ " : "") + LocaleController.getString(R.string.KronoTabStylePill),
+                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_VKUI ? "✓ " : "") + LocaleController.getString(R.string.KronoTabStyleVkui),
+                (KronoConfig.tabStyle == KronoConfig.TAB_STYLE_TEXT_ONLY ? "✓ " : "") + LocaleController.getString(R.string.KronoTabStyleTextOnly)
         };
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Estilo de las pestañas");
+        builder.setTitle(LocaleController.getString(R.string.KronoTabStyle));
         builder.setItems(items, (dialog, which) -> {
             KronoConfig.setTabStyle(which);
             if (listAdapter != null && tabStyleRow >= 0) {
@@ -1292,7 +1292,7 @@ public class KronoSettingsActivity extends BaseFragment {
             }
             getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             dialog.dismiss();
-            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, "Estilo de pestañas: " + KronoConfig.getTabStyleName()).show();
+            BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_theme, LocaleController.formatString(R.string.KronoTabStyleApplied, KronoConfig.getTabStyleName())).show();
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         showDialog(builder.create());
@@ -1304,7 +1304,7 @@ public class KronoSettingsActivity extends BaseFragment {
         }
         Context context = getParentActivity();
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
-        builder.setTitle("Palabras ocultas bajo Spoiler");
+        builder.setTitle(LocaleController.getString(R.string.KronoSpoilerWordsDialogTitle));
 
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -1317,7 +1317,7 @@ public class KronoSettingsActivity extends BaseFragment {
         editText.setTextColor(Theme.getColor(Theme.key_dialogTextBlack));
         editText.setBackground(Theme.createEditTextDrawable(context, true));
         editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        editText.setHint("Separadas por comas (ej: spoiler, final, clave)");
+        editText.setHint(LocaleController.getString(R.string.KronoSpoilerWordsHint));
         editText.setText(KronoConfig.spoilerWordsRaw);
         editText.setSelection(editText.getText().length());
         editText.setCursorColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
@@ -1333,7 +1333,7 @@ public class KronoSettingsActivity extends BaseFragment {
                 listAdapter.notifyDataSetChanged();
             }
             if (!raw.isEmpty() && !KronoConfig.spoilerWordsEnabled) {
-                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, "Palabras guardadas (activa el filtro arriba para aplicarlas)").show();
+                BulletinFactory.of(this).createSimpleBulletin(R.drawable.msg_info, LocaleController.getString(R.string.KronoSpoilerWordsSaved)).show();
             }
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
@@ -1345,10 +1345,10 @@ public class KronoSettingsActivity extends BaseFragment {
             return;
         }
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Limpiar archivos del caché");
-        builder.setMessage("¿Deseas borrar todos los archivos temporales y multimedia en caché (" + cacheSizeText + ")? Tus chats y tus archivos guardados en Descargas no se eliminarán.");
+        builder.setTitle(LocaleController.getString(R.string.KronoClearCacheDialogTitle));
+        builder.setMessage(LocaleController.formatString(R.string.KronoClearCacheDialogMsg, cacheSizeText));
         builder.setPositiveButton(LocaleController.getString(R.string.Clear), (dialog, which) -> {
-            cacheSizeText = "Limpiando...";
+            cacheSizeText = LocaleController.getString(R.string.KronoClearing);
             if (listAdapter != null && clearCacheNowRow >= 0) {
                 listAdapter.notifyItemChanged(clearCacheNowRow);
             }
@@ -1366,7 +1366,7 @@ public class KronoSettingsActivity extends BaseFragment {
                         listAdapter.notifyItemChanged(clearCacheNowRow);
                     }
                     BulletinFactory.of(KronoSettingsActivity.this)
-                            .createSimpleBulletin(R.drawable.msg_delete, "Caché eliminado: " + freedStr + " liberados")
+                            .createSimpleBulletin(R.drawable.msg_delete, LocaleController.formatString(R.string.KronoCacheCleared, freedStr))
                             .show();
                 });
             });
@@ -1457,7 +1457,7 @@ public class KronoSettingsActivity extends BaseFragment {
         if (KronoConfig.isDisableFirebasePush()) {
             BulletinFactory.of(this).createSimpleBulletin(
                     R.drawable.msg_info,
-                    "FCM está desactivado en Privacidad -> Cero telemetría"
+                    LocaleController.getString(R.string.KronoDiagFcmDisabledMsg)
             ).show();
             return;
         }
@@ -1477,7 +1477,7 @@ public class KronoSettingsActivity extends BaseFragment {
         }
         BulletinFactory.of(this).createSimpleBulletin(
                 R.drawable.msg_notifications,
-                "Solicitando nuevo token FCM y re-registrando con Telegram..."
+                LocaleController.getString(R.string.KronoDiagRefreshingFcm)
         ).show();
         AndroidUtilities.runOnUIThread(() -> {
             if (listAdapter != null && currentSection == SECTION_NOTIFICATIONS) {
@@ -1493,7 +1493,7 @@ public class KronoSettingsActivity extends BaseFragment {
         if (!hasNotificationPermission()) {
             BulletinFactory.of(this).createSimpleBulletin(
                     R.drawable.msg_info,
-                    "Primero concede el permiso de notificaciones del sistema"
+                    LocaleController.getString(R.string.KronoDiagNeedNotifPerm)
             ).show();
             openAppNotificationSettings();
             return;
@@ -1507,7 +1507,7 @@ public class KronoSettingsActivity extends BaseFragment {
             if (Build.VERSION.SDK_INT >= 26) {
                 NotificationManager nm = (NotificationManager) getParentActivity().getSystemService(Context.NOTIFICATION_SERVICE);
                 if (nm != null && nm.getNotificationChannel(channelId) == null) {
-                    NotificationChannel ch = new NotificationChannel(channelId, "Pruebas de KronoGram", NotificationManager.IMPORTANCE_HIGH);
+                    NotificationChannel ch = new NotificationChannel(channelId, LocaleController.getString(R.string.KronoDiagTestChannel), NotificationManager.IMPORTANCE_HIGH);
                     nm.createNotificationChannel(ch);
                 }
             }
@@ -1520,20 +1520,20 @@ public class KronoSettingsActivity extends BaseFragment {
             PendingIntent pi = PendingIntent.getActivity(getParentActivity(), 0, launchIntent, pFlags);
             NotificationCompat.Builder builder = new NotificationCompat.Builder(getParentActivity(), channelId)
                     .setSmallIcon(R.drawable.notification)
-                    .setContentTitle("KronoGram — Prueba de notificación")
-                    .setContentText("El canal y permisos de notificación funcionan correctamente.")
+                    .setContentTitle(LocaleController.getString(R.string.KronoDiagTestTitle))
+                    .setContentText(LocaleController.getString(R.string.KronoDiagTestBody))
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setAutoCancel(true)
                     .setContentIntent(pi);
             NotificationManagerCompat.from(getParentActivity()).notify(49199, builder.build());
             BulletinFactory.of(this).createSimpleBulletin(
                     R.drawable.msg_notifications,
-                    "Notificación local de prueba enviada"
+                    LocaleController.getString(R.string.KronoDiagTestSent)
             ).show();
         } catch (Throwable e) {
             BulletinFactory.of(this).createSimpleBulletin(
                     R.drawable.msg_info,
-                    "Error al enviar prueba: " + e.getMessage()
+                    LocaleController.formatString(R.string.KronoDiagTestError, e.getMessage() != null ? e.getMessage() : "")
             ).show();
         }
     }
@@ -1544,34 +1544,34 @@ public class KronoSettingsActivity extends BaseFragment {
         }
         StringBuilder sb = new StringBuilder();
         boolean hasGms = ApplicationLoader.getPushProvider().hasServices();
-        sb.append("• Google Play Services: ").append(hasGms ? "Disponible" : "No disponible").append("\n");
-        sb.append("• Firebase Push (FCM): ").append(KronoConfig.isDisableFirebasePush() ? "Desactivado por usuario" : "Habilitado").append("\n");
-        sb.append("• Token FCM: ").append(TextUtils.isEmpty(SharedConfig.pushString) ? "No generado" : SharedConfig.pushString).append("\n");
-        sb.append("• Estado interno: ").append(TextUtils.isEmpty(SharedConfig.pushStringStatus) ? "OK" : SharedConfig.pushStringStatus).append("\n");
+        sb.append("• ").append(LocaleController.getString(R.string.KronoDiagPlayServices)).append(": ").append(LocaleController.getString(hasGms ? R.string.KronoAvailable : R.string.KronoUnavailable)).append("\n");
+        sb.append("• ").append(LocaleController.getString(R.string.KronoDiagFcm)).append(": ").append(LocaleController.getString(KronoConfig.isDisableFirebasePush() ? R.string.KronoDiagDetailDisabledByUser : R.string.KronoDiagDetailEnabled)).append("\n");
+        sb.append("• FCM Token: ").append(TextUtils.isEmpty(SharedConfig.pushString) ? LocaleController.getString(R.string.KronoDiagDetailNotGenerated) : SharedConfig.pushString).append("\n");
+        sb.append("• ").append(LocaleController.getString(R.string.KronoDiagDetailInternalStatus)).append(": ").append(TextUtils.isEmpty(SharedConfig.pushStringStatus) ? "OK" : SharedConfig.pushStringStatus).append("\n");
         if (!TextUtils.isEmpty(PushListenerController.lastTokenError)) {
-            sb.append("• Último error FCM: ").append(PushListenerController.lastTokenError).append("\n");
+            sb.append("• ").append(LocaleController.getString(R.string.KronoDiagDetailLastFcmError)).append(": ").append(PushListenerController.lastTokenError).append("\n");
         }
-        sb.append("• Cuenta actual registrada: ").append(UserConfig.getInstance(currentAccount).registeredForPush ? "Sí" : "No").append("\n");
-        sb.append("• Conexión push MTProto: ").append(ConnectionsManager.getInstance(currentAccount).isPushConnectionEnabled() ? "Activa" : "Inactiva").append("\n");
-        sb.append("• Servicio anti-cierre: ").append(NotificationsService.isRunningInForeground ? "En primer plano" : "Inactivo").append("\n");
-        sb.append("• Batería sin restricciones: ").append(isBatteryOptimizationIgnored() ? "Sí" : "No (optimizada)").append("\n");
+        sb.append("• ").append(LocaleController.getString(R.string.KronoDiagDetailAccountRegistered)).append(": ").append(LocaleController.getString(UserConfig.getInstance(currentAccount).registeredForPush ? R.string.KronoYes : R.string.KronoNo)).append("\n");
+        sb.append("• ").append(LocaleController.getString(R.string.KronoDiagDetailMtprotoPush)).append(": ").append(LocaleController.getString(ConnectionsManager.getInstance(currentAccount).isPushConnectionEnabled() ? R.string.KronoActive : R.string.KronoInactive)).append("\n");
+        sb.append("• ").append(LocaleController.getString(R.string.KronoDiagServiceRunning)).append(": ").append(LocaleController.getString(NotificationsService.isRunningInForeground ? R.string.KronoRunningFg : R.string.KronoInactive)).append("\n");
+        sb.append("• ").append(LocaleController.getString(R.string.KronoDiagDetailBatteryUnrestricted)).append(": ").append(LocaleController.getString(isBatteryOptimizationIgnored() ? R.string.KronoYes : R.string.KronoDiagDetailNoOptimized)).append("\n");
         if (PushListenerController.lastPushReceiveTime > 0) {
             String ts = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(PushListenerController.lastPushReceiveTime));
-            sb.append("• Último push recibido: ").append(PushListenerController.lastPushType).append(" a las ").append(ts);
+            sb.append("• ").append(LocaleController.getString(R.string.KronoDiagLastPush)).append(": ").append(PushListenerController.lastPushType).append(" · ").append(ts);
         } else {
-            sb.append("• Último push recibido: Ninguno en esta sesión");
+            sb.append("• ").append(LocaleController.getString(R.string.KronoDiagLastPush)).append(": ").append(LocaleController.getString(R.string.KronoDiagDetailNoneThisSession));
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-        builder.setTitle("Detalle técnico Push");
+        builder.setTitle(LocaleController.getString(R.string.KronoDiagDetailTitle));
         builder.setMessage(sb.toString());
         if (!TextUtils.isEmpty(SharedConfig.pushString)) {
-            builder.setNeutralButton("Copiar token", (d, w) -> {
+            builder.setNeutralButton(LocaleController.getString(R.string.KronoCopyToken), (d, w) -> {
                 AndroidUtilities.addToClipboard(SharedConfig.pushString);
-                BulletinFactory.of(KronoSettingsActivity.this).createSimpleBulletin(R.drawable.msg_copy, "Token FCM copiado").show();
+                BulletinFactory.of(KronoSettingsActivity.this).createSimpleBulletin(R.drawable.msg_copy, LocaleController.getString(R.string.KronoTokenCopied)).show();
             });
         }
-        builder.setPositiveButton("Re-registrar", (d, w) -> forcePushTokenReregister());
+        builder.setPositiveButton(LocaleController.getString(R.string.KronoReRegister), (d, w) -> forcePushTokenReregister());
         builder.setNegativeButton(LocaleController.getString(R.string.Close), null);
         showDialog(builder.create());
     }
@@ -1718,159 +1718,159 @@ public class KronoSettingsActivity extends BaseFragment {
             if (type == 0) {
                 HeaderCell headerCell = (HeaderCell) holder.itemView;
                 if (position == categoriesHeaderRow) {
-                    headerCell.setText("Ajustes");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderSettings));
                 } else if (position == ghostHeaderRow) {
-                    headerCell.setText("Modo Fantasma (Ghost Mode)");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderGhost));
                 } else if (position == hiddenVaultHeaderRow) {
-                    headerCell.setText("Chats y carpetas ocultos");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderHiddenVault));
                 } else if (position == privacyExtraHeaderRow) {
-                    headerCell.setText("Privacidad avanzada");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderPrivacyExtra));
                 } else if (position == telemetryHeaderRow) {
-                    headerCell.setText("Cero telemetría y rastreadores");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderTelemetry));
                 } else if (position == themeHeaderRow) {
-                    headerCell.setText("Temas");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderThemes));
                 } else if (position == tabsHeaderRow) {
-                    headerCell.setText("Pestañas de chats");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderTabs));
                 } else if (position == chatsHeaderRow) {
-                    headerCell.setText("Chats y Carpetas");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderChats));
                 } else if (position == storageHeaderRow) {
-                    headerCell.setText("Archivos y Caché");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderStorage));
                 } else if (position == aiHeaderRow) {
-                    headerCell.setText("Transcripción y Traducción");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderAi));
                 } else if (position == notifServiceHeaderRow) {
-                    headerCell.setText("Servicio y entrega en segundo plano");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderNotifService));
                 } else if (position == diagHeaderRow) {
-                    headerCell.setText("Diagnóstico de notificaciones Push");
+                    headerCell.setText(LocaleController.getString(R.string.KronoHeaderDiag));
                 }
             } else if (type == 1) {
                 SettingsActivity.SettingCell settingCell = (SettingsActivity.SettingCell) holder.itemView;
                 if (position == privacyCategoryRow) {
-                    settingCell.set(0xFF28B9F2, 0xFF0A98E6, R.drawable.settings_privacy, "Privacidad y seguridad", "Modo Fantasma, bóveda oculta, anti-borrado y 1 vista", null);
+                    settingCell.set(0xFF28B9F2, 0xFF0A98E6, R.drawable.settings_privacy, LocaleController.getString(R.string.KronoSectionPrivacyTitle), LocaleController.getString(R.string.KronoSectionPrivacySubtitle), null);
                 } else if (position == appearanceCategoryRow) {
-                    settingCell.set(0xFFF34A71, 0xFFDC284E, R.drawable.settings_chat, "Apariencia", "Temas, Material You y estilo de la interfaz", null);
+                    settingCell.set(0xFFF34A71, 0xFFDC284E, R.drawable.settings_chat, LocaleController.getString(R.string.KronoSectionAppearanceShort), LocaleController.getString(R.string.KronoSectionAppearanceSubtitle), null);
                 } else if (position == chatsCategoryRow) {
-                    settingCell.set(0xFFF39C27, 0xFFE37810, R.drawable.settings_folders, "Chats", "Carpetas, gestos, anclados ilimitados y caché", null);
+                    settingCell.set(0xFFF39C27, 0xFFE37810, R.drawable.settings_folders, LocaleController.getString(R.string.KronoSectionChatsShort), LocaleController.getString(R.string.KronoSectionChatsSubtitle), null);
                 } else if (position == aiCategoryRow) {
-                    settingCell.set(0xFF9663FA, 0xFF7244E6, R.drawable.settings_language, "Voz y Traducción", "Transcripción de voz gratuita y motores de traducción", null);
+                    settingCell.set(0xFF9663FA, 0xFF7244E6, R.drawable.settings_language, LocaleController.getString(R.string.KronoSectionAiTitle), LocaleController.getString(R.string.KronoSectionAiSubtitle), null);
                 } else if (position == notificationsCategoryRow) {
-                    settingCell.set(0xFFFA5858, 0xFFE3324B, R.drawable.settings_sounds, "Notificaciones y Diagnóstico", "Servicio anti-cierre, estado FCM, batería y pruebas push", null);
+                    settingCell.set(0xFFFA5858, 0xFFE3324B, R.drawable.settings_sounds, LocaleController.getString(R.string.KronoSectionNotifTitle), LocaleController.getString(R.string.KronoSectionNotifSubtitle), null);
                 } else if (position == backupCategoryRow) {
-                    settingCell.set(0xFF19B5C9, 0xFF0E88A6, R.drawable.settings_data, "Copia de seguridad", "Nube de Telegram, archivo local y Mensajes Guardados", null);
+                    settingCell.set(0xFF19B5C9, 0xFF0E88A6, R.drawable.settings_data, LocaleController.getString(R.string.KronoSectionBackupTitle), LocaleController.getString(R.string.KronoSectionBackupSubtitle), null);
                 }
             } else if (type == 2) {
                 TextCheckCell checkCell = (TextCheckCell) holder.itemView;
                 if (position == ghostMasterRow) {
-                    checkCell.setTextAndValueAndCheck("Activar Modo Fantasma completo", "Oculta lectura, historias, escribiendo y en línea", KronoConfig.ghostMode, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoGhostMaster), LocaleController.getString(R.string.KronoGhostMasterDesc), KronoConfig.ghostMode, true, true);
                 } else if (position == ghostDontReadMessagesRow) {
-                    checkCell.setTextAndCheck("No marcar mensajes como leídos", KronoConfig.isGhostDontReadMessages(), true);
+                    checkCell.setTextAndCheck(LocaleController.getString(R.string.KronoGhostDontReadMsg), KronoConfig.isGhostDontReadMessages(), true);
                 } else if (position == ghostDontReadStoriesRow) {
-                    checkCell.setTextAndCheck("No marcar historias como vistas", KronoConfig.isGhostDontReadStories(), true);
+                    checkCell.setTextAndCheck(LocaleController.getString(R.string.KronoGhostDontReadStories), KronoConfig.isGhostDontReadStories(), true);
                 } else if (position == ghostDontSendTypingRow) {
-                    checkCell.setTextAndCheck("Ocultar estado «escribiendo...»", KronoConfig.isGhostDontSendTyping(), true);
+                    checkCell.setTextAndCheck(LocaleController.getString(R.string.KronoGhostDontSendTyping), KronoConfig.isGhostDontSendTyping(), true);
                 } else if (position == ghostDontSendOnlineRow) {
-                    checkCell.setTextAndCheck("Ocultar estado «en línea»", KronoConfig.isGhostDontSendOnline(), false);
+                    checkCell.setTextAndCheck(LocaleController.getString(R.string.KronoGhostDontSendOnline), KronoConfig.isGhostDontSendOnline(), false);
                 } else if (position == hiddenVaultBiometricRow) {
                     boolean bioReady = KronoHiddenLockHelper.canUseBiometrics(mContext);
-                    checkCell.setTextAndValueAndCheck("Desbloqueo biométrico", "Permite usar huella o rostro junto al PIN o contraseña", bioReady && KronoConfig.hiddenUseBiometric, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoVaultBiometric), LocaleController.getString(R.string.KronoVaultBiometricDesc), bioReady && KronoConfig.hiddenUseBiometric, true, true);
                     checkCell.setEnabled(bioReady, null);
                 } else if (position == hiddenVaultMuteNotifRow) {
-                    checkCell.setTextAndValueAndCheck("Silenciar notificaciones de ocultos", "Evita notificaciones y previsualizaciones de chats y carpetas ocultos", KronoConfig.hiddenMuteNotifications, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoVaultMuteNotif), LocaleController.getString(R.string.KronoVaultMuteNotifDesc), KronoConfig.hiddenMuteNotifications, true, true);
                 } else if (position == hiddenVaultHideFolderChatsRow) {
-                    checkCell.setTextAndValueAndCheck("Ocultar chats de carpetas ocultas", "También oculta sus chats en la pestaña «Todos» y en la búsqueda", KronoConfig.hiddenHideFolderChatsEverywhere, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoVaultHideFolderChats), LocaleController.getString(R.string.KronoVaultHideFolderChatsDesc), KronoConfig.hiddenHideFolderChatsEverywhere, true, true);
                 } else if (position == hiddenVaultAutoLockRow) {
-                    checkCell.setTextAndValueAndCheck("Bloquear bóveda al salir", "Exige volver a desbloquear la bóveda al ir a segundo plano", KronoConfig.hiddenAutoLockOnBackground, true, false);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoVaultAutoLock), LocaleController.getString(R.string.KronoVaultAutoLockDesc), KronoConfig.hiddenAutoLockOnBackground, true, false);
                 } else if (position == hidePhoneNumberRow) {
-                    checkCell.setTextAndValueAndCheck("Ocultar número de teléfono", "Oculta tu número en Ajustes, Cajón y Perfil", KronoConfig.hidePhoneNumber, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoHidePhone), LocaleController.getString(R.string.KronoHidePhoneDesc), KronoConfig.hidePhoneNumber, true, true);
                 } else if (position == hideChatListNamesRow) {
-                    checkCell.setTextAndValueAndCheck("Ocultar nombres y avatares en lista", "Modo privacidad en la pantalla principal de chats", KronoConfig.hideChatListNamesAvatars, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoHideChatNames), LocaleController.getString(R.string.KronoHideChatNamesDesc), KronoConfig.hideChatListNamesAvatars, true, true);
                 } else if (position == blockSecretChatsRow) {
-                    checkCell.setTextAndValueAndCheck("Bloquear inicio de chats secretos", "Impide iniciar o aceptar chats secretos", KronoConfig.blockSecretChats, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoBlockSecretChats), LocaleController.getString(R.string.KronoBlockSecretChatsDesc), KronoConfig.blockSecretChats, true, true);
                 } else if (position == antiDeleteMessagesRow) {
-                    checkCell.setTextAndValueAndCheck("Guardar mensajes eliminados", "Conserva localmente mensajes borrados y muestra «eliminado»", KronoConfig.antiDeleteMessages, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoAntiDelete), LocaleController.getString(R.string.KronoAntiDeleteDesc), KronoConfig.antiDeleteMessages, true, true);
                 } else if (position == antiDeleteExcludeChannelsRow) {
-                    checkCell.setTextAndValueAndCheck("Excluir canales en anti-borrado", "Aplica anti-borrado solo a chats privados, grupos y supergrupos", KronoConfig.antiDeleteExcludeChannels, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoAntiDeleteNoChannels), LocaleController.getString(R.string.KronoAntiDeleteNoChannelsDesc), KronoConfig.antiDeleteExcludeChannels, true, true);
                 } else if (position == unlimitedViewOnceRow) {
-                    checkCell.setTextAndValueAndCheck("Ver multimedia de 1 sola vista sin límite", "Permite reabrir fotos, vídeos, audios y notas redondas temporales", KronoConfig.unlimitedViewOnce, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoUnlimitedViewOnce), LocaleController.getString(R.string.KronoUnlimitedViewOnceDesc), KronoConfig.unlimitedViewOnce, true, true);
                 } else if (position == viewOnceAllowSaveRow) {
-                    checkCell.setTextAndValueAndCheck("Permitir capturas y guardado en 1 vista", "Habilita capturas de pantalla y guardar en galería multimedia efímera", KronoConfig.viewOnceAllowSaveAndScreenshots, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoViewOnceSave), LocaleController.getString(R.string.KronoViewOnceSaveDesc), KronoConfig.viewOnceAllowSaveAndScreenshots, true, true);
                 } else if (position == allowRestrictedContentBypassRow) {
-                    checkCell.setTextAndValueAndCheck("Omitir restricciones en chats y canales", "Permite capturas, grabación de pantalla, copia, guardado y reenvío en canales, chats, historias y chats secretos", KronoConfig.allowRestrictedContentBypass, true, false);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoBypassRestricted), LocaleController.getString(R.string.KronoBypassRestrictedDesc), KronoConfig.allowRestrictedContentBypass, true, false);
                 } else if (position == zeroTelemetryRow) {
-                    checkCell.setTextAndValueAndCheck("Cero telemetría / Sin rastreadores", "Bloqueo integral: desactiva logs internos, Firebase Analytics, anuncios y URL trackers", KronoConfig.zeroTelemetry, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoZeroTelemetry), LocaleController.getString(R.string.KronoZeroTelemetryDesc), KronoConfig.zeroTelemetry, true, true);
                 } else if (position == blockTelegramTelemetryRow) {
-                    checkCell.setTextAndValueAndCheck("Bloquear telemetría interna de Telegram", "Impide enviar eventos appLog, estadísticas de dispositivo e install referrer", KronoConfig.isBlockTelegramTelemetry(), true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoBlockTgTelemetry), LocaleController.getString(R.string.KronoBlockTgTelemetryDesc), KronoConfig.isBlockTelegramTelemetry(), true, true);
                 } else if (position == disableFirebaseAnalyticsRow) {
-                    checkCell.setTextAndValueAndCheck("Desactivar Firebase Analytics", "Detiene la recopilación de analíticas e ID de publicidad en tiempo de ejecución", KronoConfig.isDisableFirebaseAnalytics(), true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoDisableFirebaseAnalytics), LocaleController.getString(R.string.KronoDisableFirebaseAnalyticsDesc), KronoConfig.isDisableFirebaseAnalytics(), true, true);
                 } else if (position == blockSponsoredMessagesRow) {
-                    checkCell.setTextAndValueAndCheck("Bloquear anuncios y métricas patrocinadas", "Oculta mensajes/vídeos patrocinados y bloquea reportes de vista o clic", KronoConfig.isBlockSponsoredMessages(), true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoBlockSponsored), LocaleController.getString(R.string.KronoBlockSponsoredDesc), KronoConfig.isBlockSponsoredMessages(), true, true);
                 } else if (position == stripUrlTrackersRow) {
-                    checkCell.setTextAndValueAndCheck("Limpiar rastreadores en enlaces", "Elimina utm_*, fbclid, gclid, igshid, si y similares al abrir URLs", KronoConfig.isStripUrlTrackers(), true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoStripUrlTrackers), LocaleController.getString(R.string.KronoStripUrlTrackersDesc), KronoConfig.isStripUrlTrackers(), true, true);
                 } else if (position == disableFirebasePushRow) {
-                    checkCell.setTextAndValueAndCheck("Desactivar Push de Google (FCM)", "Evita conectar con Firebase Push; usa servicio local en segundo plano", KronoConfig.isDisableFirebasePush(), true, false);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoDisableFcm), LocaleController.getString(R.string.KronoDisableFcmDesc), KronoConfig.isDisableFirebasePush(), true, false);
                 } else if (position == tabStyleStrokeRow) {
-                    checkCell.setTextAndValueAndCheck("Contorno en pestaña activa", "Añade un borde sutil alrededor de la pestaña seleccionada", KronoConfig.tabStyleStroke, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoTabStroke), LocaleController.getString(R.string.KronoTabStrokeDesc), KronoConfig.tabStyleStroke, true, true);
                 } else if (position == hideTabsCountersRow) {
-                    checkCell.setTextAndValueAndCheck("Ocultar contadores en pestañas", "Esconde el globo numérico de mensajes no leídos en las carpetas", KronoConfig.hideTabsCounters, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoHideTabCounters), LocaleController.getString(R.string.KronoHideTabCountersDesc), KronoConfig.hideTabsCounters, true, true);
                 } else if (position == folderNameInHeaderRow) {
-                    checkCell.setTextAndValueAndCheck("Nombre de carpeta en cabecera", "Muestra el nombre de la carpeta activa en la barra superior", KronoConfig.folderNameInHeader, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoFolderNameHeader), LocaleController.getString(R.string.KronoFolderNameHeaderDesc), KronoConfig.folderNameInHeader, true, true);
                 } else if (position == disableTabsSwipeRow) {
-                    checkCell.setTextAndValueAndCheck("Desactivar deslizamiento entre carpetas", "Evita cambiar de carpeta al deslizar horizontalmente en la lista", KronoConfig.disableTabsSwipe, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoDisableTabSwipe), LocaleController.getString(R.string.KronoDisableTabSwipeDesc), KronoConfig.disableTabsSwipe, true, true);
                 } else if (position == infiniteFolderScrollRow) {
-                    checkCell.setTextAndValueAndCheck("Scroll infinito entre carpetas", "Al llegar a la última o primera carpeta y seguir deslizando, vuelve al otro extremo en lugar de ir a Contactos", KronoConfig.infiniteFolderScroll, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoInfiniteFolderScroll), LocaleController.getString(R.string.KronoInfiniteFolderScrollDesc), KronoConfig.infiniteFolderScroll, true, true);
                     checkCell.setEnabled(!KronoConfig.disableTabsSwipe, null);
                 } else if (position == swipeToEditOwnRow) {
-                    checkCell.setTextAndValueAndCheck("Editar mensaje enviado con gesto", "Desliza hacia la izquierda un mensaje propio para editarlo", KronoConfig.swipeToEditOwnMessage, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoSwipeEditOwn), LocaleController.getString(R.string.KronoSwipeEditOwnDesc), KronoConfig.swipeToEditOwnMessage, true, true);
                 } else if (position == deleteForAllDefaultRow) {
-                    checkCell.setTextAndValueAndCheck("«Borrar para todos» por defecto", "Marca automáticamente la casilla al eliminar mensajes", KronoConfig.deleteForAllByDefault, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoDeleteForAll), LocaleController.getString(R.string.KronoDeleteForAllDesc), KronoConfig.deleteForAllByDefault, true, true);
                 } else if (position == showTimeWithSecondsRow) {
-                    checkCell.setTextAndValueAndCheck("Hora exacta con segundos", "Muestra los segundos en la hora de envío y recepción de los mensajes", KronoConfig.showTimeWithSeconds, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoTimeWithSeconds), LocaleController.getString(R.string.KronoTimeWithSecondsDesc), KronoConfig.showTimeWithSeconds, true, true);
                 } else if (position == unlimitedPinnedChatsRow) {
-                    checkCell.setTextAndValueAndCheck("Chats anclados ilimitados (local)", "Permite fijar tantos chats como quieras sin límite", KronoConfig.unlimitedPinnedChats, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoUnlimitedPins), LocaleController.getString(R.string.KronoUnlimitedPinsDesc), KronoConfig.unlimitedPinnedChats, true, true);
                 } else if (position == quickGoToMessageRow) {
                     checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoQuickGoToMessage), LocaleController.getString(R.string.KronoQuickGoToMessageDesc), KronoConfig.quickGoToMessageInSearch, true, true);
                 } else if (position == longClickMediaMenuRow) {
                     checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoLongClickMediaMenu), LocaleController.getString(R.string.KronoLongClickMediaMenuDesc), KronoConfig.longClickMediaShowsMenu, true, true);
                 } else if (position == disablePullToNextChannelRow) {
-                    checkCell.setTextAndValueAndCheck("Desactivar salto al siguiente canal o tema", "Evita pasar automáticamente al siguiente canal o tema sin leer al seguir haciendo scroll al final", KronoConfig.disablePullToNextChannel, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoDisableNextChannel), LocaleController.getString(R.string.KronoDisableNextChannelDesc), KronoConfig.disablePullToNextChannel, true, true);
                 } else if (position == showFavoritesFolderRow) {
-                    checkCell.setTextAndValueAndCheck("Mostrar carpeta «Favoritos»", "Carpeta local protegida (⭐) para tus chats favoritos", KronoConfig.showFavoritesFolder, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoShowFavorites), LocaleController.getString(R.string.KronoShowFavoritesDesc), KronoConfig.showFavoritesFolder, true, true);
                 } else if (position == hideAllChatsTabRow) {
-                    checkCell.setTextAndValueAndCheck("Eliminar carpeta «Todos»", "Oculta la pestaña «Todos» cuando tienes carpetas", KronoConfig.hideAllChatsTab, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoHideAllChatsTab), LocaleController.getString(R.string.KronoHideAllChatsTabDesc), KronoConfig.hideAllChatsTab, true, true);
                 } else if (position == autoSendFolderLogsRow) {
-                    checkCell.setTextAndValueAndCheck("Auto-enviar logs de carpetas", "Envía un reporte a Mensajes Guardados si falla la sincronización", KronoConfig.autoSendFolderSyncLogs, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoAutoSendFolderLogs), LocaleController.getString(R.string.KronoAutoSendFolderLogsDesc), KronoConfig.autoSendFolderSyncLogs, true, true);
                 } else if (position == spoilerWordsToggleRow) {
-                    checkCell.setTextAndCheck("Filtro de palabras ocultas bajo Spoiler", KronoConfig.spoilerWordsEnabled, true);
+                    checkCell.setTextAndCheck(LocaleController.getString(R.string.KronoSpoilerWordsToggle), KronoConfig.spoilerWordsEnabled, true);
                 } else if (position == keepOriginalFilenameRow) {
-                    checkCell.setTextAndValueAndCheck("Guardar archivos con nombre original", "Evita prefijos numéricos al guardar documentos", KronoConfig.keepOriginalFilename, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoKeepOriginalFilename), LocaleController.getString(R.string.KronoKeepOriginalFilenameDesc), KronoConfig.keepOriginalFilename, true, true);
                 } else if (position == freeVoiceTranscriptionRow) {
-                    checkCell.setTextAndValueAndCheck("Transcripción de voz gratuita", "Habilita el botón voz-a-texto sin requerir Premium", KronoConfig.freeVoiceTranscription, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoFreeVoice), LocaleController.getString(R.string.KronoFreeVoiceDesc), KronoConfig.freeVoiceTranscription, true, true);
                 } else if (position == freeChatTranslationRow) {
-                    checkCell.setTextAndValueAndCheck("Traducir chats completos gratis", "Habilita la traducción completa de chats y canales sin Telegram Premium usando el motor elegido", KronoConfig.freeChatTranslation, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoFreeChatTranslation), LocaleController.getString(R.string.KronoFreeChatTranslationDesc), KronoConfig.freeChatTranslation, true, true);
                 } else if (position == persistentForegroundServiceRow) {
-                    checkCell.setTextAndValueAndCheck("Servicio persistente (anti-cierre OEM)", "Mantiene una notificación silenciosa en primer plano para evitar cierres por Doze, Xiaomi, Samsung o Huawei", KronoConfig.isPersistentForegroundService(), true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoPersistentService), LocaleController.getString(R.string.KronoPersistentServiceDesc), KronoConfig.isPersistentForegroundService(), true, true);
                 } else if (position == backgroundPushConnectionRow) {
                     boolean persistent = KronoConfig.isPersistentForegroundService();
                     boolean bgConn = persistent || MessagesController.getGlobalNotificationsSettings().getBoolean("pushConnection", false);
-                    checkCell.setTextAndValueAndCheck("Conexión TCP en segundo plano", "Mantiene el socket MTProto activo si FCM falla o está desactivado", bgConn, true, false);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoBgTcp), LocaleController.getString(R.string.KronoBgTcpDesc), bgConn, true, false);
                     checkCell.setEnabled(!persistent, null);
                 } else if (position == glassSettingsBarRow) {
                     final boolean glassMasterOn = !KronoConfig.isGlassOff();
-                    checkCell.setTextAndValueAndCheck("Cristal en barra de ajustes", "Botones y barra superior en Ajustes, Perfil y listas", glassMasterOn && KronoConfig.glassOnSettingsBar, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoGlassSettingsBar), LocaleController.getString(R.string.KronoGlassSettingsBarDesc), glassMasterOn && KronoConfig.glassOnSettingsBar, true, true);
                     checkCell.setEnabled(glassMasterOn, null);
                 } else if (position == glassSearchBarsRow) {
                     final boolean glassMasterOn = !KronoConfig.isGlassOff();
-                    checkCell.setTextAndValueAndCheck("Cristal en barras de búsqueda", "Buscador principal, dentro de chats y filtros", glassMasterOn && KronoConfig.glassOnSearchBars, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoGlassSearchBars), LocaleController.getString(R.string.KronoGlassSearchBarsDesc), glassMasterOn && KronoConfig.glassOnSearchBars, true, true);
                     checkCell.setEnabled(glassMasterOn, null);
                 } else if (position == glassBottomBarRow) {
                     final boolean glassMasterOn = !KronoConfig.isGlassOff();
-                    checkCell.setTextAndValueAndCheck("Cristal en barra inferior y pestañas", "Barra de navegación inferior y pestañas de carpetas", glassMasterOn && KronoConfig.glassOnBottomBar, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoGlassBottomBar), LocaleController.getString(R.string.KronoGlassBottomBarDesc), glassMasterOn && KronoConfig.glassOnBottomBar, true, true);
                     checkCell.setEnabled(glassMasterOn, null);
                 } else if (position == glassChatBarsRow) {
                     final boolean glassMasterOn = !KronoConfig.isGlassOff();
-                    checkCell.setTextAndValueAndCheck("Cristal en chat y menús", "Barra superior de chats, campo de mensaje y menús flotantes", glassMasterOn && KronoConfig.glassOnChatBars, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoGlassChatBars), LocaleController.getString(R.string.KronoGlassChatBarsDesc), glassMasterOn && KronoConfig.glassOnChatBars, true, true);
                     checkCell.setEnabled(glassMasterOn, null);
                 } else if (position == disableTitleMarqueeRow) {
-                    checkCell.setTextAndValueAndCheck("Quitar efecto marquee en los títulos", "Evita el desplazamiento lateral continuo en títulos largos", KronoConfig.disableTitleMarquee, true, true);
+                    checkCell.setTextAndValueAndCheck(LocaleController.getString(R.string.KronoDisableMarquee), LocaleController.getString(R.string.KronoDisableMarqueeDesc), KronoConfig.disableTitleMarquee, true, true);
                 } else if (position == smoothSplashAnimationRow) {
                     final boolean splashSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
                     checkCell.setTextAndValueAndCheck(
@@ -1888,118 +1888,118 @@ public class KronoSettingsActivity extends BaseFragment {
                     int chatsCount = KronoConfig.getHiddenDialogs(currentAccount).size();
                     int foldersCount = KronoConfig.getHiddenFilterIds(currentAccount).size();
                     String summary = (chatsCount == 0 && foldersCount == 0)
-                            ? "Vacía"
-                            : (chatsCount + " chats · " + foldersCount + " carpetas");
-                    settingsCell.setTextAndValue("Abrir bóveda oculta", summary, true);
+                            ? LocaleController.getString(R.string.KronoVaultEmpty)
+                            : LocaleController.formatString(R.string.KronoVaultSummary, chatsCount, foldersCount);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoVaultOpen), summary, true);
                 } else if (position == hiddenVaultLockMethodRow) {
-                    settingsCell.setTextAndValue("Método de bloqueo", KronoConfig.getHiddenLockSummary(KronoHiddenLockHelper.canUseBiometrics(mContext)), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoVaultLockMethod), KronoConfig.getHiddenLockSummary(KronoHiddenLockHelper.canUseBiometrics(mContext)), true);
                 } else if (position == openThemesRow) {
-                    settingsCell.setTextAndValue("Temas", "Abrir Ajustes de chats", true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoHeaderThemes), LocaleController.getString(R.string.KronoOpenThemesDesc), true);
                 } else if (position == monetThemeRow) {
                     Theme.ThemeInfo cur = Theme.getCurrentTheme();
-                    String curName = cur != null && !android.text.TextUtils.isEmpty(cur.name) ? cur.name : "Predeterminado";
-                    settingsCell.setTextAndValue("Tema Monet (Material You)", curName, true);
+                    String curName = cur != null && !android.text.TextUtils.isEmpty(cur.name) ? cur.name : LocaleController.getString(R.string.KronoDefault);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoMonetTheme), curName, true);
                 } else if (position == uiStyleRow) {
-                    settingsCell.setTextAndValue("Estilo visual de interfaz", KronoConfig.getUiStyleName(), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoUiStyle), KronoConfig.getUiStyleName(), true);
                 } else if (position == glassModeRow) {
-                    settingsCell.setTextAndValue("Efecto de cristal (Glass)", KronoConfig.getGlassModeName(), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoGlassMode), KronoConfig.getGlassModeName(), true);
                 } else if (position == tabModeRow) {
-                    settingsCell.setTextAndValue("Contenido de las pestañas", KronoConfig.getTabModeName(), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoTabMode), KronoConfig.getTabModeName(), true);
                 } else if (position == tabStyleRow) {
-                    settingsCell.setTextAndValue("Estilo de las pestañas", KronoConfig.getTabStyleName(), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoTabStyle), KronoConfig.getTabStyleName(), true);
                 } else if (position == sendFolderLogsNowRow) {
                     String lastFail = FolderSyncLogger.getLastFailureSummary(currentAccount);
                     int events = FolderSyncLogger.getBufferedEventCount();
                     String summary = lastFail != null
-                            ? ("Fallo: " + lastFail)
-                            : (events > 0 ? (events + " eventos") : "Enviar ahora");
-                    settingsCell.setTextAndValue("Enviar logs de sincronización de carpetas", summary, false);
+                            ? LocaleController.formatString(R.string.KronoFolderLogsFailure, lastFail)
+                            : (events > 0 ? LocaleController.formatString(R.string.KronoFolderLogsEvents, events) : LocaleController.getString(R.string.KronoSendNow));
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoSendFolderLogsNow), summary, false);
                 } else if (position == messageSwipeActionRow) {
-                    settingsCell.setTextAndValue("Acción al deslizar sobre un mensaje", KronoConfig.getMessageSwipeActionName(), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoMsgSwipeAction), KronoConfig.getMessageSwipeActionName(), true);
                 } else if (position == spoilerWordsEditRow) {
                     int count = KronoConfig.getSpoilerWordsList().size();
-                    settingsCell.setTextAndValue("Configurar palabras en Spoiler", count == 0 ? "Ninguna" : (count + " palabras"), false);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoSpoilerWordsEdit), count == 0 ? LocaleController.getString(R.string.KronoSpoilerWordsNone) : LocaleController.formatString(R.string.KronoSpoilerWordsCount, count), false);
                 } else if (position == clearCacheNowRow) {
-                    settingsCell.setTextAndValue("Borrar archivos del caché ahora", cacheSizeText, true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoClearCacheNow), cacheSizeText, true);
                 } else if (position == openStorageUsageRow) {
-                    settingsCell.setTextAndValue("Administrador avanzado de almacenamiento", "Abrir", false);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoOpenStorageUsage), LocaleController.getString(R.string.KronoOpen), false);
                 } else if (position == voiceTranscriptionModeRow) {
-                    settingsCell.setTextAndValue("Modo de transcripción", KronoConfig.getVoiceTranscriptionModeName(), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoVoiceMode), KronoConfig.getVoiceTranscriptionModeName(), true);
                 } else if (position == voiceTranscriptionLanguageRow) {
-                    settingsCell.setTextAndValue("Idioma de transcripción local", KronoConfig.getVoiceTranscriptionLanguageName(), true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoVoiceLang), KronoConfig.getVoiceTranscriptionLanguageName(), true);
                 } else if (position == voiceTranscriptionModelsRow) {
-                    settingsCell.setTextAndValue("Modelos de voz offline (Vosk)", voiceModelsStatusText, true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoVoiceModels), voiceModelsStatusText, true);
                 } else if (position == translationProviderRow) {
-                    settingsCell.setTextAndValue("Motor de traducción alternativo", KronoConfig.getTranslationProviderName(), false);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoTranslationProvider), KronoConfig.getTranslationProviderName(), false);
                 } else if (position == diagPlayServicesRow) {
                     boolean hasGms = ApplicationLoader.getPushProvider().hasServices();
-                    settingsCell.setTextAndValue("Servicios de Google Play", hasGms ? "Disponibles" : "No disponibles", true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagPlayServices), LocaleController.getString(hasGms ? R.string.KronoAvailable : R.string.KronoUnavailable), true);
                 } else if (position == diagFcmStatusRow) {
                     String fcmState;
                     if (KronoConfig.isDisableFirebasePush()) {
-                        fcmState = "Desactivado";
+                        fcmState = LocaleController.getString(R.string.KronoDisabled);
                     } else if (!TextUtils.isEmpty(PushListenerController.lastTokenError) || "__FIREBASE_FAILED__".equals(SharedConfig.pushStringStatus)) {
-                        fcmState = "Error (ver detalle)";
+                        fcmState = LocaleController.getString(R.string.KronoErrorDetails);
                     } else {
-                        fcmState = "Activo";
+                        fcmState = LocaleController.getString(R.string.KronoActive);
                     }
-                    settingsCell.setTextAndValue("Firebase Push (FCM)", fcmState, true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagFcm), fcmState, true);
                 } else if (position == diagFcmTokenRow) {
                     String tokenSummary;
                     if (KronoConfig.isDisableFirebasePush()) {
-                        tokenSummary = "Desactivado";
+                        tokenSummary = LocaleController.getString(R.string.KronoDisabled);
                     } else if (TextUtils.isEmpty(SharedConfig.pushString)) {
-                        tokenSummary = "__FIREBASE_FAILED__".equals(SharedConfig.pushStringStatus) ? "Error al obtener" : "Sin token / Generando";
+                        tokenSummary = LocaleController.getString("__FIREBASE_FAILED__".equals(SharedConfig.pushStringStatus) ? R.string.KronoTokenFetchErr : R.string.KronoTokenPending);
                     } else {
                         String tail = SharedConfig.pushString.length() > 6
                                 ? SharedConfig.pushString.substring(SharedConfig.pushString.length() - 6)
                                 : SharedConfig.pushString;
                         boolean reg = UserConfig.getInstance(currentAccount).registeredForPush;
-                        tokenSummary = (reg ? "Registrado (…" : "Pendiente (…") + tail + ")";
+                        tokenSummary = LocaleController.formatString(reg ? R.string.KronoTokenRegistered : R.string.KronoTokenUnregistered, tail);
                     }
-                    settingsCell.setTextAndValue("Token FCM y registro", tokenSummary, true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagFcmToken), tokenSummary, true);
                 } else if (position == diagNotifPermRow) {
-                    settingsCell.setTextAndValue("Permiso de notificaciones", hasNotificationPermission() ? "Concedido" : "Denegado (Abrir)", true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagNotifPerm), LocaleController.getString(hasNotificationPermission() ? R.string.KronoGranted : R.string.KronoDeniedOpen), true);
                 } else if (position == diagBatteryOptRow) {
-                    settingsCell.setTextAndValue("Optimización de batería", isBatteryOptimizationIgnored() ? "Sin restricciones" : "Optimizada (Desactivar)", true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagBatteryOpt), LocaleController.getString(isBatteryOptimizationIgnored() ? R.string.KronoUnrestricted : R.string.KronoOptimizedDisable), true);
                 } else if (position == diagServiceRunningRow) {
-                    settingsCell.setTextAndValue("Servicio anti-cierre", NotificationsService.isRunningInForeground ? "Activo en primer plano" : "Inactivo", true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagServiceRunning), LocaleController.getString(NotificationsService.isRunningInForeground ? R.string.KronoRunningFg : R.string.KronoInactive), true);
                 } else if (position == diagLastPushRow) {
                     String lastPush;
                     if (PushListenerController.lastPushReceiveTime > 0) {
                         String ts = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date(PushListenerController.lastPushReceiveTime));
                         lastPush = PushListenerController.lastPushType + " · " + ts;
                     } else {
-                        lastPush = "Ninguno en sesión";
+                        lastPush = LocaleController.getString(R.string.KronoNoneSession);
                     }
-                    settingsCell.setTextAndValue("Último push FCM recibido", lastPush, true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagLastPush), lastPush, true);
                 } else if (position == diagRefreshPushRow) {
-                    settingsCell.setTextAndValue("Forzar re-registro de token FCM", "Ejecutar", true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagRefreshPush), LocaleController.getString(R.string.KronoRun), true);
                 } else if (position == diagTestNotificationRow) {
-                    settingsCell.setTextAndValue("Enviar notificación local de prueba", "Probar", true);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagTestNotif), LocaleController.getString(R.string.KronoTest), true);
                 } else if (position == diagSystemBatteryRow) {
-                    settingsCell.setTextAndValue("Ajustes de batería del sistema", "Abrir", false);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoDiagSystemBattery), LocaleController.getString(R.string.KronoOpen), false);
                 }
             } else if (type == 4) {
                 TextInfoPrivacyCell infoCell = (TextInfoPrivacyCell) holder.itemView;
                 if (position == ghostInfoRow) {
-                    infoCell.setText("El Modo Fantasma te permite leer mensajes e historias sin enviar confirmaciones de lectura ni mostrar que estás en línea.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoGhostInfo));
                 } else if (position == hiddenVaultInfoRow) {
-                    infoCell.setText("Oculta chats manteniendo pulsado un chat en la lista principal o seleccionando varios, y oculta carpetas manteniendo pulsada su pestaña. Para entrar rápido a la bóveda, mantén pulsado el título «KronoGram» arriba.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoVaultInfo));
                 } else if (position == privacyExtraInfoRow) {
-                    infoCell.setText("Oculta información sensible, conserva mensajes eliminados por otros usuarios y visualiza multimedia efímera sin límite. Si activas «No marcar mensajes como leídos» en Modo Fantasma, tampoco se enviará confirmación de apertura al ver multimedia de 1 sola vista.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoPrivacyExtraInfo));
                 } else if (position == telemetryInfoRow) {
-                    infoCell.setText("Todas las opciones de telemetría vienen desactivadas por defecto para que elijas libremente. Nota: si activas «Desactivar Push de Google (FCM)», las notificaciones dependerán del servicio en segundo plano de Telegram y podrían llegar con ligero retraso o consumir más batería.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoTelemetryInfo));
                 } else if (position == themeInfoRow) {
-                    infoCell.setText("Elige entre Monet Light, Monet Dark o Monet AMOLED y cambia al instante el estilo visual entre Material You, Estilo iOS o Estilo Clásico. También puedes elegir el modo Glass (Liquid Glass, Frosted Glass o Desactivado) y activar o desactivar el cristal de forma independiente por componente.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoThemeInfo));
                 } else if (position == storageInfoRow) {
-                    infoCell.setText("También puedes añadir o quitar cualquier chat de una carpeta manteniendo pulsado el chat en la lista principal y tocando el icono de carpetas.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoStorageInfo));
                 } else if (position == aiInfoRow) {
-                    infoCell.setText("La transcripción de voz funciona gratuitamente en cualquier versión de Android sin API keys mediante Vosk offline: la primera vez descargará el modelo ligero (~40 MB) del idioma seleccionado y después todo el reconocimiento se ejecuta localmente en tu dispositivo.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoAiInfo));
                 } else if (position == notifServiceInfoRow) {
-                    infoCell.setText("Activa el «Servicio persistente» si notas retrasos al apagar la pantalla o si desactivaste Push de Google (FCM). Mostrará una notificación silenciosa de prioridad mínima para impedir que el sistema cierre la app.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoNotifServiceInfo));
                 } else if (position == diagInfoRow) {
-                    infoCell.setText("Toca «Token FCM y registro» para ver el detalle técnico completo. Si tu teléfono (Xiaomi/HyperOS, Samsung, Huawei, Oppo) sigue reteniendo notificaciones, toca «Optimización de batería» para poner KronoGram en «Sin restricciones» y activa «Inicio automático» en los ajustes del sistema.");
+                    infoCell.setText(LocaleController.getString(R.string.KronoDiagInfo));
                 }
             }
         }
