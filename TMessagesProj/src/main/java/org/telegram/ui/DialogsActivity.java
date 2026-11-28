@@ -8056,10 +8056,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         );
         if (isFolderPage) {
             if (filter != null) {
-                if (filter.isLocalFavorites()) {
-                    getMessagesController().ensureFilterPeersLoaded(filter);
-                } else if (currentDialogsCount < filter.alwaysShow.size() + filter.pinnedDialogs.size()
-                        || !filter.alwaysShow.isEmpty() || filter.pinnedDialogs.size() > 0) {
+                if (filter.isLocalFavorites() || !filter.alwaysShow.isEmpty() || filter.pinnedDialogs.size() > 0) {
                     getMessagesController().ensureFilterPeersLoaded(filter);
                 }
                 if (!filter.isLocalFavorites() && (filter.flags & MessagesController.DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) == 0) {

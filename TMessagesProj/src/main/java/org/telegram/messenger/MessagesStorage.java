@@ -3913,7 +3913,40 @@ public class MessagesStorage extends BaseController {
                     }
                 }
 
-                FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_DATABASE, "db_checkLoadedRemoteFilters_diff", "remoteCount=" + (vector != null ? vector.size() : 0) + " dbCount=" + dialogFilters.size() + " toSave=" + filtersToSave.size() + " toDelete=" + filtersToDelete.size() + " missingUsers=" + usersToLoadMap.size() + " missingChats=" + chatsToLoadMap.size() + " missingDialogs=" + dialogsToLoadMap.size());
+                int skippedUnresolvable = 0;
+                MessagesController messagesController = getMessagesController();
+                if (!dialogsToLoadMap.isEmpty()) {
+                    java.util.Iterator<HashMap.Entry<Long, TLRPC.InputPeer>> it = dialogsToLoadMap.entrySet().iterator();
+                    while (it.hasNext()) {
+                        long did = it.next().getKey();
+                        if (messagesController.isFilterPeerTemporarilyUnresolvable(did)) {
+                            it.remove();
+                            skippedUnresolvable++;
+                        }
+                    }
+                }
+                if (!chatsToLoadMap.isEmpty()) {
+                    java.util.Iterator<HashMap.Entry<Long, TLRPC.InputPeer>> it = chatsToLoadMap.entrySet().iterator();
+                    while (it.hasNext()) {
+                        long chatId = it.next().getKey();
+                        if (messagesController.isFilterPeerTemporarilyUnresolvable(-chatId)) {
+                            it.remove();
+                            skippedUnresolvable++;
+                        }
+                    }
+                }
+                if (!usersToLoadMap.isEmpty()) {
+                    java.util.Iterator<HashMap.Entry<Long, TLRPC.InputPeer>> it = usersToLoadMap.entrySet().iterator();
+                    while (it.hasNext()) {
+                        long userId = it.next().getKey();
+                        if (messagesController.isFilterPeerTemporarilyUnresolvable(userId)) {
+                            it.remove();
+                            skippedUnresolvable++;
+                        }
+                    }
+                }
+
+                FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_DATABASE, "db_checkLoadedRemoteFilters_diff", "remoteCount=" + (vector != null ? vector.size() : 0) + " dbCount=" + dialogFilters.size() + " toSave=" + filtersToSave.size() + " toDelete=" + filtersToDelete.size() + " missingUsers=" + usersToLoadMap.size() + " missingChats=" + chatsToLoadMap.size() + " missingDialogs=" + dialogsToLoadMap.size() + " skippedUnresolvable=" + skippedUnresolvable);
                 if (usersToLoadMap.isEmpty() && chatsToLoadMap.isEmpty() && dialogsToLoadMap.isEmpty()) {
                     processLoadedFilterPeersInternal(dialogs, null, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                 } else {
@@ -3963,6 +3996,7 @@ public class MessagesStorage extends BaseController {
         }
         KronoConfig.loadConfig();
         boolean orderChanged = false;
+        boolean favoritesToggled = false;
         boolean remoteHasDefault = filtersOrder.contains(0);
         ArrayList<Integer> remoteCanonicalOrder = new ArrayList<>(filtersOrder.size());
         for (int i = 0; i < filtersOrder.size(); i++) {
@@ -3975,6 +4009,9 @@ public class MessagesStorage extends BaseController {
         boolean remoteOrderChangedFromLastSync = !prevRemoteOrder.isEmpty() && !prevRemoteOrder.equals(remoteCanonicalOrder);
         KronoConfig.saveLastRemoteFilterOrder(currentAccount, remoteCanonicalOrder);
 
+        ArrayList<Integer> previousAllOrder = new ArrayList<>(dialogFilters.size());
+        ArrayList<Integer> previousRemoteOrder = new ArrayList<>(dialogFilters.size());
+        boolean ordersContiguous = true;
         MessagesController.DialogFilter favoritesFilter = null;
         int prevFavoritesIndex = -1;
         ArrayList<Integer> currentCustomOrder = KronoConfig.getCustomFilterOrder(currentAccount);
@@ -3983,10 +4020,14 @@ public class MessagesStorage extends BaseController {
         }
         for (int a = 0, N = dialogFilters.size(); a < N; a++) {
             MessagesController.DialogFilter filter = dialogFilters.get(a);
+            previousAllOrder.add(filter.id);
+            if (filter.order != a) {
+                ordersContiguous = false;
+            }
             if (filter.isLocalFavorites()) {
                 favoritesFilter = filter;
                 if (prevFavoritesIndex < 0) {
-                    prevFavoritesIndex = Math.max(1, filter.order);
+                    prevFavoritesIndex = Math.max(1, a);
                 }
                 filter.name = "Favoritos";
                 filter.emoticon = "⭐";
@@ -3995,23 +4036,8 @@ public class MessagesStorage extends BaseController {
                 filter.alwaysShow.addAll(KronoConfig.getFavoriteDialogs(currentAccount));
                 filter.neverShow.clear();
                 filter.pendingUnreadCount = -1;
-                continue;
-            }
-            int order;
-            if (filter.isDefault()) {
-                order = remoteHasDefault ? filtersOrder.indexOf(0) : 0;
             } else {
-                int idx = filtersOrder.indexOf(filter.id);
-                if (idx >= 0) {
-                    order = remoteHasDefault ? idx : (idx + 1);
-                } else {
-                    order = dialogFilters.size() + 1;
-                }
-            }
-            if (filter.order != order) {
-                filter.order = order;
-                anythingChanged = true;
-                orderChanged = true;
+                previousRemoteOrder.add(filter.id);
             }
         }
         if (KronoConfig.showFavoritesFolder) {
@@ -4019,15 +4045,28 @@ public class MessagesStorage extends BaseController {
                 favoritesFilter = getMessagesController().createLocalFavoritesFilter();
                 saveDialogFilterInternal(favoritesFilter, false, true);
                 anythingChanged = true;
-                orderChanged = true;
+                favoritesToggled = true;
             }
         } else if (favoritesFilter != null) {
             deleteDialogFilterInternal(favoritesFilter);
             favoritesFilter = null;
             anythingChanged = true;
-            orderChanged = true;
+            favoritesToggled = true;
         }
+
         if (remoteOrderChangedFromLastSync) {
+            for (int a = 0, N = dialogFilters.size(); a < N; a++) {
+                MessagesController.DialogFilter filter = dialogFilters.get(a);
+                if (filter.isLocalFavorites()) {
+                    continue;
+                }
+                if (filter.isDefault()) {
+                    filter.order = remoteHasDefault ? filtersOrder.indexOf(0) : 0;
+                } else {
+                    int idx = filtersOrder.indexOf(filter.id);
+                    filter.order = idx >= 0 ? (remoteHasDefault ? idx : (idx + 1)) : (dialogFilters.size() + 1);
+                }
+            }
             Collections.sort(dialogFilters, (o1, o2) -> {
                 if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
                     return o1.isLocalFavorites() ? 1 : -1;
@@ -4057,38 +4096,77 @@ public class MessagesStorage extends BaseController {
                 KronoConfig.saveCustomFilterOrder(currentAccount, normalizedIds);
             }
             saveDialogFiltersOrderInternal();
+            orderChanged = true;
             anythingChanged = true;
         } else if (KronoConfig.hasCustomFilterOrder(currentAccount)) {
-            if (applyCustomFilterOrderInternal() || orderChanged) {
+            if (applyCustomFilterOrderInternal() || favoritesToggled || !ordersContiguous) {
+                for (int i = 0; i < dialogFilters.size(); i++) {
+                    dialogFilters.get(i).order = i;
+                }
                 saveDialogFiltersOrderInternal();
+                orderChanged = true;
                 anythingChanged = true;
             }
-        } else if (orderChanged) {
-            Collections.sort(dialogFilters, (o1, o2) -> {
-                if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
-                    return o1.isLocalFavorites() ? 1 : -1;
+        } else {
+            ArrayList<Integer> expectedRemoteOrder = new ArrayList<>(remoteCanonicalOrder.size() + 1);
+            if (!remoteHasDefault && dialogFiltersMap.get(0) != null) {
+                expectedRemoteOrder.add(0);
+            }
+            for (int i = 0; i < remoteCanonicalOrder.size(); i++) {
+                int fid = remoteCanonicalOrder.get(i);
+                if (dialogFiltersMap.get(fid) != null && !expectedRemoteOrder.contains(fid)) {
+                    expectedRemoteOrder.add(fid);
                 }
-                if (o1.order > o2.order) {
-                    return 1;
-                } else if (o1.order < o2.order) {
-                    return -1;
-                }
-                if (o1.isDefault() != o2.isDefault()) {
-                    return o1.isDefault() ? -1 : 1;
-                }
-                return 0;
-            });
-            if (favoritesFilter != null) {
-                dialogFilters.remove(favoritesFilter);
-                int targetIndex = prevFavoritesIndex >= 0 ? Math.min(prevFavoritesIndex, dialogFilters.size()) : Math.min(1, dialogFilters.size());
-                dialogFilters.add(targetIndex, favoritesFilter);
             }
             for (int i = 0; i < dialogFilters.size(); i++) {
-                dialogFilters.get(i).order = i;
+                MessagesController.DialogFilter f = dialogFilters.get(i);
+                if (!f.isLocalFavorites() && !expectedRemoteOrder.contains(f.id)) {
+                    expectedRemoteOrder.add(f.id);
+                }
             }
-            saveDialogFiltersOrderInternal();
+            boolean relativeRemoteOrderMismatch = !previousRemoteOrder.equals(expectedRemoteOrder);
+            if (relativeRemoteOrderMismatch || favoritesToggled || !ordersContiguous || !filtersToSave.isEmpty() || filtersToDelete.size() > 0) {
+                for (int a = 0, N = dialogFilters.size(); a < N; a++) {
+                    MessagesController.DialogFilter filter = dialogFilters.get(a);
+                    if (filter.isLocalFavorites()) {
+                        continue;
+                    }
+                    int idx = expectedRemoteOrder.indexOf(filter.id);
+                    filter.order = idx >= 0 ? idx : (dialogFilters.size() + 1);
+                }
+                Collections.sort(dialogFilters, (o1, o2) -> {
+                    if (o1.isLocalFavorites() != o2.isLocalFavorites()) {
+                        return o1.isLocalFavorites() ? 1 : -1;
+                    }
+                    if (o1.order > o2.order) {
+                        return 1;
+                    } else if (o1.order < o2.order) {
+                        return -1;
+                    }
+                    if (o1.isDefault() != o2.isDefault()) {
+                        return o1.isDefault() ? -1 : 1;
+                    }
+                    return 0;
+                });
+                if (favoritesFilter != null) {
+                    dialogFilters.remove(favoritesFilter);
+                    int targetIndex = prevFavoritesIndex >= 0 ? Math.min(prevFavoritesIndex, dialogFilters.size()) : Math.min(1, dialogFilters.size());
+                    dialogFilters.add(targetIndex, favoritesFilter);
+                }
+                ArrayList<Integer> newAllOrder = new ArrayList<>(dialogFilters.size());
+                for (int i = 0; i < dialogFilters.size(); i++) {
+                    MessagesController.DialogFilter f = dialogFilters.get(i);
+                    f.order = i;
+                    newAllOrder.add(f.id);
+                }
+                if (!newAllOrder.equals(previousAllOrder) || !ordersContiguous || favoritesToggled) {
+                    orderChanged = true;
+                    anythingChanged = true;
+                    saveDialogFiltersOrderInternal();
+                }
+            }
         }
-        if (!users.isEmpty() || !chats.isEmpty() || (encryptedChats != null && !encryptedChats.isEmpty()) || (pinnedDialogs != null && !pinnedDialogs.dialogs.isEmpty()) || (pinnedRemoteDialogs != null && !pinnedRemoteDialogs.dialogs.isEmpty())) {
+        if (pinnedRemoteDialogs != null && (!pinnedRemoteDialogs.dialogs.isEmpty() || !pinnedRemoteDialogs.chats.isEmpty() || !pinnedRemoteDialogs.users.isEmpty())) {
             anythingChanged = true;
         }
         int remote = anythingChanged ? 1 : 2;
