@@ -31,6 +31,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.FolderSyncLogger;
 import org.telegram.messenger.KronoConfig;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
@@ -148,6 +149,8 @@ public class KronoSettingsActivity extends BaseFragment {
     private int infiniteFolderScrollRow = -1;
     private int showFavoritesFolderRow = -1;
     private int hideAllChatsTabRow = -1;
+    private int autoSendFolderLogsRow = -1;
+    private int sendFolderLogsNowRow = -1;
     private int tabsDividerRow = -1;
     private int chatsHeaderRow = -1;
     private int messageSwipeActionRow = -1;
@@ -331,6 +334,8 @@ public class KronoSettingsActivity extends BaseFragment {
         infiniteFolderScrollRow = -1;
         showFavoritesFolderRow = -1;
         hideAllChatsTabRow = -1;
+        autoSendFolderLogsRow = -1;
+        sendFolderLogsNowRow = -1;
         tabsDividerRow = -1;
         chatsHeaderRow = -1;
         messageSwipeActionRow = -1;
@@ -446,6 +451,8 @@ public class KronoSettingsActivity extends BaseFragment {
             infiniteFolderScrollRow = rowCount++;
             showFavoritesFolderRow = rowCount++;
             hideAllChatsTabRow = rowCount++;
+            autoSendFolderLogsRow = rowCount++;
+            sendFolderLogsNowRow = rowCount++;
             tabsDividerRow = rowCount++;
             chatsHeaderRow = rowCount++;
             messageSwipeActionRow = rowCount++;
@@ -834,6 +841,31 @@ public class KronoSettingsActivity extends BaseFragment {
                     ((TextCheckCell) view).setChecked(KronoConfig.hideAllChatsTab);
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
+            } else if (position == autoSendFolderLogsRow) {
+                KronoConfig.setAutoSendFolderSyncLogs(!KronoConfig.autoSendFolderSyncLogs);
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(KronoConfig.autoSendFolderSyncLogs);
+                }
+            } else if (position == sendFolderLogsNowRow) {
+                FolderSyncLogger.sendLogsToSavedMessages(
+                        currentAccount,
+                        true,
+                        "MANUAL",
+                        "Solicitud del usuario desde Ajustes",
+                        fileName -> {
+                            if (listAdapter != null && sendFolderLogsNowRow >= 0) {
+                                listAdapter.notifyItemChanged(sendFolderLogsNowRow);
+                            }
+                            BulletinFactory.of(this).createSimpleBulletin(
+                                    R.drawable.msg_folders,
+                                    "Logs de carpetas enviados a Mensajes Guardados"
+                            ).show();
+                        },
+                        err -> BulletinFactory.of(this).createSimpleBulletin(
+                                R.drawable.msg_info,
+                                err
+                        ).show()
+                );
             } else if (position == spoilerWordsToggleRow) {
                 KronoConfig.setSpoilerWordsEnabled(!KronoConfig.spoilerWordsEnabled);
                 if (view instanceof TextCheckCell) {
@@ -1609,7 +1641,7 @@ public class KronoSettingsActivity extends BaseFragment {
                        position == deleteForAllDefaultRow || position == showTimeWithSecondsRow ||
                        position == unlimitedPinnedChatsRow || position == quickGoToMessageRow ||
                        position == longClickMediaMenuRow || disablePullToNextChannelRow == position ||
-                       position == showFavoritesFolderRow || position == hideAllChatsTabRow || position == spoilerWordsToggleRow ||
+                       position == showFavoritesFolderRow || position == hideAllChatsTabRow || position == autoSendFolderLogsRow || position == spoilerWordsToggleRow ||
                        position == keepOriginalFilenameRow || position == freeVoiceTranscriptionRow || position == freeChatTranslationRow ||
                        position == persistentForegroundServiceRow || position == backgroundPushConnectionRow ||
                        position == glassSettingsBarRow || position == glassSearchBarsRow ||
@@ -1620,6 +1652,7 @@ public class KronoSettingsActivity extends BaseFragment {
                        position == openThemesRow || position == monetThemeRow || position == uiStyleRow ||
                        position == glassModeRow ||
                        position == tabModeRow || position == tabStyleRow ||
+                       position == sendFolderLogsNowRow ||
                        position == messageSwipeActionRow ||
                        position == spoilerWordsEditRow || position == clearCacheNowRow ||
                        position == openStorageUsageRow || position == voiceTranscriptionModeRow ||
@@ -1802,7 +1835,9 @@ public class KronoSettingsActivity extends BaseFragment {
                 } else if (position == showFavoritesFolderRow) {
                     checkCell.setTextAndValueAndCheck("Mostrar carpeta «Favoritos»", "Carpeta local protegida (⭐) para tus chats favoritos", KronoConfig.showFavoritesFolder, true, true);
                 } else if (position == hideAllChatsTabRow) {
-                    checkCell.setTextAndValueAndCheck("Eliminar carpeta «Todos»", "Oculta la pestaña «Todos» cuando tienes carpetas", KronoConfig.hideAllChatsTab, true, false);
+                    checkCell.setTextAndValueAndCheck("Eliminar carpeta «Todos»", "Oculta la pestaña «Todos» cuando tienes carpetas", KronoConfig.hideAllChatsTab, true, true);
+                } else if (position == autoSendFolderLogsRow) {
+                    checkCell.setTextAndValueAndCheck("Auto-enviar logs de carpetas", "Envía un reporte a Mensajes Guardados si falla la sincronización", KronoConfig.autoSendFolderSyncLogs, true, true);
                 } else if (position == spoilerWordsToggleRow) {
                     checkCell.setTextAndCheck("Filtro de palabras ocultas bajo Spoiler", KronoConfig.spoilerWordsEnabled, true);
                 } else if (position == keepOriginalFilenameRow) {
@@ -1872,6 +1907,13 @@ public class KronoSettingsActivity extends BaseFragment {
                     settingsCell.setTextAndValue("Contenido de las pestañas", KronoConfig.getTabModeName(), true);
                 } else if (position == tabStyleRow) {
                     settingsCell.setTextAndValue("Estilo de las pestañas", KronoConfig.getTabStyleName(), true);
+                } else if (position == sendFolderLogsNowRow) {
+                    String lastFail = FolderSyncLogger.getLastFailureSummary(currentAccount);
+                    int events = FolderSyncLogger.getBufferedEventCount();
+                    String summary = lastFail != null
+                            ? ("Fallo: " + lastFail)
+                            : (events > 0 ? (events + " eventos") : "Enviar ahora");
+                    settingsCell.setTextAndValue("Enviar logs de sincronización de carpetas", summary, false);
                 } else if (position == messageSwipeActionRow) {
                     settingsCell.setTextAndValue("Acción al deslizar sobre un mensaje", KronoConfig.getMessageSwipeActionName(), true);
                 } else if (position == spoilerWordsEditRow) {

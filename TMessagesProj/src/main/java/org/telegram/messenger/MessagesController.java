@@ -292,6 +292,18 @@ public class MessagesController extends BaseController implements NotificationCe
     public boolean dialogFiltersLoaded;
     public ArrayList<TLRPC.TL_dialogFilterSuggested> suggestedFilters = new ArrayList<>();
 
+    public String getFolderSyncDebugSnapshot() {
+        return "dialogFiltersLoaded=" + dialogFiltersLoaded
+                + " loadingRemoteFilters=" + loadingRemoteFilters
+                + " checkedMissingFilterPeers=" + checkedMissingFilterPeers
+                + " remoteFilterPeersFailed=" + remoteFilterPeersFailed
+                + " remoteFiltersSyncedThisSession=" + remoteFiltersSyncedThisSession
+                + " pendingRemoteFiltersReload=" + pendingRemoteFiltersReload
+                + " remoteFiltersNeedRetryOnConnect=" + remoteFiltersNeedRetryOnConnect
+                + " pendingFilterPeerRepair=" + pendingFilterPeerRepair
+                + "\n";
+    }
+
     private final LongSparseArray<ArrayList<TLRPC.Updates>> updatesQueueChannels = new LongSparseArray<>();
     private LongSparseLongArray updatesStartWaitTimeChannels = new LongSparseLongArray();
     private LongSparseIntArray channelsPts = new LongSparseIntArray();
@@ -2020,8 +2032,10 @@ public class MessagesController extends BaseController implements NotificationCe
 
         getConnectionsManager().sendRequest(req, (response, error) -> Utilities.stageQueue.postRunnable(() -> {
             if (error != null) {
+                final String reqType = req.getClass().getSimpleName();
                 if (isPeerBatchError(error)) {
                     if (inputUsersSnapshot != null && inputUsersSnapshot.size() > 1) {
+                        FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadPeers_batch_split", "req=" + reqType + " size=" + inputUsersSnapshot.size() + " code=" + error.code + " text=" + error.text, false);
                         int mid = inputUsersSnapshot.size() / 2;
                         TLRPC.TL_users_getUsers left = new TLRPC.TL_users_getUsers();
                         left.id.addAll(inputUsersSnapshot.subList(0, mid));
@@ -2034,6 +2048,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                         return;
                     } else if (inputChatsSnapshot != null && inputChatsSnapshot.size() > 1) {
+                        FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadPeers_batch_split", "req=" + reqType + " size=" + inputChatsSnapshot.size() + " code=" + error.code + " text=" + error.text, false);
                         int mid = inputChatsSnapshot.size() / 2;
                         TLRPC.TL_messages_getChats left = new TLRPC.TL_messages_getChats();
                         left.id.addAll(inputChatsSnapshot.subList(0, mid));
@@ -2046,6 +2061,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                         return;
                     } else if (inputChannelsSnapshot != null && inputChannelsSnapshot.size() > 1) {
+                        FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadPeers_batch_split", "req=" + reqType + " size=" + inputChannelsSnapshot.size() + " code=" + error.code + " text=" + error.text, false);
                         int mid = inputChannelsSnapshot.size() / 2;
                         TLRPC.TL_channels_getChannels left = new TLRPC.TL_channels_getChannels();
                         left.id.addAll(inputChannelsSnapshot.subList(0, mid));
@@ -2058,6 +2074,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                         return;
                     } else if (inputDialogsSnapshot != null && inputDialogsSnapshot.size() > 1) {
+                        FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadPeers_batch_split", "req=" + reqType + " size=" + inputDialogsSnapshot.size() + " code=" + error.code + " text=" + error.text, false);
                         int mid = inputDialogsSnapshot.size() / 2;
                         TLRPC.TL_messages_getPeerDialogs left = new TLRPC.TL_messages_getPeerDialogs();
                         left.peers.addAll(inputDialogsSnapshot.subList(0, mid));
@@ -2069,9 +2086,12 @@ public class MessagesController extends BaseController implements NotificationCe
                         sendLoadPeersRequest(left, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                         sendLoadPeersRequest(right, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                         return;
+                    } else {
+                        FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadPeers_single_peer_error", "req=" + reqType + " code=" + error.code + " text=" + error.text, false);
                     }
                 } else {
                     hasTransientError[0] = true;
+                    FolderSyncLogger.logError(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadPeers_transient_error", "req=" + reqType + " code=" + error.code + " text=" + error.text, false);
                 }
             } else if (response instanceof TLRPC.TL_messages_chats) {
                 TLRPC.TL_messages_chats res = (TLRPC.TL_messages_chats) response;
@@ -2098,6 +2118,11 @@ public class MessagesController extends BaseController implements NotificationCe
             requests.remove(req);
             if (requests.isEmpty()) {
                 remoteFilterPeersFailed = hasTransientError[0];
+                if (remoteFilterPeersFailed) {
+                    FolderSyncLogger.logError(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadFilterPeers_failed", "remoteFilterPeersFailed=true usersLoaded=" + users.size() + " chatsLoaded=" + chats.size() + " pinnedDialogs=" + pinnedDialogs.dialogs.size(), true);
+                } else {
+                    FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadFilterPeers_complete", "usersLoaded=" + users.size() + " chatsLoaded=" + chats.size() + " pinnedDialogs=" + pinnedDialogs.dialogs.size());
+                }
                 getMessagesStorage().processLoadedFilterPeers(pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
             }
         }));
@@ -2186,6 +2211,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 getMessagesStorage().processLoadedFilterPeers(pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                 return;
             }
+            FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadFilterPeers_start", "usersToLoad=" + usersToLoadMap.size() + " chatsToLoad=" + chatsToLoadMap.size() + " dialogsToLoad=" + dialogsToLoadMap.size() + " batches=" + requests.size());
 
             for (TLRPC.TL_users_getUsers r : userRequests) {
                 sendLoadPeersRequest(r, requests, hasTransientError, pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
@@ -2390,9 +2416,11 @@ public class MessagesController extends BaseController implements NotificationCe
 
             AndroidUtilities.runOnUIThread(() -> {
                 boolean ramFiltersDesynced = false;
+                String desyncDetail = null;
                 if (remote == 2) {
                     if (filters == null || dialogFilters.size() != filters.size()) {
                         ramFiltersDesynced = true;
+                        desyncDetail = "ramSize=" + dialogFilters.size() + " storageSize=" + (filters != null ? filters.size() : -1);
                     } else {
                         for (int i = 0; i < filters.size(); i++) {
                             DialogFilter f1 = filters.get(i);
@@ -2402,10 +2430,16 @@ public class MessagesController extends BaseController implements NotificationCe
                                     || f1.neverShow.size() != f2.neverShow.size()
                                     || f1.pinnedDialogs.size() != f2.pinnedDialogs.size()) {
                                 ramFiltersDesynced = true;
+                                desyncDetail = "index=" + i
+                                        + " dbId=" + (f1 != null ? f1.id : -1)
+                                        + " ramId=" + (f2 != null ? f2.id : -1);
                                 break;
                             }
                         }
                     }
+                }
+                if (ramFiltersDesynced) {
+                    FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_UI_STATE, "ram_filters_desynced", "remote=2 " + desyncDetail + " dialogFiltersLoaded=" + dialogFiltersLoaded, dialogFiltersLoaded);
                 }
                 final boolean applyFullFiltersUpdate = remote != 2 || ramFiltersDesynced;
                 if (applyFullFiltersUpdate) {
@@ -2499,6 +2533,9 @@ public class MessagesController extends BaseController implements NotificationCe
                             checkedMissingFilterPeers = true;
                         }
                         final boolean shouldSyncRemote = needsRepair || !getUserConfig().filtersLoaded || !remoteFiltersSyncedThisSession;
+                        if (needsRepair) {
+                            FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_UI_STATE, "local_filters_missing_peers_need_repair", "filtersCount=" + dialogFilters.size() + " shouldSyncRemote=" + shouldSyncRemote, false);
+                        }
                         if (shouldSyncRemote) {
                             remoteFiltersSyncedThisSession = true;
                         }
@@ -2685,6 +2722,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
                     }
                 }
+                FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_UI_STATE, "processLoadedDialogFilters_applied", "remote=" + remote + " applyFull=" + applyFullFiltersUpdate + " filtersCount=" + (dialogFilters != null ? dialogFilters.size() : -1) + " skipMarkLoaded=" + skipMarkFiltersLoaded);
                 if (remote != 0) {
                     if (!skipMarkFiltersLoaded) {
                         getUserConfig().filtersLoaded = true;
@@ -2693,6 +2731,7 @@ public class MessagesController extends BaseController implements NotificationCe
                         remoteFiltersNeedRetryOnConnect = false;
                     } else {
                         remoteFiltersNeedRetryOnConnect = true;
+                        FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_NETWORK, "skip_mark_filters_loaded", "remote=" + remote + " reason=remoteFilterPeersFailed", false);
                     }
                     loadingRemoteFilters = false;
                     getNotificationCenter().postNotificationName(NotificationCenter.filterSettingsUpdated);
@@ -2751,6 +2790,7 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
         if (remoteFiltersNeedRetryOnConnect || (dialogFiltersLoaded && !remoteFiltersSyncedThisSession)) {
+            FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "connection_restored_retry_filters", "needRetry=" + remoteFiltersNeedRetryOnConnect + " dialogFiltersLoaded=" + dialogFiltersLoaded + " syncedThisSession=" + remoteFiltersSyncedThisSession);
             remoteFiltersNeedRetryOnConnect = false;
             remoteFiltersSyncedThisSession = true;
             loadRemoteFilters(true);
@@ -2765,9 +2805,11 @@ public class MessagesController extends BaseController implements NotificationCe
             if (force && getUserConfig().isClientActivated()) {
                 pendingRemoteFiltersReload = true;
             }
+            FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadRemoteFilters_deferred", "force=" + force + " pendingReload=" + pendingRemoteFiltersReload);
             return;
         }
         if (!getUserConfig().isClientActivated() || !force && getUserConfig().filtersLoaded) {
+            FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "loadRemoteFilters_skipped", "activated=" + getUserConfig().isClientActivated() + " force=" + force + " filtersLoaded=" + getUserConfig().filtersLoaded);
             return;
         }
         loadingRemoteFilters = true;
@@ -2776,14 +2818,18 @@ public class MessagesController extends BaseController implements NotificationCe
             getUserConfig().filtersLoaded = false;
             getUserConfig().saveConfig(false);
         }
+        final long startMs = android.os.SystemClock.elapsedRealtime();
+        FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "getDialogFilters_request", "force=" + force);
         TLRPC.TL_messages_getDialogFilters req = new TLRPC.TL_messages_getDialogFilters();
         getConnectionsManager().sendRequest(req, (response, error) -> {
+            final long durationMs = android.os.SystemClock.elapsedRealtime() - startMs;
             if (response instanceof Vector) {
                 ArrayList<TLRPC.DialogFilter> filters = new ArrayList<>();
                 Vector vector = (Vector) response;
                 for (int i = 0; i < vector.objects.size(); ++i) {
                     filters.add((TLRPC.DialogFilter) vector.objects.get(i));
                 }
+                FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "getDialogFilters_response_vector", "count=" + filters.size() + " durationMs=" + durationMs);
                 getMessagesStorage().checkLoadedRemoteFilters(filters, () -> {
                     if (onLoadedRemoteFilters != null) {
                         onLoadedRemoteFilters.run(true);
@@ -2792,6 +2838,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 });
             } else if (response instanceof TLRPC.TL_messages_dialogFilters) {
                 TLRPC.TL_messages_dialogFilters res = (TLRPC.TL_messages_dialogFilters) response;
+                FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "getDialogFilters_response_v2", "count=" + (res.filters != null ? res.filters.size() : 0) + " tagsEnabled=" + res.tags_enabled + " durationMs=" + durationMs);
                 if (folderTags != res.tags_enabled) {
                     setFolderTags(res.tags_enabled);
                     AndroidUtilities.runOnUIThread(() -> {
@@ -2805,6 +2852,11 @@ public class MessagesController extends BaseController implements NotificationCe
                     }
                 });
             } else {
+                final String errDetail = "durationMs=" + durationMs
+                        + " errorCode=" + (error != null ? error.code : "null")
+                        + " errorText=" + (error != null ? error.text : "null")
+                        + " responseType=" + (response != null ? response.getClass().getSimpleName() : "null");
+                FolderSyncLogger.logError(currentAccount, FolderSyncLogger.LAYER_NETWORK, "getDialogFilters_failed", errDetail, true);
                 AndroidUtilities.runOnUIThread(() -> {
                     loadingRemoteFilters = false;
                     if (onLoadedRemoteFilters != null) {
@@ -2968,12 +3020,16 @@ public class MessagesController extends BaseController implements NotificationCe
     private void requestFilterPeerRepairFromServer() {
         if (loadingRemoteFilters) {
             pendingFilterPeerRepair = true;
+            FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "filter_peer_repair_queued", "reason=loadingRemoteFilters");
             return;
         }
         long now = android.os.SystemClock.elapsedRealtime();
         if (now - lastFilterPeerRepairTime > 15000L) {
             lastFilterPeerRepairTime = now;
+            FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_NETWORK, "filter_peer_repair_triggered", "reloading remote filters", false);
             loadRemoteFilters(true);
+        } else {
+            FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_NETWORK, "filter_peer_repair_throttled", "cooldownMsRemaining=" + (15000L - (now - lastFilterPeerRepairTime)));
         }
     }
 
@@ -3040,11 +3096,13 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         if (missingFromSqlite != null && !missingFromSqlite.isEmpty()) {
             checkedLocalFilterPeerIds.addAll(missingFromSqlite);
+            FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_DATABASE, "ensureFilterPeersLoaded_sqlite", "filterId=" + filter.id + " missingFromSqlite=" + missingFromSqlite.size());
             getMessagesStorage().loadMissingFilterDialogs(missingFromSqlite, (dialogs, users, chats, encryptedChats) ->
                     processLoadedLocalFilterDialogs(dialogs, users, chats, encryptedChats, filter));
             return;
         }
         if (missingInRam != null && !missingInRam.isEmpty()) {
+            FolderSyncLogger.logWarn(currentAccount, FolderSyncLogger.LAYER_UI_STATE, "ensureFilterPeersLoaded_ram_missing", "filterId=" + filter.id + " missingInRam=" + missingInRam.size(), false);
             requestFilterPeerRepairFromServer();
         }
     }

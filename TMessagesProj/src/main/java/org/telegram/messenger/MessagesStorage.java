@@ -2946,8 +2946,10 @@ public class MessagesStorage extends BaseController {
                     getChatsInternal(TextUtils.join(",", chatsToLoad), chats);
                 }
 
+                FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_DATABASE, "db_loadDialogFilters_done", "filtersCount=" + dialogFilters.size() + " hasDefault=" + hasDefaultFilter + " hasFav=" + (favoritesFilter != null) + " dialogsToLoad=" + dialogsToLoad.size() + " usersToLoad=" + usersToLoad.size() + " chatsToLoad=" + chatsToLoad.size());
                 getMessagesController().processLoadedDialogFilters(new ArrayList<>(dialogFilters), dialogs, null, users, chats, encryptedChats, 0, null);
             } catch (Exception e) {
+                FolderSyncLogger.logError(currentAccount, FolderSyncLogger.LAYER_DATABASE, "db_loadDialogFilters_exception", e.getClass().getSimpleName() + ": " + e.getMessage(), true);
                 checkSQLException(e);
             } finally {
                 if (filtersCursor != null) {
@@ -3911,12 +3913,14 @@ public class MessagesStorage extends BaseController {
                     }
                 }
 
+                FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_DATABASE, "db_checkLoadedRemoteFilters_diff", "remoteCount=" + (vector != null ? vector.size() : 0) + " dbCount=" + dialogFilters.size() + " toSave=" + filtersToSave.size() + " toDelete=" + filtersToDelete.size() + " missingUsers=" + usersToLoadMap.size() + " missingChats=" + chatsToLoadMap.size() + " missingDialogs=" + dialogsToLoadMap.size());
                 if (usersToLoadMap.isEmpty() && chatsToLoadMap.isEmpty() && dialogsToLoadMap.isEmpty()) {
                     processLoadedFilterPeersInternal(dialogs, null, users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                 } else {
                     getMessagesController().loadFilterPeers(dialogsToLoadMap, usersToLoadMap, chatsToLoadMap, dialogs, new TLRPC.TL_messages_dialogs(), users, chats, encryptedChats, filtersToSave, filtersToDelete, filtersOrder, filterDialogRemovals, filtersUnreadCounterReset, onDone);
                 }
             } catch (Exception e) {
+                FolderSyncLogger.logError(currentAccount, FolderSyncLogger.LAYER_DATABASE, "db_checkLoadedRemoteFilters_exception", e.getClass().getSimpleName() + ": " + e.getMessage(), true);
                 checkSQLException(e);
                 AndroidUtilities.runOnUIThread(() -> {
                     getMessagesController().resetLoadingRemoteFilters();
@@ -4088,6 +4092,7 @@ public class MessagesStorage extends BaseController {
             anythingChanged = true;
         }
         int remote = anythingChanged ? 1 : 2;
+        FolderSyncLogger.logInfo(currentAccount, FolderSyncLogger.LAYER_DATABASE, "db_processLoadedFilterPeers_done", "remote=" + remote + " saved=" + filtersToSave.size() + " deleted=" + filtersToDelete.size() + " orderChanged=" + orderChanged + " remoteOrderChanged=" + remoteOrderChangedFromLastSync + " finalCount=" + dialogFilters.size());
         calcUnreadCounters(true);
         getMessagesController().processLoadedDialogFilters(new ArrayList<>(dialogFilters), pinnedDialogs, pinnedRemoteDialogs, users, chats, encryptedChats, remote, onDone);
     }

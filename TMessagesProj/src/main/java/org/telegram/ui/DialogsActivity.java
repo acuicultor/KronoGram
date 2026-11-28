@@ -6906,6 +6906,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         int a = animated && viewPages.length > 1 ? 1 : 0;
         if (viewPages[a].selectedType < 0 || viewPages[a].selectedType >= getMessagesController().getDialogFilters().size()) {
+            org.telegram.messenger.FolderSyncLogger.logError(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "switchToCurrentSelectedMode_out_of_bounds", "selectedType=" + viewPages[a].selectedType + " filtersSize=" + getMessagesController().getDialogFilters().size() + " dialogsType=" + viewPages[a].dialogsType, true);
             return;
         }
         MessagesController.DialogFilter filter = getMessagesController().getDialogFilters().get(viewPages[a].selectedType);
@@ -6952,6 +6953,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private void updateFilterTabs(boolean force, boolean animated) {
         if (filterTabsView == null || inPreviewMode || searchIsShowed || (rightSlidingDialogContainer != null && rightSlidingDialogContainer.hasFragment())) {
+            org.telegram.messenger.FolderSyncLogger.logInfo(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "updateFilterTabs_skipped", "tabsViewNull=" + (filterTabsView == null) + " inPreview=" + inPreviewMode + " searching=" + searchIsShowed + " force=" + force);
             return;
         }
         if (filterOptions != null) {
@@ -7033,7 +7035,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
                 for (int a = 0; a < viewPages.length; a++) {
                     if (viewPages[a].selectedType >= filters.size() || (!filterTabsView.isEmpty() && !filterTabsView.hasTab(viewPages[a].selectedType))) {
+                        int oldType = viewPages[a].selectedType;
                         viewPages[a].selectedType = !filterTabsView.isEmpty() ? filterTabsView.getFirstTabId() : Math.max(0, filters.size() - 1);
+                        org.telegram.messenger.FolderSyncLogger.logWarn(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "updateFilterTabs_selectedType_reset", "page=" + a + " oldSelectedType=" + oldType + " newSelectedType=" + viewPages[a].selectedType + " filtersSize=" + filters.size(), false);
                         if (a == 0) {
                             updateCurrentTab = true;
                         }
@@ -7052,6 +7056,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
         } else {
             if (filterTabsView.getVisibility() != View.GONE) {
+                org.telegram.messenger.FolderSyncLogger.logInfo(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "updateFilterTabs_hidden", "filtersSize=" + filters.size() + " hasVisibleCustom=" + hasVisibleCustomFilter);
                 filterTabsView.setIsEditing(false);
                 showDoneItem(false);
 
@@ -7110,9 +7115,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     }
                 }
                 if (!found || instanceChanged || (expectedFilter != null && expectedFilter != currentFilter)) {
+                    org.telegram.messenger.FolderSyncLogger.logWarn(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "updateFilterTabs_filter_mismatch_resync", "found=" + found + " instanceChanged=" + instanceChanged + " currentId=" + currentFilter.id + " expectedId=" + (expectedFilter != null ? expectedFilter.id : -1) + " selectedType=" + viewPages[0].selectedType, false);
                     switchToCurrentSelectedMode(false);
                 }
             } else if (expectedFilter != null && !expectedFilter.isDefault()) {
+                org.telegram.messenger.FolderSyncLogger.logWarn(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "updateFilterTabs_expected_non_default_resync", "expectedId=" + expectedFilter.id + " selectedType=" + viewPages[0].selectedType, false);
                 switchToCurrentSelectedMode(false);
             }
         } else if (filters.size() > 1 && filterTabsView.getVisibility() == View.VISIBLE && viewPages[0].selectedType >= 0 && viewPages[0].selectedType < filters.size() && !filters.get(viewPages[0].selectedType).isDefault()) {
@@ -11046,6 +11053,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 finishFragment();
             }
         } else if (id == NotificationCenter.dialogFiltersUpdated) {
+            org.telegram.messenger.FolderSyncLogger.logInfo(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "dialogsActivity_dialogFiltersUpdated", "filtersSize=" + getMessagesController().getDialogFilters().size() + " loaded=" + getMessagesController().dialogFiltersLoaded);
             updateFilterTabs(true, true);
             updateFilterTabsAppearance();
         } else if (id == NotificationCenter.filterSettingsUpdated) {

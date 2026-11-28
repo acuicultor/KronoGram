@@ -502,7 +502,10 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
     private boolean openFoldersSelector(View anchor) {
         if (getContext() == null || getParentActivity() == null) return false;
         final ArrayList<MessagesController.DialogFilter> filters = getMessagesController().getDialogFilters();
-        if (filters == null || filters.size() <= 1) return false;
+        if (filters == null || filters.size() <= 1) {
+            org.telegram.messenger.FolderSyncLogger.logWarn(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "mainTabs_openFoldersSelector_unavailable", "filtersSize=" + (filters != null ? filters.size() : -1) + " loaded=" + getMessagesController().dialogFiltersLoaded, false);
+            return false;
+        }
 
         boolean hasVisibleCustomFilter = false;
         for (int i = 0; i < filters.size(); i++) {
@@ -564,6 +567,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
             o.addView(folderItem, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
         if (visibleCount <= 1) {
+            org.telegram.messenger.FolderSyncLogger.logWarn(currentAccount, org.telegram.messenger.FolderSyncLogger.LAYER_UI_STATE, "mainTabs_openFoldersSelector_hidden", "visibleCount=" + visibleCount + " filtersSize=" + filters.size() + " hasVisibleCustom=" + hasVisibleCustomFilter, false);
             return false;
         }
 //        o.setBlur(true);
