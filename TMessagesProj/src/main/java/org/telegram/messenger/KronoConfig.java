@@ -109,7 +109,7 @@ public class KronoConfig {
     public static boolean folderNameInHeader = false;
     public static boolean disableTabsSwipe = false;
     public static boolean infiniteFolderScroll = true;
-    public static boolean autoSendFolderSyncLogs = true;
+    public static boolean autoSendFolderSyncLogs = false;
 
     // Swipe gesture actions
     public static final int SWIPE_ACTION_REPLY = 0;
@@ -216,7 +216,7 @@ public class KronoConfig {
         folderNameInHeader = preferences.getBoolean("folderNameInHeader", false);
         disableTabsSwipe = preferences.getBoolean("disableTabsSwipe", false);
         infiniteFolderScroll = preferences.getBoolean("infiniteFolderScroll", true);
-        autoSendFolderSyncLogs = preferences.getBoolean("autoSendFolderSyncLogs", true);
+        autoSendFolderSyncLogs = preferences.getBoolean("autoSendFolderSyncLogs", false);
 
         localPinnedDialogsByAccount.clear();
         favoriteDialogsByAccount.clear();
