@@ -127,6 +127,7 @@ public class KronoSettingsActivity extends BaseFragment {
     // Appearance section rows
     private int themeHeaderRow = -1;
     private int openThemesRow = -1;
+    private int themeEditorRow = -1;
     private int monetThemeRow = -1;
     private int uiStyleRow = -1;
     private int glassModeRow = -1;
@@ -313,6 +314,7 @@ public class KronoSettingsActivity extends BaseFragment {
 
         themeHeaderRow = -1;
         openThemesRow = -1;
+        themeEditorRow = -1;
         monetThemeRow = -1;
         uiStyleRow = -1;
         glassModeRow = -1;
@@ -430,6 +432,7 @@ public class KronoSettingsActivity extends BaseFragment {
         } else if (currentSection == SECTION_APPEARANCE) {
             themeHeaderRow = rowCount++;
             openThemesRow = rowCount++;
+            themeEditorRow = rowCount++;
             monetThemeRow = rowCount++;
             uiStyleRow = rowCount++;
             glassModeRow = rowCount++;
@@ -708,6 +711,8 @@ public class KronoSettingsActivity extends BaseFragment {
                 ).show();
             } else if (position == openThemesRow) {
                 presentFragment(new ThemeActivity(ThemeActivity.THEME_TYPE_BASIC));
+            } else if (position == themeEditorRow) {
+                presentFragment(new KronoThemeEditorActivity());
             } else if (position == monetThemeRow) {
                 showMonetThemeSelectorDialog();
             } else if (position == uiStyleRow) {
@@ -1649,7 +1654,7 @@ public class KronoSettingsActivity extends BaseFragment {
                        position == disableTitleMarqueeRow || position == smoothSplashAnimationRow) {
                 return 2; // TextCheckCell
             } else if (position == hiddenVaultOpenRow || position == hiddenVaultLockMethodRow ||
-                       position == openThemesRow || position == monetThemeRow || position == uiStyleRow ||
+                       position == openThemesRow || position == themeEditorRow || position == monetThemeRow || position == uiStyleRow ||
                        position == glassModeRow ||
                        position == tabModeRow || position == tabStyleRow ||
                        position == sendFolderLogsNowRow ||
@@ -1895,6 +1900,11 @@ public class KronoSettingsActivity extends BaseFragment {
                     settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoVaultLockMethod), KronoConfig.getHiddenLockSummary(KronoHiddenLockHelper.canUseBiometrics(mContext)), true);
                 } else if (position == openThemesRow) {
                     settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoHeaderThemes), LocaleController.getString(R.string.KronoOpenThemesDesc), true);
+                } else if (position == themeEditorRow) {
+                    Theme.ThemeInfo cur = Theme.getActiveTheme();
+                    if (cur == null) cur = Theme.getCurrentTheme();
+                    String curName = cur != null && !android.text.TextUtils.isEmpty(cur.name) ? cur.name : LocaleController.getString(R.string.KronoDefault);
+                    settingsCell.setTextAndValue(LocaleController.getString(R.string.KronoThemeEditorTitle), curName, true);
                 } else if (position == monetThemeRow) {
                     Theme.ThemeInfo cur = Theme.getCurrentTheme();
                     String curName = cur != null && !android.text.TextUtils.isEmpty(cur.name) ? cur.name : LocaleController.getString(R.string.KronoDefault);

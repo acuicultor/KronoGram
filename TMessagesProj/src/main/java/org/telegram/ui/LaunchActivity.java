@@ -217,6 +217,7 @@ import org.telegram.ui.Components.StickersAlert;
 import org.telegram.ui.Components.TermsOfServiceView;
 import org.telegram.ui.Components.ThemeRevealView;
 import org.telegram.ui.Components.TextStyleSpan;
+import org.telegram.ui.Components.KronoThemeEditorView;
 import org.telegram.ui.Components.ThemeEditorView;
 import org.telegram.ui.Components.UndoView;
 import org.telegram.ui.Components.inset.WindowAnimatedInsetsProvider;
@@ -6833,6 +6834,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             if (editorView != null) {
                 editorView.onActivityResult(requestCode, resultCode, data);
             }
+            KronoThemeEditorView kronoEditorView = KronoThemeEditorView.getInstance();
+            if (kronoEditorView != null) {
+                kronoEditorView.onActivityResult(requestCode, resultCode, data);
+            }
             if (actionBarLayout != null && actionBarLayout.getFragmentStack().size() != 0) {
                 BaseFragment fragment = actionBarLayout.getFragmentStack().get(actionBarLayout.getFragmentStack().size() - 1);
                 fragment.onActivityResultFragment(requestCode, resultCode, data);
@@ -7358,6 +7363,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (editorView != null) {
             editorView.destroy();
         }
+        KronoThemeEditorView kronoEditorView = KronoThemeEditorView.getInstance();
+        if (kronoEditorView != null) {
+            kronoEditorView.destroy();
+        }
         FloatingDebugController.onDestroy();
         AnimatedEmojiDrawable.dropGlobalEmojiCache();
         if (BuildConfig.DEBUG_PRIVATE_VERSION) {
@@ -7576,6 +7585,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         ThemeEditorView editorView = ThemeEditorView.getInstance();
         if (editorView != null) {
             editorView.onConfigurationChanged();
+        }
+        KronoThemeEditorView kronoEditorView = KronoThemeEditorView.getInstance();
+        if (kronoEditorView != null) {
+            kronoEditorView.onConfigurationChanged();
         }
         if (Theme.selectedAutoNightType == Theme.AUTO_NIGHT_TYPE_SYSTEM) {
             Theme.checkAutoNightThemeConditions();

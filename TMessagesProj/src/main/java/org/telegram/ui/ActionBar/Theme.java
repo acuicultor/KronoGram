@@ -123,6 +123,7 @@ import org.telegram.ui.Components.RoundStatusDrawable;
 import org.telegram.ui.Components.ScamDrawable;
 import org.telegram.ui.Components.SendingFileDrawable;
 import org.telegram.ui.Components.StatusDrawable;
+import org.telegram.ui.Components.KronoThemeEditorView;
 import org.telegram.ui.Components.ThemeEditorView;
 import org.telegram.ui.Components.TypingDotsDrawable;
 import org.telegram.ui.LaunchActivity;
@@ -5805,6 +5806,10 @@ public class Theme {
         if (editorView != null) {
             editorView.destroy();
         }
+        KronoThemeEditorView kronoEditorView = KronoThemeEditorView.getInstance();
+        if (kronoEditorView != null) {
+            kronoEditorView.destroy();
+        }
         try {
             if (themeInfo.pathToFile != null || themeInfo.assetName != null) {
                 if (!nightTheme && save) {
@@ -5932,6 +5937,10 @@ public class Theme {
         ThemeEditorView editorView = ThemeEditorView.getInstance();
         if (editorView != null) {
             editorView.destroy();
+        }
+        KronoThemeEditorView kronoEditorView = KronoThemeEditorView.getInstance();
+        if (kronoEditorView != null) {
+            kronoEditorView.destroy();
         }
         try {
             if (themeInfo.pathToFile != null || themeInfo.assetName != null) {

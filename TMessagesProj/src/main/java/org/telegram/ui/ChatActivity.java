@@ -44671,7 +44671,7 @@ public class ChatActivity extends BaseFragment implements
             if (!setup) {
                 updateCompactResources();
             }
-            if (!setup && ThemeEditorView.getInstance() == null) {
+            if (!setup && ThemeEditorView.getInstance() == null && org.telegram.ui.Components.KronoThemeEditorView.getInstance() == null) {
                 Theme.refreshThemeColors(true, true);
             } else {
                 AndroidUtilities.runOnUIThread(() -> NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.didSetNewTheme, false, true, true));

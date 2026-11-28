@@ -35,6 +35,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.ActivityWindowEmptyBackgroundDrawable;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.PasscodeView;
+import org.telegram.ui.Components.KronoThemeEditorView;
 import org.telegram.ui.Components.ThemeEditorView;
 
 import java.util.ArrayList;
@@ -240,6 +241,10 @@ public class BubbleActivity extends BasePermissionsActivity implements INavigati
         ThemeEditorView editorView = ThemeEditorView.getInstance();
         if (editorView != null) {
             editorView.onActivityResult(requestCode, resultCode, data);
+        }
+        KronoThemeEditorView kronoEditorView = KronoThemeEditorView.getInstance();
+        if (kronoEditorView != null) {
+            kronoEditorView.onActivityResult(requestCode, resultCode, data);
         }
         if (!actionBarLayout.getFragmentStack().isEmpty()) {
             BaseFragment fragment = actionBarLayout.getFragmentStack().get(actionBarLayout.getFragmentStack().size() - 1);
