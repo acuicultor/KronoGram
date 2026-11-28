@@ -440,9 +440,9 @@
     <string name="KronoThemeEditorSave">Enregistrer</string>
     <string name="KronoThemeEditorTools">Outils de thème</string>
     <string name="KronoThemeEditorFloatingMode">Éditeur flottant en direct</string>
-    <string name="KronoThemeEditorAccentTool">Appliquer une palette d'accent</string>
+    <string name="KronoThemeEditorAccentTool">Appliquer une palette d\'accent</string>
     <string name="KronoThemeEditorAccentToolDesc">Harmonise barres, boutons, liens et bulles</string>
-    <string name="KronoThemeEditorAccentApplied">Palette d'accent appliquée à %1$d clés</string>
+    <string name="KronoThemeEditorAccentApplied">Palette d\'accent appliquée à %1$d clés</string>
     <string name="KronoThemeEditorReplaceTool">Rechercher et remplacer une couleur</string>
     <string name="KronoThemeEditorReplaceCount">%1$d clés</string>
     <string name="KronoThemeEditorReplacePickSource">Sélectionner la couleur à remplacer</string>
@@ -450,7 +450,7 @@
     <string name="KronoThemeEditorReplaceSimilar">Inclure les nuances similaires</string>
     <string name="KronoThemeEditorReplacePickTarget">Choisir la nouvelle couleur</string>
     <string name="KronoThemeEditorReplaceApplied">Couleur remplacée dans %1$d clés</string>
-    <string name="KronoThemeEditorWallpaper">Fond d'écran de chat</string>
+    <string name="KronoThemeEditorWallpaper">Fond d\'écran de chat</string>
     <string name="KronoThemeEditorSwitchTheme">Changer de thème personnalisé</string>
     <string name="KronoThemeEditorDuplicateTheme">Dupliquer le thème</string>
     <string name="KronoThemeEditorRenameTheme">Renommer le thème</string>
@@ -469,7 +469,7 @@
     <string name="KronoThemeEditorModifiedCount">%1$d modifiées</string>
     <string name="KronoThemeEditorCatAll">Tout</string>
     <string name="KronoThemeEditorCatModified">Modifiées</string>
-    <string name="KronoThemeEditorCatActionBar">Barre d'action</string>
+    <string name="KronoThemeEditorCatActionBar">Barre d\'action</string>
     <string name="KronoThemeEditorCatWindow">Fenêtre et listes</string>
     <string name="KronoThemeEditorCatChats">Chats et bulles</string>
     <string name="KronoThemeEditorCatDialogs">Dialogues et menus</string>
@@ -478,7 +478,7 @@
     <string name="KronoThemeEditorCatMedia">Médias et lecteur</string>
     <string name="KronoThemeEditorCatCalls">Appels et stories</string>
     <string name="KronoThemeEditorCatOther">Autres</string>
-    <string name="KronoThemeEditorNoModified">Aucune clé modifiée pour l'instant</string>
+    <string name="KronoThemeEditorNoModified">Aucune clé modifiée pour l\'instant</string>
     <string name="KronoThemeEditorNewThemeHint">Nom du thème</string>
     <string name="KronoThemeEditorNewThemeTitle">Nouveau thème personnalisé</string>
     <string name="KronoThemeEditorThemeCreated">Thème « %1$s » créé</string>
@@ -489,14 +489,14 @@
     <string name="KronoThemeEditorUndoApplied">Annulé : %1$s</string>
     <string name="KronoThemeEditorRedoApplied">Rétabli : %1$s</string>
     <string name="KronoThemeEditorThemeSaved">Thème enregistré</string>
-    <string name="KronoThemeEditorFloatingHint">Palette flottante active. Ouvrez n'importe quel écran et touchez la bulle de palette.</string>
+    <string name="KronoThemeEditorFloatingHint">Palette flottante active. Ouvrez n\'importe quel écran et touchez la bulle de palette.</string>
     <string name="KronoThemeEditorNoCustomThemes">Aucun thème personnalisé trouvé</string>
     <string name="KronoThemeEditorThemeRenamed">Renommé en « %1$s »</string>
     <string name="KronoThemeEditorDeleteConfirm">Supprimer définitivement le thème personnalisé « %1$s » ?</string>
     <string name="KronoThemeEditorThemeDeleted">Thème supprimé</string>
-    <string name="KronoThemeEditorThemeImportError">Impossible d'importer le fichier .attheme</string>
+    <string name="KronoThemeEditorThemeImportError">Impossible d\'importer le fichier .attheme</string>
     <string name="KronoThemeEditorThemeImported">Thème « %1$s » importé</string>
-    <string name="KronoThemeEditorThemeExportError">Impossible d'exporter le fichier de thème</string>
+    <string name="KronoThemeEditorThemeExportError">Impossible d\'exporter le fichier de thème</string>
     <string name="KronoThemeEditorPreviewTitle">Aperçu KronoGram</string>
     <string name="KronoThemeEditorPreviewIncoming">Exemple de message reçu</string>
     <string name="KronoThemeEditorPreviewOutgoing">Exemple de message envoyé</string>
